@@ -41,4 +41,6 @@ echo Example CMake command:
 echo cmake -B build -S . -DCMAKE_TOOLCHAIN_FILE=[path\to\vcpkg]\scripts\buildsystems\vcpkg.cmake
 echo cmake --build build
 
+pause
+
 exit /b 0

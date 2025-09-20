@@ -7,7 +7,7 @@ project (VulkanTutorial)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/CMake")
 
-find_package (glfw3 REQUIRED)
+find_package (sdl3 REQUIRED)
 find_package (glm REQUIRED)
 find_package (Vulkan REQUIRED)
 find_package (tinyobjloader REQUIRED)
@@ -104,7 +104,7 @@ function (add_chapter CHAPTER_NAME)
   set_target_properties (${CHAPTER_NAME} PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CHAPTER_NAME})
   set_target_properties (${CHAPTER_NAME} PROPERTIES CXX_STANDARD 20)
-  target_link_libraries (${CHAPTER_NAME} Vulkan::cppm glfw)
+  target_link_libraries (${CHAPTER_NAME} Vulkan::cppm SDL3::SDL3)
   target_include_directories (${CHAPTER_NAME} PRIVATE ${STB_INCLUDEDIR})
 
   if(WIN32)
