@@ -2,7 +2,7 @@
   "name": "vulkan-tutorial",
   "version": "1.0.0",
   "dependencies": [
-    "sdl3",
+    { "name": "sdl3", "features": [ "vulkan" ] },
     "glm",
     "tinyobjloader",
     "stb",
