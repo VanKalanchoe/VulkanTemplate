@@ -10,6 +10,7 @@
 #include <array>
 #include <assert.h>
 #include <chrono>
+#include <thread>
 #include <unordered_map>
 
 #ifdef __INTELLISENSE__
@@ -29,21 +30,24 @@ import vulkan_hpp;
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_ENABLE_EXPERIMENTAL
+#define GLM_FORCE_CXX11
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+#include <ktx.h>
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
+#define TINYGLTF_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <tiny_gltf.h>
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-const std::string MODEL_PATH = "models/viking_room.obj";
-const std::string TEXTURE_PATH = "textures/viking_room.png";
+const std::string MODEL_PATH = "models/viking_room.glb";
+const std::string TEXTURE_PATH = "textures/viking_room.ktx2";
+// Define the number of objects to render
+constexpr int MAX_OBJECTS = 3;
 
 const std::vector validationLayers =
 {
@@ -92,6 +96,35 @@ struct std::hash<Vertex>
     }
 };
 
+// Define a structure to hold per-object data
+struct GameObject
+{
+    // Transform properties
+    glm::vec3 position = {0.0f, 0.0f, 0.0f};
+    glm::vec3 rotation = {0.0f, 0.0f, 0.0f};
+    glm::vec3 scale = {1.0f, 1.0f, 1.0f};
+
+    // Uniform buffer for this object (one per frame in flight)
+    std::vector<vk::raii::Buffer> uniformBuffers;
+    std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
+    std::vector<void*> uniformBuffersMapped;
+
+    // Descriptor sets for this object (one per frame in flight)
+    std::vector<vk::raii::DescriptorSet> descriptorSets;
+
+    // Calculate model matrix based on position, rotation, and scale
+    glm::mat4 getModelMatrix() const
+    {
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, position);
+        model = glm::rotate(model, rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::rotate(model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
+        model = glm::rotate(model, rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::scale(model, scale);
+        return model;
+    }
+};
+
 struct UniformBufferObject
 {
     alignas(16) glm::mat4 model;
@@ -136,7 +169,8 @@ public:
         cleanup();
     }
 
-    void setFramebufferResized(bool resized) { framebufferResized = resized; };
+    void setFramebufferResized(bool resized) { framebufferResized = resized; }
+    void setWindowMinimized(bool minimized) { windowMinimized = minimized; };
 
 private:
     SDL_Window* window = nullptr;
@@ -172,6 +206,7 @@ private:
     vk::raii::DeviceMemory textureImageMemory = nullptr;
     vk::raii::ImageView textureImageView = nullptr;
     vk::raii::Sampler textureSampler = nullptr;
+    vk::Format textureImageFormat = vk::Format::eUndefined;
 
     std::vector<Vertex> vertices;
     std::vector<uint32_t> indices;
@@ -179,6 +214,10 @@ private:
     vk::raii::DeviceMemory vertexBufferMemory = nullptr;
     vk::raii::Buffer indexBuffer = nullptr;
     vk::raii::DeviceMemory indexBufferMemory = nullptr;
+
+    // Array of game objects to render
+    std::array<GameObject, MAX_OBJECTS> gameObjects;
+    
     std::vector<vk::raii::Buffer> uniformBuffers;
     std::vector<vk::raii::DeviceMemory> uniformBuffersMemory;
     std::vector<void*> uniformBuffersMapped;
@@ -196,6 +235,7 @@ private:
     uint32_t currentFrame = 0;
 
     bool framebufferResized = false;
+    bool windowMinimized = false;
 
     std::vector<const char*> requiredDeviceExtension =
     {
@@ -231,7 +271,7 @@ private:
             return SDL_APP_FAILURE;
         }
 
-        //SDL_SetWindowMinimumSize(window,640,480);
+        SDL_SetWindowMinimumSize(window,640,480);
 
         return SDL_APP_CONTINUE;
     }
@@ -257,6 +297,7 @@ private:
         loadModel();
         createVertexBuffer();
         createIndexBuffer();
+        setupGameObjects();
         createUniformBuffers();
         createDescriptorPool();
         createDescriptorSets();
@@ -268,6 +309,8 @@ private:
 
     void mainLoop()
     {
+        if (windowMinimized)
+            return;
         drawFrame();
     }
 
@@ -279,6 +322,25 @@ private:
 
     void cleanup()
     {
+        // Clean up resources in each GameObject
+        for (auto& gameObject : gameObjects)
+        {
+            // Unmap memory
+            for (size_t i = 0; i < gameObject.uniformBuffersMemory.size(); i++)
+            {
+                if (gameObject.uniformBuffersMapped[i] != nullptr)
+                {
+                    gameObject.uniformBuffersMemory[i].unmapMemory();
+                }
+            }
+
+            // Clear vectors to release resources
+            gameObject.uniformBuffers.clear();
+            gameObject.uniformBuffersMemory.clear();
+            gameObject.uniformBuffersMapped.clear();
+            gameObject.descriptorSets.clear();
+        }
+        
         SDL_DestroyWindow(window);
     }
 
@@ -286,10 +348,6 @@ private:
     {
         int width = 0, height = 0;
         SDL_GetWindowSize(window, &width, &height);
-        while (width == 0 || height == 0)
-        {
-            SDL_GetWindowSize(window, &width, &height);
-        }
 
         device.waitIdle();
 
@@ -703,43 +761,98 @@ private:
     {
         return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
     }
-
-
+    
     void createTextureImage()
     {
-        int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-        vk::DeviceSize imageSize = texWidth * texHeight * 4;
-        mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+        ktxTexture* kTexture;
+        KTX_error_code result = ktxTexture_CreateFromNamedFile(
+            TEXTURE_PATH.c_str(),
+            KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
+            &kTexture);
 
-        if (!pixels)
-        {
-            throw std::runtime_error("failed to load texture image!");
+        if (result != KTX_SUCCESS) {
+            throw std::runtime_error("failed to load ktx texture image!");
         }
 
+        // Get texture dimensions and data
+        uint32_t texWidth = kTexture->baseWidth;
+        uint32_t texHeight = kTexture->baseHeight;
+        ktx_size_t imageSize = ktxTexture_GetImageSize(kTexture, 0);
+        ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
+
+        // Create staging buffer
         vk::raii::Buffer stagingBuffer({});
         vk::raii::DeviceMemory stagingBufferMemory({});
         createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
                      vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
                      stagingBuffer, stagingBufferMemory);
 
+        // Copy texture data to staging buffer
         void* data = stagingBufferMemory.mapMemory(0, imageSize);
-        memcpy(data, pixels, imageSize);
+        memcpy(data, ktxTextureData, imageSize);
         stagingBufferMemory.unmapMemory();
 
-        stbi_image_free(pixels);
+        // Determine the Vulkan format from KTX format
+        vk::Format textureFormat;
 
-        createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, vk::Format::eR8G8B8A8Srgb, vk::ImageTiling::eOptimal,
-                    vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-                    vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
-                    textureImageMemory);
+        // Check if the KTX texture has a format
+        if (kTexture->classId == ktxTexture2_c) {
+            // For KTX2 files, we can get the format directly
+            auto* ktx2 = reinterpret_cast<ktxTexture2*>(kTexture);
+            textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
+            if (textureFormat == vk::Format::eUndefined) {
+                // If the format is undefined, fall back to a reasonable default
+                textureFormat = vk::Format::eR8G8B8A8Unorm;
+            }
+        } else {
+            // For KTX1 files or if we can't determine the format, use a reasonable default
+            textureFormat = vk::Format::eR8G8B8A8Unorm;
+        }
 
-        transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-                              mipLevels);
-        copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth),
-                          static_cast<uint32_t>(texHeight));
+        textureImageFormat = textureFormat;
 
-        generateMipmaps(textureImage, vk::Format::eR8G8B8A8Srgb, texWidth, texHeight, mipLevels);
+        if (kTexture->numLevels > 1)
+        {
+            mipLevels = kTexture->numLevels;
+            // Create the texture image
+            createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat, vk::ImageTiling::eOptimal,
+                        vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
+                        vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
+                        textureImageMemory);
+
+            // Copy data from staging buffer to texture image
+            transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+            
+            // Copy each mip level
+            for (uint32_t i = 0; i < mipLevels; i++) {
+                ktx_size_t offset;
+                KTX_error_code result = ktxTexture_GetImageOffset(kTexture, i, 0, 0, &offset);
+                uint32_t mipWidth  = std::max(1u, texWidth  >> i);
+                uint32_t mipHeight = std::max(1u, texHeight >> i);
+                copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(mipWidth), static_cast<uint32_t>(mipHeight), offset, mipLevels);
+            }
+            
+            transitionImageLayout(textureImage, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
+        }
+        else
+        {
+            mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+            // Create the texture image
+            createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat, vk::ImageTiling::eOptimal,
+                        vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
+                        vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
+                        textureImageMemory);
+
+            // Copy data from staging buffer to texture image
+            transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+
+            copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+            
+            generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
+        }
+        
+        // Cleanup KTX resources
+        ktxTexture_Destroy(kTexture);
     }
 
     void generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
@@ -836,7 +949,7 @@ private:
 
     void createTextureImageView()
     {
-        textureImageView = createImageView(textureImage, vk::Format::eR8G8B8A8Srgb, vk::ImageAspectFlagBits::eColor,
+        textureImageView = createImageView(textureImage, textureImageFormat, vk::ImageAspectFlagBits::eColor,
                                            mipLevels);
     }
 
@@ -937,58 +1050,122 @@ private:
         endSingleTimeCommands(*commandBuffer);
     }
 
-    void copyBufferToImage(const vk::raii::Buffer& buffer, vk::raii::Image& image, uint32_t width, uint32_t height)
+    void copyBufferToImage(const vk::raii::Buffer& buffer, vk::raii::Image& image, uint32_t width, uint32_t height, uint64_t offset = 0, uint32_t mipLevel = 0)
     {
         std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = beginSingleTimeCommands();
-        vk::BufferImageCopy region{
-            .bufferOffset = 0, .bufferRowLength = 0, .bufferImageHeight = 0,
-            .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-            .imageOffset = {0, 0, 0}, .imageExtent = {width, height, 1}
+        vk::BufferImageCopy region
+        {
+            .bufferOffset = offset, .bufferRowLength = 0, .bufferImageHeight = 0,
+            .imageSubresource = {vk::ImageAspectFlagBits::eColor, mipLevel, 0, 1},
+            .imageOffset = {0, 0, 0},
+            .imageExtent = {width, height, 1}
         };
         commandBuffer->copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, {region});
         endSingleTimeCommands(*commandBuffer);
     }
 
-    void loadModel()
-    {
-        tinyobj::attrib_t attrib;
-        std::vector<tinyobj::shape_t> shapes;
-        std::vector<tinyobj::material_t> materials;
-        std::string warn, err;
+    void loadModel() {
+        // Use tinygltf to load the model instead of tinyobjloader
+        tinygltf::Model model;
+        tinygltf::TinyGLTF loader;
+        std::string err;
+        std::string warn;
 
-        if (!LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
-        {
-            throw std::runtime_error(warn + err);
+        bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
+
+        if (!warn.empty()) {
+            std::cout << "glTF warning: " << warn << std::endl;
         }
 
-        std::unordered_map<Vertex, uint32_t> uniqueVertices{};
+        if (!err.empty()) {
+            std::cout << "glTF error: " << err << std::endl;
+        }
 
-        for (const auto& shape : shapes)
-        {
-            for (const auto& index : shape.mesh.indices)
-            {
-                Vertex vertex{};
+        if (!ret) {
+            throw std::runtime_error("Failed to load glTF model");
+        }
 
-                vertex.pos = {
-                    attrib.vertices[3 * index.vertex_index + 0],
-                    attrib.vertices[3 * index.vertex_index + 1],
-                    attrib.vertices[3 * index.vertex_index + 2]
-                };
+        vertices.clear();
+        indices.clear();
 
-                vertex.texCoord = {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
+        // Process all meshes in the model
+        for (const auto& mesh : model.meshes) {
+            for (const auto& primitive : mesh.primitives) {
+                // Get indices
+                const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+                const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+                const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
 
-                vertex.color = {1.0f, 1.0f, 1.0f};
+                // Get vertex positions
+                const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
+                const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+                const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
-                if (!uniqueVertices.contains(vertex))
-                {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices.size());
+                // Get texture coordinates if available
+                bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
+                const tinygltf::Accessor* texCoordAccessor = nullptr;
+                const tinygltf::BufferView* texCoordBufferView = nullptr;
+                const tinygltf::Buffer* texCoordBuffer = nullptr;
+
+                if (hasTexCoords) {
+                    texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
+                    texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
+                    texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
+                }
+
+                uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
+
+                for (size_t i = 0; i < posAccessor.count; i++) {
+                    Vertex vertex{};
+
+                    const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor.byteOffset + i * 12]);
+                    // glTF uses a right-handed coordinate system with Y-up
+                    // Vulkan uses a right-handed coordinate system with Y-down
+                    // We need to flip the Y coordinate
+                    vertex.pos = {pos[0], pos[1], pos[2]};
+
+                    if (hasTexCoords) {
+                        const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * 8]);
+                        vertex.texCoord = {texCoord[0], texCoord[1]};
+                    } else {
+                        vertex.texCoord = {0.0f, 0.0f};
+                    }
+
+                    vertex.color = {1.0f, 1.0f, 1.0f};
+
                     vertices.push_back(vertex);
                 }
 
-                indices.push_back(uniqueVertices[vertex]);
+                const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+                size_t indexCount = indexAccessor.count;
+                size_t indexStride = 0;
+
+                // Determine index stride based on component type
+                if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                    indexStride = sizeof(uint16_t);
+                } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+                    indexStride = sizeof(uint32_t);
+                } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+                    indexStride = sizeof(uint8_t);
+                } else {
+                    throw std::runtime_error("Unsupported index component type");
+                }
+
+                indices.reserve(indices.size() + indexCount);
+
+                for (size_t i = 0; i < indexCount; i++) {
+                    uint32_t index = 0;
+
+                    if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT) {
+                        index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
+                    } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT) {
+                        index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
+                    } else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE) {
+                        index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
+                    }
+
+                    indices.push_back(baseVertex + index);
+                }
             }
         }
     }
@@ -1033,37 +1210,61 @@ private:
         copyBuffer(stagingBuffer, indexBuffer, bufferSize);
     }
 
+    // Initialize the game objects with different positions, rotations, and scales
+    void setupGameObjects()
+    {
+        // Object 1 - Center
+        gameObjects[0].position = {0.0f, 0.0f, 0.0f};
+        gameObjects[0].rotation = {0.0f, glm::radians(-90.0f), 0.0f};
+        gameObjects[0].scale = {1.0f, 1.0f, 1.0f};
+
+        // Object 2 - Left
+        gameObjects[1].position = {-2.0f, 0.0f, -1.0f};
+        gameObjects[1].rotation = {0.0f, glm::radians(-45.0f), 0.0f};
+        gameObjects[1].scale = {0.75f, 0.75f, 0.75f};
+
+        // Object 3 - Right
+        gameObjects[2].position = {2.0f, 0.0f, -1.0f};
+        gameObjects[2].rotation = {0.0f, glm::radians(45.0f), 0.0f};
+        gameObjects[2].scale = {0.75f, 0.75f, 0.75f};
+    }
+
+    // Create uniform buffers for each object
     void createUniformBuffers()
     {
-        uniformBuffers.clear();
-        uniformBuffersMemory.clear();
-        uniformBuffersMapped.clear();
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        // For each game object
+        for (auto& gameObject : gameObjects)
         {
-            vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-            vk::raii::Buffer buffer({});
-            vk::raii::DeviceMemory bufferMem({});
-            createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
-                         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, buffer,
-                         bufferMem);
-            uniformBuffers.emplace_back(std::move(buffer));
-            uniformBuffersMemory.emplace_back(std::move(bufferMem));
-            uniformBuffersMapped.emplace_back(uniformBuffersMemory[i].mapMemory(0, bufferSize));
+            gameObject.uniformBuffers.clear();
+            gameObject.uniformBuffersMemory.clear();
+            gameObject.uniformBuffersMapped.clear();
+
+            // Create uniform buffers for each frame in flight
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+            {
+                vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
+                vk::raii::Buffer buffer({});
+                vk::raii::DeviceMemory bufferMem({});
+                createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, buffer, bufferMem);
+                gameObject.uniformBuffers.emplace_back(std::move(buffer));
+                gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
+                gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));
+            }
         }
     }
 
     void createDescriptorPool()
     {
+        // We need MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT descriptor sets
         std::array poolSize
         {
-            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, MAX_FRAMES_IN_FLIGHT),
-            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, MAX_FRAMES_IN_FLIGHT)
+            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT),
+            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT)
         };
         vk::DescriptorPoolCreateInfo poolInfo
         {
             .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            .maxSets = MAX_FRAMES_IN_FLIGHT,
+            .maxSets = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT,
             .poolSizeCount = static_cast<uint32_t>(poolSize.size()),
             .pPoolSizes = poolSize.data()
         };
@@ -1073,53 +1274,50 @@ private:
 
     void createDescriptorSets()
     {
-        std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
-        vk::DescriptorSetAllocateInfo allocInfo
-        {
-            .descriptorPool = descriptorPool,
-            .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-            .pSetLayouts = layouts.data()
-        };
+        // For each game object
+        for (auto& gameObject : gameObjects) {
+            // Create descriptor sets for each frame in flight
+            std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
+            vk::DescriptorSetAllocateInfo allocInfo{
+                .descriptorPool = *descriptorPool,
+                .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
+                .pSetLayouts = layouts.data()
+            };
 
-        descriptorSets.clear();
-        descriptorSets = device.allocateDescriptorSets(allocInfo);
+            gameObject.descriptorSets.clear();
+            gameObject.descriptorSets = device.allocateDescriptorSets(allocInfo);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            vk::DescriptorBufferInfo bufferInfo
-            {
-                .buffer = uniformBuffers[i],
-                .offset = 0,
-                .range = sizeof(UniformBufferObject)
-            };
-            vk::DescriptorImageInfo imageInfo
-            {
-                .sampler = textureSampler,
-                .imageView = textureImageView,
-                .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-            };
-            std::array descriptorWrites
-            {
-                vk::WriteDescriptorSet
-                {
-                    .dstSet = descriptorSets[i],
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = vk::DescriptorType::eUniformBuffer,
-                    .pBufferInfo = &bufferInfo
-                },
-                vk::WriteDescriptorSet
-                {
-                    .dstSet = descriptorSets[i],
-                    .dstBinding = 1,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                    .pImageInfo = &imageInfo
-                }
-            };
-            device.updateDescriptorSets(descriptorWrites, {});
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+                vk::DescriptorBufferInfo bufferInfo{
+                    .buffer = *gameObject.uniformBuffers[i],
+                    .offset = 0,
+                    .range = sizeof(UniformBufferObject)
+                };
+                vk::DescriptorImageInfo imageInfo{
+                    .sampler = *textureSampler,
+                    .imageView = *textureImageView,
+                    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+                };
+                std::array descriptorWrites{
+                    vk::WriteDescriptorSet{
+                        .dstSet = *gameObject.descriptorSets[i],
+                        .dstBinding = 0,
+                        .dstArrayElement = 0,
+                        .descriptorCount = 1,
+                        .descriptorType = vk::DescriptorType::eUniformBuffer,
+                        .pBufferInfo = &bufferInfo
+                    },
+                    vk::WriteDescriptorSet{
+                        .dstSet = *gameObject.descriptorSets[i],
+                        .dstBinding = 1,
+                        .dstArrayElement = 0,
+                        .descriptorCount = 1,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .pImageInfo = &imageInfo
+                    }
+                };
+                device.updateDescriptorSets(descriptorWrites, {});
+            }
         }
     }
 
@@ -1273,8 +1471,22 @@ private:
         commandBuffers[currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
         commandBuffers[currentFrame].bindVertexBuffers(0, *vertexBuffer, {0});
         commandBuffers[currentFrame].bindIndexBuffer( *indexBuffer, 0, vk::IndexType::eUint32 );
-        commandBuffers[currentFrame].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSets[currentFrame], nullptr);
-        commandBuffers[currentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
+        /*commandBuffers[currentFrame].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSets[currentFrame], nullptr);*/
+        // Draw each object with its own descriptor set
+        for (const auto& gameObject : gameObjects) {
+            // Bind the descriptor set for this object
+            commandBuffers[currentFrame].bindDescriptorSets(
+                vk::PipelineBindPoint::eGraphics,
+                *pipelineLayout,
+                0,
+                *gameObject.descriptorSets[currentFrame],
+                nullptr
+            );
+
+            // Draw the object
+            commandBuffers[currentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
+        }
+
         commandBuffers[currentFrame].endRendering();
         // After rendering, transition the images to appropriate layouts
 
@@ -1384,22 +1596,38 @@ private:
         }
     }
 
-    void updateUniformBuffer(uint32_t currentImage)
-    {
+    void updateUniformBuffers() {
         static auto startTime = std::chrono::high_resolution_clock::now();
-
+        static auto lastFrameTime = startTime;
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float>(currentTime - startTime).count();
+        float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
+        lastFrameTime = currentTime;
 
-        UniformBufferObject ubo{};
-        ubo.model = rotate(glm::mat4(1.0f), time * glm::radians(0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.view = lookAt(glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        ubo.proj = glm::perspective(glm::radians(45.0f),
-                                    static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.
-                                        height), 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1;
+        // Camera and projection matrices (shared by all objects)
+        glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 6.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 20.0f);
+        proj[1][1] *= -1;
 
-        memcpy(uniformBuffersMapped[currentImage], &ubo, sizeof(ubo));
+        // Update uniform buffers for each object
+        for (auto& gameObject : gameObjects) {
+            // Apply continuous rotation to the object based on frame time
+            const float rotationSpeed = 0.5f; // Rotation speed in radians per second
+            gameObject.rotation.y += rotationSpeed * deltaTime; // Slow rotation around Y axis scaled by frame time
+
+            // Get the model matrix for this object
+            glm::mat4 model = gameObject.getModelMatrix();
+
+            // Create and update the UBO
+            UniformBufferObject ubo{
+                .model = model,
+                .view = view,
+                .proj = proj
+            };
+
+            // Copy the UBO data to the mapped memory
+            memcpy(gameObject.uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+        }
     }
 
     void drawFrame()
@@ -1417,7 +1645,8 @@ private:
         {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
-        updateUniformBuffer(currentFrame);
+        // Update uniform buffers for all objects
+        updateUniformBuffers();
 
         device.resetFences(*inFlightFences[currentFrame]);
         commandBuffers[currentFrame].reset();
@@ -1433,11 +1662,14 @@ private:
         queue.submit(submitInfo, *inFlightFences[currentFrame]);
 
 
-        const vk::PresentInfoKHR presentInfoKHR{
+        const vk::PresentInfoKHR presentInfoKHR
+        {
             .waitSemaphoreCount = 1, .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
             .swapchainCount = 1, .pSwapchains = &*swapChain, .pImageIndices = &imageIndex
         };
-        result = queue.presentKHR(presentInfoKHR);
+        VkResult rawResult = vkQueuePresentKHR(*queue, reinterpret_cast<const VkPresentInfoKHR*>(&presentInfoKHR));
+        result = static_cast<vk::Result>(rawResult);
+        //result = queue.presentKHR(presentInfoKHR); when resizing in hpp is fixed then use this https://github.com/KhronosGroup/Vulkan-Tutorial/issues/73
         if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized)
         {
             framebufferResized = false;
@@ -1450,8 +1682,7 @@ private:
         semaphoreIndex = (semaphoreIndex + 1) % presentCompleteSemaphores.size();
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
-
-
+    
     [[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const
     {
         vk::ShaderModuleCreateInfo createInfo{
@@ -1593,6 +1824,17 @@ SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
     case SDL_EVENT_WINDOW_RESIZED:
         {
             app->setFramebufferResized(true);
+            return SDL_APP_CONTINUE;
+        }
+    case SDL_EVENT_WINDOW_MINIMIZED:
+        {
+            app->setWindowMinimized(true);
+            return SDL_APP_CONTINUE;
+        }
+    case SDL_EVENT_WINDOW_RESTORED:
+        {
+            app->setWindowMinimized(false);
+            app->setFramebufferResized(true); // force swapchain recreation
             return SDL_APP_CONTINUE;
         }
     case SDL_EVENT_KEY_DOWN:

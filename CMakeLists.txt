@@ -139,4 +139,10 @@ function (add_chapter CHAPTER_NAME)
   endif ()
 endfunction ()
 
-add_chapter (main SHADER shaders/shader MODELS viking_room.obj TEXTURES viking_room.png TEXTURES ../textures/texture.jpg)
+add_chapter(
+    main
+    SHADER shaders/shader
+    MODELS viking_room.obj viking_room.glb
+    TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg
+    LIBS glm::glm tinygltf::tinygltf KTX::ktx
+)
