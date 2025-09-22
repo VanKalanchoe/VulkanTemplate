@@ -103,46 +103,66 @@ function (add_slang_shader_target TARGET)
   add_custom_target (${TARGET} DEPENDS ${SHADERS_DIR}/slang.spv)
 endfunction()
 
-function (add_chapter CHAPTER_NAME)
-  cmake_parse_arguments (CHAPTER "" "SHADER" "LIBS;TEXTURES;MODELS" ${ARGN})
-  add_executable (${CHAPTER_NAME} ${CHAPTER_NAME}.cpp)
-  set_target_properties (${CHAPTER_NAME} PROPERTIES
-    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CHAPTER_NAME})
-  set_target_properties (${CHAPTER_NAME} PROPERTIES CXX_STANDARD 20)
-  target_link_libraries (${CHAPTER_NAME} Vulkan::cppm SDL3::SDL3)
-  target_include_directories (${CHAPTER_NAME} PRIVATE ${STB_INCLUDEDIR})
+function(add_chapter CHAPTER_NAME)
+    cmake_parse_arguments(CHAPTER "" "SHADER" "LIBS;TEXTURES;MODELS" ${ARGN})
 
-  if(WIN32)
-    if(${CMAKE_GENERATOR} MATCHES "Visual Studio.*")
-      set_target_properties(${CHAPTER_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/${CHAPTER_NAME}")
+    # Gather all .cpp files in the chapter folder
+    file(GLOB_RECURSE CHAPTER_SOURCES
+    "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/*.cpp"
+    "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/*.h"
+    "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/*.hpp"
+)
+
+    # Create the executable with all cpp files
+    add_executable(${CHAPTER_NAME} ${CHAPTER_SOURCES})
+
+    set_target_properties(${CHAPTER_NAME} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}
+        CXX_STANDARD 20
+    )
+
+    # Link Vulkan, SDL, and any additional libraries
+    target_link_libraries(${CHAPTER_NAME} Vulkan::cppm SDL3::SDL3)
+    target_include_directories(${CHAPTER_NAME} PRIVATE ${STB_INCLUDEDIR})
+
+    # Set working directory for Visual Studio debug
+    if(WIN32 AND ${CMAKE_GENERATOR} MATCHES "Visual Studio.*")
+        set_target_properties(${CHAPTER_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/${CHAPTER_NAME}")
     endif()
-  endif()
 
-  if (DEFINED CHAPTER_SHADER)
-    set (CHAPTER_SHADER_TARGET ${CHAPTER_NAME}_shader)
-    file (GLOB SHADER_SOURCES ${CHAPTER_SHADER}.frag ${CHAPTER_SHADER}.vert ${CHAPTER_SHADER}.comp)
-    add_shaders_target (${CHAPTER_SHADER_TARGET} CHAPTER_NAME ${CHAPTER_NAME} SOURCES ${SHADER_SOURCES})
-    add_dependencies (${CHAPTER_NAME} ${CHAPTER_SHADER_TARGET})
+    # Handle shaders if defined
+    if(DEFINED CHAPTER_SHADER)
+        set(CHAPTER_SHADER_TARGET ${CHAPTER_NAME}_shader)
+        file(GLOB SHADER_SOURCES ${CHAPTER_SHADER}.frag ${CHAPTER_SHADER}.vert ${CHAPTER_SHADER}.comp)
+        add_shaders_target(${CHAPTER_SHADER_TARGET} CHAPTER_NAME ${CHAPTER_NAME} SOURCES ${SHADER_SOURCES})
+        add_dependencies(${CHAPTER_NAME} ${CHAPTER_SHADER_TARGET})
 
-    set (CHAPTER_SHADER_SLANG_TARGET ${CHAPTER_NAME}_slang_shader)
-    file (GLOB SHADER_SLANG_SOURCES ${CHAPTER_SHADER}.slang)
-    if(SHADER_SLANG_SOURCES)
-      add_slang_shader_target( ${CHAPTER_SHADER_SLANG_TARGET} CHAPTER_NAME ${CHAPTER_NAME} SOURCES ${SHADER_SLANG_SOURCES})
-      add_dependencies(${CHAPTER_NAME} ${CHAPTER_SHADER_SLANG_TARGET})
+        set(CHAPTER_SHADER_SLANG_TARGET ${CHAPTER_NAME}_slang_shader)
+        file(GLOB SHADER_SLANG_SOURCES ${CHAPTER_SHADER}.slang)
+        if(SHADER_SLANG_SOURCES)
+            add_slang_shader_target(${CHAPTER_SHADER_SLANG_TARGET} CHAPTER_NAME ${CHAPTER_NAME} SOURCES ${SHADER_SLANG_SOURCES})
+            add_dependencies(${CHAPTER_NAME} ${CHAPTER_SHADER_SLANG_TARGET})
+        endif()
     endif()
-  endif ()
-  if (DEFINED CHAPTER_LIBS)
-    target_link_libraries (${CHAPTER_NAME} ${CHAPTER_LIBS})
-  endif ()
-  if (DEFINED CHAPTER_MODELS)
-    list(TRANSFORM CHAPTER_MODELS PREPEND "${CMAKE_SOURCE_DIR}/assets/")
-    file (COPY ${CHAPTER_MODELS} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/models)
-  endif ()
-  if (DEFINED CHAPTER_TEXTURES)
-    list(TRANSFORM CHAPTER_TEXTURES PREPEND "${CMAKE_SOURCE_DIR}/assets/")
-    file (COPY ${CHAPTER_TEXTURES} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/textures)
-  endif ()
-endfunction ()
+
+    # Link additional libraries if defined
+    if(DEFINED CHAPTER_LIBS)
+        target_link_libraries(${CHAPTER_NAME} ${CHAPTER_LIBS})
+    endif()
+
+    # Copy models to build folder
+    if(DEFINED CHAPTER_MODELS)
+        list(TRANSFORM CHAPTER_MODELS PREPEND "${CMAKE_SOURCE_DIR}/assets/")
+        file(COPY ${CHAPTER_MODELS} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/models)
+    endif()
+
+    # Copy textures to build folder
+    if(DEFINED CHAPTER_TEXTURES)
+        list(TRANSFORM CHAPTER_TEXTURES PREPEND "${CMAKE_SOURCE_DIR}/assets/")
+        file(COPY ${CHAPTER_TEXTURES} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/textures)
+    endif()
+endfunction()
+
 
 add_chapter(
     main
