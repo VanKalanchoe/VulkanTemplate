@@ -1219,7 +1219,7 @@ private:
         gameObjects[0].scale = {1.0f, 1.0f, 1.0f};
 
         // Object 2 - Left
-        gameObjects[1].position = {-2.0f, 0.0f, -1.0f};
+        gameObjects[1].position = {-2.0f, 0.0f, -11.0f};
         gameObjects[1].rotation = {0.0f, glm::radians(-45.0f), 0.0f};
         gameObjects[1].scale = {0.75f, 0.75f, 0.75f};
 
@@ -1606,7 +1606,7 @@ private:
 
         // Camera and projection matrices (shared by all objects)
         glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 6.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.1f, 20.0f);
+        glm::mat4 proj = glm::perspective(glm::radians(45.0f), static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height), 0.01f, 1000.0f);
         proj[1][1] *= -1;
 
         // Update uniform buffers for each object
