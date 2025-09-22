@@ -14,6 +14,11 @@ find_package (tinyobjloader REQUIRED)
 find_package (tinygltf REQUIRED)
 find_package (KTX REQUIRED)
 
+# Add ImGui from submodule
+add_subdirectory(vendor/imgui)
+# Create an interface target so it's easy to link
+add_library(imgui::imgui ALIAS imgui)
+
 # set up Vulkan C++ module
 add_library(VulkanCppModule)
 add_library(Vulkan::cppm ALIAS VulkanCppModule)
@@ -144,5 +149,5 @@ add_chapter(
     SHADER shaders/shader
     MODELS viking_room.obj viking_room.glb
     TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg
-    LIBS glm::glm tinygltf::tinygltf KTX::ktx
+    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui::imgui
 )
