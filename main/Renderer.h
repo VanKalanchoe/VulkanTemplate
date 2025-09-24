@@ -267,7 +267,7 @@ public:
     {
         initWindow();
         initVulkan();
-        m_samplerPool.init(device);
+        
         // Acquiring the sampler which will be used for displaying the GBuffer
         const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
         linearSampler = m_samplerPool.acquireSampler(info);
@@ -304,8 +304,7 @@ private:
     vk::SurfaceFormatKHR swapChainSurfaceFormat;
     vk::Extent2D swapChainExtent;
     std::vector<vk::raii::ImageView> swapChainImageViews;
-
-    vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
+    
     vk::raii::PipelineLayout pipelineLayout = nullptr;
     vk::raii::Pipeline graphicsPipeline = nullptr;
 
@@ -348,6 +347,8 @@ private:
     vk::raii::DescriptorPool uiDescriptorPool = nullptr; // imgui 
     std::vector<vk::raii::DescriptorSet> descriptorSets;
     std::vector<VkDescriptorSet> uiDescriptorSet{}; // imgui
+    vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
+    vk::raii::DescriptorSetLayout commonDescriptorSetLayout = nullptr;
 
     vk::raii::CommandPool commandPool = nullptr;
     std::vector<vk::raii::CommandBuffer> commandBuffers;
@@ -367,7 +368,8 @@ private:
         vk::KHRSwapchainExtensionName,
         vk::KHRSpirv14ExtensionName,
         vk::KHRSynchronization2ExtensionName,
-        vk::KHRCreateRenderpass2ExtensionName
+        vk::KHRCreateRenderpass2ExtensionName,
+        vk::EXTDescriptorIndexingExtensionName
     };
 
     SDL_AppResult initWindow();

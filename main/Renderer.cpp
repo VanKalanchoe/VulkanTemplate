@@ -45,22 +45,26 @@ SDL_AppResult Renderer::initVulkan()
     createLogicalDevice();
     createSwapChain();
     createImageViews();
-    createDescriptorSetLayout();
-    createGraphicsPipeline();
+    
     createCommandPool();
     createSceneResources();
     createColorResources();
     createDepthResources();
+    m_samplerPool.init(device);
     createTextureImage();
     createTextureImageView();
     createTextureSampler();
+    
+    /*createDescriptorSetLayout();*/
+    createDescriptorPool();
+    createDescriptorSets();
+    createGraphicsPipeline();
     loadModel();
     createVertexBuffer();
     createIndexBuffer();
     setupGameObjects();
     createUniformBuffers();
-    createDescriptorPool();
-    createDescriptorSets();
+    
     createCommandBuffers();
     createSyncObjects();
 
@@ -411,14 +415,26 @@ void Renderer::createLogicalDevice()
     }
 
     // query for Vulkan 1.3 features
-    vk::StructureChain<vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan11Features // added myself
-                       , vk::PhysicalDeviceVulkan13Features,
-                       vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT> featureChain =
+    vk::StructureChain<
+        vk::PhysicalDeviceFeatures2,
+        vk::PhysicalDeviceVulkan11Features, // added myself
+        vk::PhysicalDeviceVulkan13Features,
+        vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+        vk::PhysicalDeviceDescriptorIndexingFeatures
+    >featureChain =
     {
         {.features = {.sampleRateShading = true, .samplerAnisotropy = true}}, // vk::PhysicalDeviceFeatures2
         {.shaderDrawParameters = true}, // <-- enable // added myself
         {.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
-        {.extendedDynamicState = true} // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+        {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+        {
+            .shaderSampledImageArrayNonUniformIndexing = true,
+            .descriptorBindingSampledImageUpdateAfterBind = true,
+            .descriptorBindingUpdateUnusedWhilePending = true,
+            .descriptorBindingPartiallyBound = true,
+            .descriptorBindingVariableDescriptorCount = true,
+            .runtimeDescriptorArray = true
+            }
     };
 
     // create a Device
@@ -427,7 +443,7 @@ void Renderer::createLogicalDevice()
         .queueFamilyIndex = queueIndex, .queueCount = 1, .pQueuePriorities = &queuePriority
     };
     vk::DeviceCreateInfo deviceCreateInfo{
-        .pNext = &featureChain.get<vk::PhysicalDeviceFeatures2>(),
+        .pNext = &featureChain.get(),
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &deviceQueueCreateInfo,
         .enabledExtensionCount = static_cast<uint32_t>(requiredDeviceExtension.size()),
@@ -480,7 +496,7 @@ void Renderer::createImageViews()
     }
 }
 
-void Renderer::createDescriptorSetLayout()
+/*void Renderer::createDescriptorSetLayout()
 {
     std::array bindings = {
         vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex,
@@ -493,7 +509,7 @@ void Renderer::createDescriptorSetLayout()
         .bindingCount = static_cast<uint32_t>(bindings.size()), .pBindings = bindings.data()
     };
     descriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
-}
+}*/
 
 void Renderer::createGraphicsPipeline()
 {
@@ -564,8 +580,14 @@ void Renderer::createGraphicsPipeline()
         .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()), .pDynamicStates = dynamicStates.data()
     };
 
+    std::array<vk::DescriptorSetLayout, 2> setLayouts =
+    {
+        *descriptorSetLayout,
+        *commonDescriptorSetLayout
+    };
+    
     vk::PipelineLayoutCreateInfo pipelineLayoutInfo{
-        .setLayoutCount = 1, .pSetLayouts = &*descriptorSetLayout, .pushConstantRangeCount = 0
+        .setLayoutCount = setLayouts.size(), .pSetLayouts = setLayouts.data(), .pushConstantRangeCount = 0
     };
 
     pipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
@@ -690,7 +712,8 @@ void Renderer::createTextureImage()
     // Get texture dimensions and data
     uint32_t texWidth = kTexture->baseWidth;
     uint32_t texHeight = kTexture->baseHeight;
-    ktx_size_t imageSize = ktxTexture_GetImageSize(kTexture, 0);
+    /*ktx_size_t imageSize = ktxTexture_GetImageSize(kTexture, 0);*/
+    ktx_size_t imageSize = ktxTexture_GetDataSize(kTexture); // total size of all mip levels
     ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
 
     // Create staging buffer
@@ -750,7 +773,7 @@ void Renderer::createTextureImage()
             uint32_t mipWidth = std::max(1u, texWidth >> i);
             uint32_t mipHeight = std::max(1u, texHeight >> i);
             copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(mipWidth),
-                              static_cast<uint32_t>(mipHeight), offset, mipLevels);
+                              static_cast<uint32_t>(mipHeight), offset, i);
         }
 
         transitionImageLayout(textureImage, vk::ImageLayout::eTransferDstOptimal,
@@ -1211,15 +1234,19 @@ void Renderer::createDescriptorPool()
 {
     {
         // We need MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT descriptor sets
+        uint32_t m_maxTextures = 10000;
+        const uint32_t safegardSize = 2;
+        uint32_t maxDescriptorSets = std::min(1000U, physicalDevice.getProperties().limits.maxDescriptorSetUniformBuffers - safegardSize);
+        m_maxTextures = std::min(m_maxTextures, physicalDevice.getProperties().limits.maxDescriptorSetSampledImages - safegardSize);
         std::array poolSize
         {
-            vk::DescriptorPoolSize(vk::DescriptorType::eUniformBuffer, MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT),
-            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT)
+            vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, m_maxTextures)
         };
+        
         vk::DescriptorPoolCreateInfo poolInfo
         {
-            .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
-            .maxSets = MAX_OBJECTS * MAX_FRAMES_IN_FLIGHT,
+            .flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+            .maxSets = maxDescriptorSets,
             .poolSizeCount = static_cast<uint32_t>(poolSize.size()),
             .pPoolSizes = poolSize.data()
         };
@@ -1245,7 +1272,7 @@ void Renderer::createDescriptorPool()
 
 void Renderer::createDescriptorSets()
 {
-    // For each game object
+    /*// For each game object
     for (auto& gameObject : gameObjects)
     {
         // Create descriptor sets for each frame in flight
@@ -1291,8 +1318,146 @@ void Renderer::createDescriptorSets()
             };
             device.updateDescriptorSets(descriptorWrites, {});
         }
+    }*/
+
+    // First describe the layout of the texture descriptor, what and how many
+        {
+            uint32_t numTextures = 10000; // We don't need to set the exact number of texture the scene have.
+
+            // In comment, the layout for a storage buffer, which is not used in this sample, but rather a push descriptor (below)
+            std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings{
+                {
+                    {
+                        .binding = 0,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .descriptorCount = numTextures,
+                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics
+                    },
+                
+                    // This is if we would add another binding for the scene info, but instead we make another set, see below
+                    // {.binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS},
+                }
+            };
+
+            std::array<vk::DescriptorBindingFlags, 1> flags = {
+                // Flags for binding 0 (texture array):
+                vk::DescriptorBindingFlagBits::eUpdateAfterBind | // Can update while in use
+                vk::DescriptorBindingFlagBits::eUpdateUnusedWhilePending | // Can update unused entries
+                vk::DescriptorBindingFlagBits::ePartiallyBound // Not all array elements need to be valid (0,2,3 vs 0,1,2,3)
+
+                // Flags for binding 1 (scene info buffer):
+                // VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT  // flags for storage buffer binding
+            };
+            
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{
+                .bindingCount = uint32_t(layoutBindings.size()), // matches our number of bindings
+                .pBindingFlags = flags.data(), // the flags for each binding
+            };
+
+            vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{
+                .pNext = &bindingFlags,
+                .flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool,
+                // Allows to update the descriptor set after it has been bound
+                .bindingCount = uint32_t(layoutBindings.size()),
+                .pBindings = layoutBindings.data(),
+            };
+            descriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
+           
+            std::vector<vk::DescriptorSetLayout> layouts = { *descriptorSetLayout };
+            // Allocate the descriptor set, needed only for larger descriptor sets
+            vk::DescriptorSetAllocateInfo allocInfo = {
+                .descriptorPool = descriptorPool,
+                .descriptorSetCount = 1,
+                .pSetLayouts = layouts.data(),
+            };
+            descriptorSets = device.allocateDescriptorSets(allocInfo);
+        }
+
+    // Second this is another set which will be pushed
+        {
+            // This is the scene buffer information
+            std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings{
+            {
+                {
+                    .binding = 0,
+                    .descriptorType = vk::DescriptorType::eUniformBuffer,
+                    .descriptorCount = 1,
+                    .stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute
+                }
+            }
+            };
+            vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{
+                .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor,
+                .bindingCount = uint32_t(layoutBindings.size()),
+                .pBindings = layoutBindings.data(),
+            };
+            commonDescriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
+        }
+        
+        // The sampler used for the texture
+        vk::raii::Sampler sampler = m_samplerPool.acquireSampler({
+            .magFilter = vk::Filter::eLinear,
+            .minFilter = vk::Filter::eLinear,
+            .mipmapMode = vk::SamplerMipmapMode::eLinear,
+            .addressModeU = vk::SamplerAddressMode::eRepeat,
+            .addressModeV = vk::SamplerAddressMode::eRepeat,
+            .addressModeW = vk::SamplerAddressMode::eRepeat,
+            .maxLod = vk::LodClampNone,
+        });
+    
+        // Prepare imageInfos vector automatically sized to m_image's size
+        std::vector<vk::DescriptorImageInfo> imageInfos;
+        imageInfos.reserve(1); // reserve for efficiency
+
+        // The image info
+        for (size_t i = 0; i < 1; ++i)
+        {
+            imageInfos.push_back({
+                .sampler = sampler,
+                .imageView = textureImageView,
+                .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+            });
+        }
+
+            std::vector<VkDescriptorSet> descHandles;
+            for (auto& ds : descriptorSets)
+                descHandles.push_back(*ds);
+
+            std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
+            writeDescriptorSets[0] = vk::WriteDescriptorSet{};
+            writeDescriptorSets[0].dstSet = descriptorSets[0]; // single handle
+            writeDescriptorSets[0].dstBinding = 0;
+            writeDescriptorSets[0].dstArrayElement = 0;
+            writeDescriptorSets[0].descriptorCount = static_cast<uint32_t>(imageInfos.size());
+            writeDescriptorSets[0].descriptorType = vk::DescriptorType::eCombinedImageSampler;
+            writeDescriptorSets[0].pImageInfo = imageInfos.data();
+
+        // This is if the scene info buffer if part of the descriptor set layout (we have it in a separate set/layout)
+        // VkDescriptorBufferInfo bufferInfo = {.buffer = m_sceneInfoBuffer.buffer, .offset = 0, .range = VK_WHOLE_SIZE};
+        // writeDescriptorSets.push_back({
+        //     .sType           = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        //     .dstSet          = m_textureDescriptorSet,  // Not set, this is a push descriptor
+        //     .dstBinding      = 1,                       // layout(binding = 1) in the fragment shader
+        //     .dstArrayElement = 0,                       // If we were to use an array of images
+        //     .descriptorCount = 1,
+        //     .descriptorType  = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        //     .pBufferInfo     = &bufferInfo,
+        // });
+
+        /*-- 
+         * With the flags set it ACTUALLY allows:
+         *  - You can update after binding to a command buffer but before submitting.
+         *  - You can update while the descriptor set is bound in another thread.
+         *  - You don't invalidate the command buffer when you update.
+         *  - Multiple threads can update different descriptors at the same time
+         * What it does NOT allow:
+         *  - Update while the GPU is actively reading it in a shader
+         *  - Skipping proper synchronization between CPU updates and GPU reads
+         *  - Simultaneous updates to the same descriptor
+         * Since this is called before starting to render, we don't need to worry about the first two.
+        -*/
+            device.updateDescriptorSets(writeDescriptorSets, {});
     }
-}
 
 void Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
                             vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
@@ -1339,18 +1504,13 @@ void Renderer::endSingleTimeCommands(const vk::raii::CommandBuffer& commandBuffe
     queue.waitIdle();
 }
 
-//change this to use the above functions check images chapter or 1 before idk
 void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
 {
-    vk::CommandBufferAllocateInfo allocInfo{
-        .commandPool = *commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1
-    };
-    vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocInfo).front());
-    commandCopyBuffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
-    commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy{.size = size});
-    commandCopyBuffer.end();
-    queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr);
-    queue.waitIdle();
+    auto commandCopyBuffer = beginSingleTimeCommands();
+
+    commandCopyBuffer->copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy{.size = size});
+
+    endSingleTimeCommands(*commandCopyBuffer);
 }
 
 uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
@@ -1468,22 +1628,41 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
     commandBuffers[currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
     commandBuffers[currentFrame].bindVertexBuffers(0, *vertexBuffer, {0});
     commandBuffers[currentFrame].bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint32);
+
+    vk::DescriptorBufferInfo bufferInfo = { .buffer = gameObjects[0].uniformBuffers[0], .offset = 0, .range = vk::WholeSize };
+    std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
+    writeDescriptorSets[0] = vk::WriteDescriptorSet{};
+    writeDescriptorSets[0].dstSet = nullptr;
+    writeDescriptorSets[0].dstBinding = 0;
+    writeDescriptorSets[0].dstArrayElement = 0;
+    writeDescriptorSets[0].descriptorCount = 1;
+    writeDescriptorSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+    writeDescriptorSets[0].pBufferInfo = &bufferInfo;
+    
+    vk::PushDescriptorSetInfoKHR pushDescriptorInfo
+    {
+        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+        .layout = pipelineLayout,
+        .set = 1,
+        .descriptorWriteCount = writeDescriptorSets.size(),
+        .pDescriptorWrites = writeDescriptorSets.data()
+    };
+    commandBuffers[currentFrame].pushDescriptorSet2(pushDescriptorInfo);
     /*commandBuffers[currentFrame].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSets[currentFrame], nullptr);*/
     // Draw each object with its own descriptor set
-    for (const auto& gameObject : gameObjects)
-    {
-        // Bind the descriptor set for this object
-        commandBuffers[currentFrame].bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            *pipelineLayout,
-            0,
-            *gameObject.descriptorSets[currentFrame],
-            nullptr
-        );
-
-        // Draw the object
-        commandBuffers[currentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
-    }
+    
+    // Bind the descriptor set for this object
+    commandBuffers[currentFrame].bindDescriptorSets(
+        vk::PipelineBindPoint::eGraphics,
+        *pipelineLayout,
+        0,
+        *descriptorSets[0],
+        nullptr
+    );
+    
+    // Draw the object
+    commandBuffers[currentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
+    
     commandBuffers[currentFrame].endRendering();
 
     // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui

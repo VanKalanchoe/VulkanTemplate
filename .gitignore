@@ -1,3 +1,4 @@
 /build
 /vcpkg
 /vendor/vcpkg
+main/testmain.cpp

@@ -168,6 +168,6 @@ add_chapter(
     main
     SHADER shaders/shader
     MODELS viking_room.obj viking_room.glb
-    TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg
+    TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg ../textures/viking_room2.ktx2 
     LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui::imgui
 )
