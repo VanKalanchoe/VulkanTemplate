@@ -1,5 +1,18 @@
 #include "Renderer.h"
 
+/*--
+ * We are using the Vulkan Memory Allocator (VMA) to manage memory.
+ * This is a library that helps to allocate memory for Vulkan resources.
+-*/
+#define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
+#define VMA_IMPLEMENTATION
+#define VMA_LEAK_LOG_FORMAT(format, ...)                                                                               \
+{                                                                                                                    \
+printf((format), __VA_ARGS__);                                                                                     \
+printf("\n");                                                                                                      \
+}
+#include "vk_mem_alloc.h"
+
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
@@ -41,8 +54,16 @@ SDL_AppResult Renderer::initVulkan()
     setupDebugMessenger();
     createSurface();
     pickPhysicalDevice();
-    msaaSamples = getMaxUsableSampleCount();
     createLogicalDevice();
+    allocator.init(VmaAllocatorCreateInfo
+    {
+        .physicalDevice = *physicalDevice,
+        .device = *device,
+        .instance = *instance,
+        .vulkanApiVersion = apiVersion
+    });
+    
+    msaaSamples = getMaxUsableSampleCount();
     createSwapChain();
     createImageViews();
     
@@ -202,22 +223,26 @@ void Renderer::cleanup()
     for (auto& gameObject : gameObjects)
     {
         // Unmap memory
-        for (size_t i = 0; i < gameObject.uniformBuffersMemory.size(); i++)
+        for (size_t i = 0; i < gameObject.uniformBuffers.size(); i++)
         {
-            if (gameObject.uniformBuffersMapped[i] != nullptr)
+            if (gameObject.uniformBuffers[i].buffer)
             {
-                gameObject.uniformBuffersMemory[i].unmapMemory();
+                allocator.destroyBuffer(gameObject.uniformBuffers[i]);
             }
         }
 
         // Clear vectors to release resources
         gameObject.uniformBuffers.clear();
-        gameObject.uniformBuffersMemory.clear();
-        gameObject.uniformBuffersMapped.clear();
+        /*gameObject.uniformBuffersMemory.clear();
+        gameObject.uniformBuffersMapped.clear();*/
         gameObject.descriptorSets.clear();
     }
 
+    allocator.destroyBuffer(vertexBuffer);
+    allocator.destroyBuffer(indexBuffer);
+    
     m_samplerPool.deinit();
+    allocator.deinit();
 
     ImGui_ImplVulkan_Shutdown();
     ImGui_ImplSDL3_Shutdown();
@@ -264,7 +289,8 @@ void Renderer::createInstance()
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
         .apiVersion = vk::ApiVersion14
     };
-
+    apiVersion = vk::ApiVersion14;
+    
     // Get the required layers
     std::vector<char const*> requiredLayers;
     if (enableValidationLayers)
@@ -415,13 +441,17 @@ void Renderer::createLogicalDevice()
     }
 
     // query for Vulkan 1.3 features
-    vk::StructureChain<
+    vk::StructureChain
+    <
         vk::PhysicalDeviceFeatures2,
         vk::PhysicalDeviceVulkan11Features, // added myself
         vk::PhysicalDeviceVulkan13Features,
         vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-        vk::PhysicalDeviceDescriptorIndexingFeatures
-    >featureChain =
+        vk::PhysicalDeviceDescriptorIndexingFeatures,
+        vk::PhysicalDeviceBufferDeviceAddressFeatures,
+        vk::PhysicalDeviceMaintenance5Features
+    >
+    featureChain =
     {
         {.features = {.sampleRateShading = true, .samplerAnisotropy = true}}, // vk::PhysicalDeviceFeatures2
         {.shaderDrawParameters = true}, // <-- enable // added myself
@@ -434,7 +464,9 @@ void Renderer::createLogicalDevice()
             .descriptorBindingPartiallyBound = true,
             .descriptorBindingVariableDescriptorCount = true,
             .runtimeDescriptorArray = true
-            }
+        },
+        {.bufferDeviceAddress = true},
+        {.maintenance5 = true}
     };
 
     // create a Device
@@ -518,8 +550,11 @@ void Renderer::createGraphicsPipeline()
     vk::PipelineShaderStageCreateInfo vertShaderStageInfo{
         .stage = vk::ShaderStageFlagBits::eVertex, .module = shaderModule, .pName = "vertMain"
     };
-    vk::PipelineShaderStageCreateInfo fragShaderStageInfo{
-        .stage = vk::ShaderStageFlagBits::eFragment, .module = shaderModule, .pName = "fragMain"
+    vk::PipelineShaderStageCreateInfo fragShaderStageInfo
+    {
+        .stage = vk::ShaderStageFlagBits::eFragment,
+        .module = shaderModule,
+        .pName = "fragMain",
     };
     vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
@@ -717,16 +752,33 @@ void Renderer::createTextureImage()
     ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
 
     // Create staging buffer
-    vk::raii::Buffer stagingBuffer({});
+    /*vk::raii::Buffer stagingBuffer({});
     vk::raii::DeviceMemory stagingBufferMemory({});
     createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
                  vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                 stagingBuffer, stagingBufferMemory);
+                 stagingBuffer, stagingBufferMemory);*/
+   
+    Buffer stagingBuffer = allocator.createBuffer
+    (
+        imageSize,
+        vk::BufferUsageFlagBits2::eTransferSrc,
+            VMA_MEMORY_USAGE_CPU_TO_GPU,
+            VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+        );
 
     // Copy texture data to staging buffer
-    void* data = stagingBufferMemory.mapMemory(0, imageSize);
+    /*void* data = stagingBufferMemory.mapMemory(0, imageSize);
     memcpy(data, ktxTextureData, imageSize);
-    stagingBufferMemory.unmapMemory();
+    stagingBufferMemory.unmapMemory();*/
+    void* mappedPtr = nullptr;
+    if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
+    {
+        return; // todo
+    }
+
+    memcpy(mappedPtr, ktxTextureData, imageSize);
+
+    vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
     // Determine the Vulkan format from KTX format
     vk::Format textureFormat;
@@ -765,6 +817,7 @@ void Renderer::createTextureImage()
         transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
                               mipLevels);
 
+        std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = Renderer::beginSingleTimeCommands();
         // Copy each mip level
         for (uint32_t i = 0; i < mipLevels; i++)
         {
@@ -772,15 +825,18 @@ void Renderer::createTextureImage()
             KTX_error_code result = ktxTexture_GetImageOffset(kTexture, i, 0, 0, &offset);
             uint32_t mipWidth = std::max(1u, texWidth >> i);
             uint32_t mipHeight = std::max(1u, texHeight >> i);
-            copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(mipWidth),
-                              static_cast<uint32_t>(mipHeight), offset, i);
+            /*copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(mipWidth),
+                              static_cast<uint32_t>(mipHeight), offset, i);*/
+            allocator.copyBufferToImage(commandBuffer, stagingBuffer,textureImage, static_cast<uint32_t>(mipWidth), static_cast<uint32_t>(mipHeight), offset, i);
         }
-
+        endSingleTimeCommands(*commandBuffer);
+        
         transitionImageLayout(textureImage, vk::ImageLayout::eTransferDstOptimal,
                               vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
     }
     else
     {
+        std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = Renderer::beginSingleTimeCommands();
         mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
         // Create the texture image
         createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
@@ -793,12 +849,13 @@ void Renderer::createTextureImage()
         transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
                               mipLevels);
 
-        copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth),
-                          static_cast<uint32_t>(texHeight));
-
+        /*copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth),
+                          static_cast<uint32_t>(texHeight));*/
+        allocator.copyBufferToImage(commandBuffer, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        endSingleTimeCommands(*commandBuffer);
         generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
     }
-
+    allocator.destroyBuffer(stagingBuffer); // not needed in the future with vulkanhpp
     // Cleanup KTX resources
     ktxTexture_Destroy(kTexture);
 }
@@ -1000,6 +1057,7 @@ void Renderer::transitionImageLayout(const vk::raii::Image& image, vk::ImageLayo
     endSingleTimeCommands(*commandBuffer);
 }
 
+/*
 void Renderer::copyBufferToImage(const vk::raii::Buffer& buffer, vk::raii::Image& image, uint32_t width,
                                  uint32_t height,
                                  uint64_t offset, uint32_t mipLevel)
@@ -1015,6 +1073,7 @@ void Renderer::copyBufferToImage(const vk::raii::Buffer& buffer, vk::raii::Image
     commandBuffer->copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, {region});
     endSingleTimeCommands(*commandBuffer);
 }
+*/
 
 void Renderer::loadModel()
 {
@@ -1149,40 +1208,69 @@ void Renderer::loadModel()
 void Renderer::createVertexBuffer()
 {
     vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-    vk::raii::Buffer stagingBuffer({});
-    vk::raii::DeviceMemory stagingBufferMemory({});
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer,
-                 stagingBufferMemory);
 
-    void* dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
-    memcpy(dataStaging, vertices.data(), bufferSize);
-    stagingBufferMemory.unmapMemory();
+    Buffer stagingBuffer = allocator.createBuffer
+  (
+      bufferSize,
+      vk::BufferUsageFlagBits2::eTransferSrc,
+          VMA_MEMORY_USAGE_CPU_TO_GPU,
+          VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+          );
+    
+    void* mappedPtr = nullptr;
+    if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
+    {
+        return; // todo
+    }
 
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);
+    memcpy(mappedPtr, vertices.data(), bufferSize);
 
-    copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+    vmaUnmapMemory(allocator, stagingBuffer.allocation);
+
+    /*createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
+                 vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);*/
+
+    vertexBuffer = allocator.createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eVertexBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
+
+    /*copyBuffer(stagingBuffer, vertexBuffer, bufferSize);*/
+    std::unique_ptr<vk::raii::CommandBuffer> commandbuffer = beginSingleTimeCommands();
+    allocator.copyBuffer(commandbuffer, stagingBuffer, vertexBuffer, bufferSize);
+    endSingleTimeCommands(*commandbuffer);
+
+    allocator.destroyBuffer(stagingBuffer); // not needed in the future with vulkanhpp
 }
 
 void Renderer::createIndexBuffer()
 {
     vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
+    
+    Buffer stagingBuffer = allocator.createBuffer
+   (
+       bufferSize,
+       vk::BufferUsageFlagBits2::eTransferSrc,
+           VMA_MEMORY_USAGE_CPU_TO_GPU,
+           VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+           );
+    
+    void* mappedPtr = nullptr;
+    if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
+    {
+        return; // todo
+    }
 
-    vk::raii::Buffer stagingBuffer({});
-    vk::raii::DeviceMemory stagingBufferMemory({});
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc,
-                 vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer,
-                 stagingBufferMemory);
+    memcpy(mappedPtr, indices.data(), bufferSize);
 
-    void* data = stagingBufferMemory.mapMemory(0, bufferSize);
-    memcpy(data, indices.data(), bufferSize);
-    stagingBufferMemory.unmapMemory();
+    vmaUnmapMemory(allocator, stagingBuffer.allocation);
 
-    createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-                 vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);
+    /*createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
+                 vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);*/
+    indexBuffer = allocator.createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eIndexBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
 
-    copyBuffer(stagingBuffer, indexBuffer, bufferSize);
+    /*copyBuffer(stagingBuffer, indexBuffer, bufferSize);*/
+    std::unique_ptr<vk::raii::CommandBuffer> commandbuffer = beginSingleTimeCommands();
+    allocator.copyBuffer(commandbuffer, stagingBuffer, indexBuffer, bufferSize);
+    endSingleTimeCommands(*commandbuffer);
+    allocator.destroyBuffer(stagingBuffer);
 }
 
 // Initialize the game objects with different positions, rotations, and scales
@@ -1211,21 +1299,21 @@ void Renderer::createUniformBuffers()
     for (auto& gameObject : gameObjects)
     {
         gameObject.uniformBuffers.clear();
-        gameObject.uniformBuffersMemory.clear();
-        gameObject.uniformBuffersMapped.clear();
+        /*gameObject.uniformBuffersMemory.clear();
+        gameObject.uniformBuffersMapped.clear();*/
 
         // Create uniform buffers for each frame in flight
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-            vk::raii::Buffer buffer({});
-            vk::raii::DeviceMemory bufferMem({});
-            createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
+            Buffer buffer({});
+            /*createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
                          vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, buffer,
-                         bufferMem);
+                         bufferMem);*/
+            buffer = allocator.createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eUniformBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
             gameObject.uniformBuffers.emplace_back(std::move(buffer));
-            gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
-            gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));
+            /*gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
+            gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));*/
         }
     }
 }
@@ -1459,7 +1547,7 @@ void Renderer::createDescriptorSets()
             device.updateDescriptorSets(writeDescriptorSets, {});
     }
 
-void Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
+/*void Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
                             vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
 {
     vk::BufferCreateInfo bufferInfo{
@@ -1475,7 +1563,7 @@ void Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk:
     };
     bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
     buffer.bindMemory(*bufferMemory, 0);
-}
+}*/
 
 std::unique_ptr<vk::raii::CommandBuffer> Renderer::beginSingleTimeCommands()
 {
@@ -1504,6 +1592,7 @@ void Renderer::endSingleTimeCommands(const vk::raii::CommandBuffer& commandBuffe
     queue.waitIdle();
 }
 
+/*
 void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
 {
     auto commandCopyBuffer = beginSingleTimeCommands();
@@ -1512,6 +1601,7 @@ void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuff
 
     endSingleTimeCommands(*commandCopyBuffer);
 }
+*/
 
 uint32_t Renderer::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
 {
@@ -1626,10 +1716,10 @@ void Renderer::recordCommandBuffer(uint32_t imageIndex)
                                                              static_cast<float>(swapChainExtent.height), 0.0f,
                                                              1.0f));
     commandBuffers[currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-    commandBuffers[currentFrame].bindVertexBuffers(0, *vertexBuffer, {0});
-    commandBuffers[currentFrame].bindIndexBuffer(*indexBuffer, 0, vk::IndexType::eUint32);
+    commandBuffers[currentFrame].bindVertexBuffers(0, vertexBuffer.buffer, {0});
+    commandBuffers[currentFrame].bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
 
-    vk::DescriptorBufferInfo bufferInfo = { .buffer = gameObjects[0].uniformBuffers[0], .offset = 0, .range = vk::WholeSize };
+    vk::DescriptorBufferInfo bufferInfo = { .buffer = gameObjects[0].uniformBuffers[0].buffer, .offset = 0, .range = vk::WholeSize };
     std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
     writeDescriptorSets[0] = vk::WriteDescriptorSet{};
     writeDescriptorSets[0].dstSet = nullptr;
@@ -1834,8 +1924,31 @@ void Renderer::updateUniformBuffers()
             .proj = proj
         };
 
-        // Copy the UBO data to the mapped memory
-        memcpy(gameObject.uniformBuffersMapped[currentFrame], &ubo, sizeof(ubo));
+        /*// Copy the UBO data to the mapped memory
+        memcpy(gameObject.uniformBuffers[currentFrame].buffer, &ubo, sizeof(ubo));*/
+        Buffer stagingBuffer = allocator.createBuffer
+   (
+       sizeof(ubo),
+       vk::BufferUsageFlagBits2::eTransferSrc,
+           VMA_MEMORY_USAGE_CPU_TO_GPU,
+           VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+       );
+        
+        void* mappedPtr = nullptr;
+        if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
+        {
+            return; // todo
+        }
+
+        memcpy(mappedPtr, &ubo, sizeof(ubo));
+
+        vmaUnmapMemory(allocator, stagingBuffer.allocation);
+
+        std::unique_ptr<vk::raii::CommandBuffer> commandbuffer = beginSingleTimeCommands();
+        allocator.copyBuffer(commandbuffer, stagingBuffer, gameObject.uniformBuffers[currentFrame], sizeof(ubo));
+
+        endSingleTimeCommands(*commandbuffer);
+        allocator.destroyBuffer(stagingBuffer);
     }
 }
 

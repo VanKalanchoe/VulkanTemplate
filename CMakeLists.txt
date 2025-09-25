@@ -13,6 +13,7 @@ find_package (Vulkan REQUIRED)
 find_package (tinyobjloader REQUIRED)
 find_package (tinygltf REQUIRED)
 find_package (KTX REQUIRED)
+find_package (VulkanMemoryAllocator CONFIG REQUIRED)
 
 # Add ImGui from submodule
 add_subdirectory(vendor/imgui)
@@ -169,5 +170,5 @@ add_chapter(
     SHADER shaders/shader
     MODELS viking_room.obj viking_room.glb
     TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg ../textures/viking_room2.ktx2 
-    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui::imgui
+    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui::imgui GPUOpen::VulkanMemoryAllocator
 )
