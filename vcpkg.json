@@ -9,6 +9,8 @@
     "tinygltf",
     "nlohmann-json",
     "ktx",
-    "vulkan-memory-allocator"
+    "vulkan-memory-allocator",
+    "xxhash",
+    "spdlog"
   ]
 }

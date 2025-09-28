@@ -20,7 +20,7 @@ struct VSOutput
 };
 
 [shader("vertex")]
-VSOutput vertMain(VSInput input) {
+VSOutput vertexMain(VSInput input) {
     VSOutput output;
     output.pos = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 1.0))));
     output.fragColor = input.inColor;
@@ -31,7 +31,7 @@ VSOutput vertMain(VSInput input) {
 Sampler2D texture[];
 
 [shader("fragment")]
-float4 fragMain(VSOutput vertIn) : SV_TARGET {
+float4 fragmentMain(VSOutput vertIn) : SV_TARGET {
     
    return texture[0].Sample(vertIn.fragTexCoord);
 }
