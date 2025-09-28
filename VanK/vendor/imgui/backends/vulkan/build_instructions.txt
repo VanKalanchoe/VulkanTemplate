@@ -1,0 +1,5 @@
+glslangValidator -V -x -o glsl_shader.frag.u32 glsl_shader.frag
+
+Script to rebuild shaders stored inside imgui_impl_vulkan.h
+(You don't need to copy this folder if you are using the backend as-is)
+
