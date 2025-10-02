@@ -16,14 +16,15 @@
 #include <span>
 #include <thread>
 #include <unordered_map>
-#include <vulkan/vulkan_raii.hpp>
 
 #include "VanK/Renderer/RendererAPI.h"
 #include "VanK/Core/Log.h"
 
 #ifdef __INTELLISENSE__
+#define VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <vulkan/vulkan_raii.hpp>
 #else
+#define VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 import vulkan_hpp;
 #endif
 
@@ -57,16 +58,18 @@ import vulkan_hpp;
 
 #include <ktx.h>
 
+#include "Platform/Vulkan/debug_util.h"
+/*#define DBG_VK_NAME(obj)  ((void)0)
+#define DBG_VK_SCOPE(_cmd)  ((void)0)*/
 // Some graphic user interface (GUI) using Dear ImGui
 #include "backends/imgui_impl_SDL3.h"
 #include "backends/imgui_impl_vulkan.h"
-#include "imgui.h"
 #include "imgui_internal.h"  // For Docking
 
 constexpr uint32_t WIDTH = 800;
 constexpr uint32_t HEIGHT = 600;
 constexpr int MAX_FRAMES_IN_FLIGHT = 2;
-const std::string MODEL_PATH = "../build/VanK/models/viking_room.glb";
+
 const std::string TEXTURE_PATH = "../build/VanK/textures/viking_room.ktx2";
 // Define the number of objects to render
 constexpr int MAX_OBJECTS = 3;
@@ -104,53 +107,17 @@ throw std::runtime_error(message);                                              
 #define ASSERT(condition, message) assert((condition) && (message))
 #endif
 
-struct Vertex
-{
-    glm::vec3 pos;
-    glm::vec3 color;
-    glm::vec2 texCoord;
-
-    static vk::VertexInputBindingDescription getBindingDescription()
-    {
-        return {0, sizeof(Vertex), vk::VertexInputRate::eVertex};
-    }
-
-    static std::array<vk::VertexInputAttributeDescription, 3> getAttributeDescriptions()
-    {
-        return {
-            vk::VertexInputAttributeDescription(0, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, pos)),
-            vk::VertexInputAttributeDescription(1, 0, vk::Format::eR32G32B32Sfloat, offsetof(Vertex, color)),
-            vk::VertexInputAttributeDescription(2, 0, vk::Format::eR32G32Sfloat, offsetof(Vertex, texCoord))
-        };
-    }
-
-    bool operator==(const Vertex& other) const
-    {
-        return pos == other.pos && color == other.color && texCoord == other.texCoord;
-    }
-};
-
-template <>
-struct std::hash<Vertex>
-{
-    size_t operator()(Vertex const& vertex) const noexcept
-    {
-        return ((hash<glm::vec3>()(vertex.pos) ^ (hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^ (hash<
-            glm::vec2>()(vertex.texCoord) << 1);
-    }
-};
-
 namespace VanK
 {
     struct VanKCommandBuffer_T
     {
-        vk::raii::CommandBuffer handle;
+        vk::raii::CommandBuffer* handle;
     };
 
     inline vk::raii::CommandBuffer& Unwrap(VanKCommandBuffer cmd)
     {
         assert(cmd && "VanKCommandBuffer is null!");
-        return cmd->handle;
+        return *cmd->handle;
     }
 
     struct VanKPipeLine_T
@@ -201,6 +168,173 @@ namespace VanK
             /*assert(!*shaderModule && "Shader modules not compiled!");*/
             return shaderModule;
         }
+
+        /*-- 
+         * This returns the pipeline and access flags for a given layout, use for changing the image layout  
+        -*/
+        static std::tuple<vk::PipelineStageFlags2, vk::AccessFlags2> makePipelineStageAccessTuple(vk::ImageLayout state)
+        {
+            switch (state)
+            {
+            case vk::ImageLayout::eUndefined:
+                return std::make_tuple(vk::PipelineStageFlagBits2::eTopOfPipe, vk::AccessFlagBits2::eNone);
+            case vk::ImageLayout::eColorAttachmentOptimal:
+                return std::make_tuple(vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                                       vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite);
+            case vk::ImageLayout::eShaderReadOnlyOptimal:
+                return std::make_tuple(vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader
+                                       | vk::PipelineStageFlagBits2::ePreRasterizationShaders,
+                                       vk::AccessFlagBits2::eShaderRead);
+            case vk::ImageLayout::eTransferDstOptimal:
+                return std::make_tuple(vk::PipelineStageFlagBits2::eTransfer, vk::AccessFlagBits2::eTransferWrite);
+            case vk::ImageLayout::eTransferSrcOptimal:
+                return std::make_tuple(vk::PipelineStageFlagBits2::eTransfer, vk::AccessFlagBits2::eTransferRead);
+            case vk::ImageLayout::eGeneral:
+                return std::make_tuple(vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eTransfer,
+                                       vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite |
+                                       vk::AccessFlagBits2::eTransferWrite);
+            case vk::ImageLayout::ePresentSrcKHR:
+                return std::make_tuple(vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eNone);
+            case vk::ImageLayout::eDepthStencilAttachmentOptimal: // added this myself
+                return std::make_tuple(
+                    vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
+                    vk::AccessFlagBits2::eDepthStencilAttachmentRead | vk::AccessFlagBits2::eDepthStencilAttachmentWrite
+                );
+            default:
+                {
+                    ASSERT(false, "Unsupported layout transition!");
+                    return std::make_tuple(vk::PipelineStageFlagBits2::eAllCommands,
+                                           vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite);
+                }
+            }
+        };
+
+        /*-- 
+         * Return the barrier with the most common pair of stage and access flags for a given layout 
+        -*/
+        static vk::ImageMemoryBarrier2 createImageMemoryBarrier
+        (
+            vk::Image image,
+            vk::ImageLayout oldLayout,
+            vk::ImageLayout newLayout,
+            vk::ImageSubresourceRange subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
+        )
+        {
+            const auto [srcStage, srcAccess] = makePipelineStageAccessTuple(oldLayout);
+            const auto [dstStage, dstAccess] = makePipelineStageAccessTuple(newLayout);
+
+            vk::ImageMemoryBarrier2 barrier
+            {
+                .srcStageMask = srcStage,
+                .srcAccessMask = srcAccess,
+                .dstStageMask = dstStage,
+                .dstAccessMask = dstAccess,
+                .oldLayout = oldLayout,
+                .newLayout = newLayout,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = subresourceRange
+            };
+            return barrier;
+        }
+
+        /*--
+         * A helper function to transition an image from one layout to another.
+         * In the pipeline, the image must be in the correct layout to be used, and this function is used to transition the image to the correct layout.
+        -*/
+        static void cmdTransitionImageLayout
+        (
+            vk::raii::CommandBuffer& cmd,
+            vk::Image image,
+            vk::ImageLayout oldLayout,
+            vk::ImageLayout newLayout,
+            vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor,
+            uint32_t baseArrayLayer = 0,
+            uint32_t layercount = 1
+        )
+        {
+            const vk::ImageMemoryBarrier2 barrier = createImageMemoryBarrier(image, oldLayout, newLayout,
+                                                                           {aspectMask, 0, 1, baseArrayLayer, layercount});
+            const vk::DependencyInfo depInfo
+            {
+                .imageMemoryBarrierCount = 1,
+                .pImageMemoryBarriers = &barrier
+            };
+            cmd.pipelineBarrier2(depInfo);
+        }
+
+        /*-- 
+        *  This helper returns the access mask for a given stage mask.
+       -*/
+        static vk::AccessFlags2 inferAccessMaskFromStage(vk::PipelineStageFlags2 stage, bool src)
+        {
+            vk::AccessFlags2 access = {};
+
+            // Handle each possible stage bit
+            if ((stage & vk::PipelineStageFlagBits2::eComputeShader))
+                access |= src ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlagBits2::eShaderWrite;
+            if ((stage & vk::PipelineStageFlagBits2::eFragmentShader))
+                access |= src ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlagBits2::eShaderWrite;
+            if ((stage & vk::PipelineStageFlagBits2::eVertexAttributeInput))
+                access |= vk::AccessFlagBits2::eVertexAttributeRead; // Always read-only
+            if ((stage & vk::PipelineStageFlagBits2::eTransfer))
+                access |= src ? vk::AccessFlagBits2::eTransferRead : vk::AccessFlagBits2::eTransferWrite;
+            ASSERT(access, "Missing stage implementation");
+            return access;
+        }
+
+        /*--
+         * This useful function simplifies the addition of buffer barriers, by inferring 
+         * the access masks from the stage masks, and adding the buffer barrier to the command buffer.
+        -*/
+        static void cmdBufferMemoryBarrier
+        (
+            vk::raii::CommandBuffer& commandBuffer,
+            vk::Buffer buffer,
+            vk::PipelineStageFlags2 srcStageMask,
+            vk::PipelineStageFlags2 dstStageMask,
+            vk::AccessFlags2 srcAccessMask = {}, // Default to infer if not provided
+            vk::AccessFlags2 dstAccessMask = {}, // Default to infer if not provided
+            vk::DeviceSize offset = 0,
+            vk::DeviceSize size = VK_WHOLE_SIZE,
+            uint32_t srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+            uint32_t dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED
+        )
+        {
+            // Infer access masks if not explicitly provided
+            if (!srcAccessMask)
+            {
+                srcAccessMask = inferAccessMaskFromStage(srcStageMask, true);
+            }
+            if (!dstAccessMask)
+            {
+                dstAccessMask = inferAccessMaskFromStage(dstStageMask, false);
+            }
+
+            const std::array<vk::BufferMemoryBarrier2, 1> bufferBarrier{
+                {
+                    {
+                        .srcStageMask = srcStageMask,
+                        .srcAccessMask = srcAccessMask,
+                        .dstStageMask = dstStageMask,
+                        .dstAccessMask = dstAccessMask,
+                        .srcQueueFamilyIndex = srcQueueFamilyIndex,
+                        .dstQueueFamilyIndex = dstQueueFamilyIndex,
+                        .buffer = buffer,
+                        .offset = offset,
+                        .size = size
+                    }
+                }
+            };
+
+            const vk::DependencyInfo depInfo
+            {
+                .bufferMemoryBarrierCount = uint32_t(bufferBarrier.size()),
+                .pBufferMemoryBarriers = bufferBarrier.data()
+            };
+            commandBuffer.pipelineBarrier2(depInfo);
+        }
         
         /*--
          * A buffer is a region of memory used to store data.
@@ -222,7 +356,7 @@ namespace VanK
         -*/
         struct Image
         {
-            vk::Image image{}; // Vulkan Image
+            VkImage image{}; // Vulkan Image
             VmaAllocation allocation{}; // Memory associated with the image
         };
 
@@ -232,8 +366,7 @@ namespace VanK
         -*/
         struct ImageResource : Image
         {
-            vk::ImageView view{}; // Image view
-            std::vector<vk::ImageView> faceViews;
+            VkImageView view{}; // Image view
             vk::Extent2D extent{}; // Size of the image
             vk::ImageLayout layout{}; // Layout of the image (color attachment, shader read, ...)
         };
@@ -339,13 +472,13 @@ namespace VanK
                 resultBuffer.buffer = cbuffer;
         
                 // Get the GPU address of the buffer
-                const VkBufferDeviceAddressInfo info =
+                const vk::BufferDeviceAddressInfo info =
                 {
-                    .sType = VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO,
                     .buffer = cbuffer
                 };
-                /*resultBuffer.address = m_device.getBufferAddress(info);*/
-                resultBuffer.address = vkGetBufferDeviceAddress(m_device, &info);
+                /*vk::DispatchLoaderDynamic dld(instance, m_device);
+                resultBuffer.address = m_device.getBufferAddress(info);*/
+                /*resultBuffer.address = vkGetBufferDeviceAddress(m_device, static_cast<VkBufferDeviceAddressInfo>(&info));*/
                 {
                     // Find leaks
                     static uint32_t counter = 0U;
@@ -386,12 +519,133 @@ namespace VanK
                 commandBuffer->copyBufferToImage(buffer.buffer, image, vk::ImageLayout::eTransferDstOptimal, {region});
             }
 
+            /*--
+             * Create a staging buffer, copy data into it, and track it.
+             * This method accepts data, handles the mapping, copying, and unmapping
+             * automatically.
+            -*/
+            template <typename T>
+            Buffer createStagingBuffer(const std::span<T>& vectorData)
+            {
+                const VkDeviceSize bufferSize = sizeof(T) * vectorData.size();
+
+                // Create a staging buffer
+                Buffer stagingBuffer = createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferSrc,
+                                                    VMA_MEMORY_USAGE_CPU_TO_GPU,
+                                                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
+
+                // Track the staging buffer for later cleanup
+                m_stagingBuffers.push_back(stagingBuffer);
+
+                // Map and copy data to the staging buffer
+                void* data;
+                vmaMapMemory(m_allocator, stagingBuffer.allocation, &data);
+                memcpy(data, vectorData.data(), (size_t)bufferSize);
+                vmaUnmapMemory(m_allocator, stagingBuffer.allocation);
+                return stagingBuffer;
+            }
+
+            /*--
+             * Create an image in GPU memory. This does not adding data to the image.
+             * This is only creating the image in GPU memory.
+             * See createImageAndUploadData for creating an image and uploading data.
+            -*/
+            Image createImage(const VkImageCreateInfo& imageInfo) const
+            {
+                const VmaAllocationCreateInfo createInfo{.usage = VMA_MEMORY_USAGE_GPU_ONLY};
+
+                Image image;
+                VmaAllocationInfo allocInfo{};
+                VK_CHECK(
+                    vmaCreateImage(m_allocator, &imageInfo, &createInfo, &image.image, &image.allocation, &allocInfo));
+                return image;
+            }
+            
+            /*-- Destroy image --*/ // has to change once vma hpp
+            void destroyImage(Image& image) const { vmaDestroyImage(m_allocator, image.image, image.allocation); }
+
+            void destroyImageResource(ImageResource& imageRessource) const
+            {
+                destroyImage(imageRessource);
+                vkDestroyImageView(m_device, imageRessource.view, nullptr);
+            }
+
+            /*-- Create an image and upload data using a staging buffer --*/
+            template <typename T>
+            ImageResource createImageAndUploadData
+            (
+                vk::raii::CommandBuffer& cmd,
+                const std::span<T>& vectorData,
+                const vk::ImageCreateInfo& _imageInfo,
+                vk::ImageLayout finalLayout,
+                uint32_t layerCount = 1,
+                vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor)
+            {
+                // Create staging buffer and upload data
+                Buffer stagingBuffer = createStagingBuffer(vectorData);
+
+                // Create image in GPU memory
+                vk::ImageCreateInfo imageInfo = _imageInfo;
+                imageInfo.usage |= vk::ImageUsageFlagBits::eTransferDst; // We will copy data to this image
+                Image image = createImage(imageInfo);
+
+                // Transition image layout for copying data
+                cmdTransitionImageLayout(cmd, image.image, vk::ImageLayout::eUndefined,
+                                         vk::ImageLayout::eTransferDstOptimal, aspectFlags, 0, layerCount);
+                
+                // Copy buffer data to the image
+                std::vector<vk::BufferImageCopy> copyRegions(layerCount);
+                
+                VkDeviceSize faceSize = imageInfo.extent.width *
+                                        imageInfo.extent.height *
+                                        4; // assuming RGBA8 (4 bytes per pixel)
+
+                for (uint32_t layer = 0; layer < layerCount; layer++)
+                {
+                    copyRegions[layer] = {
+                        .bufferOffset = faceSize * layer,
+                        .bufferRowLength = 0, // tightly packed
+                        .bufferImageHeight = 0,
+                        .imageSubresource = {
+                            .aspectMask = aspectFlags,
+                            .mipLevel = 0,
+                            .baseArrayLayer = layer,
+                            .layerCount = 1,
+                        },
+                        .imageOffset = {0, 0, 0},
+                        .imageExtent = imageInfo.extent
+                    };
+                }
+                cmd.copyBufferToImage(stagingBuffer.buffer, image.image, vk::ImageLayout::eTransferDstOptimal, copyRegions);
+                
+                // Transition image layout to final layout
+                cmdTransitionImageLayout(cmd, image.image, vk::ImageLayout::eTransferDstOptimal, finalLayout, aspectFlags, 0, layerCount);
+
+                ImageResource resultImage(image);
+                resultImage.layout = finalLayout;
+                return resultImage;
+            }
+
+            /*--
+             * The staging buffers are buffers that are used to transfer data from the CPU to the GPU.
+             * They cannot be freed until the data is transferred. So the command buffer must be completed, then the staging buffer can be cleared.
+            -*/
+            void freeStagingBuffers()
+            {
+                for (const auto& buffer : m_stagingBuffers)
+                {
+                    destroyBuffer(buffer);
+                }
+                m_stagingBuffers.clear();
+            }
+
             /*-- When leak are reported, set the ID of the leak here --*/
             void setLeakID(uint32_t id) { m_leakID = id; }
 
         private:
             VmaAllocator m_allocator{};
             vk::Device m_device{};
+            std::vector<Buffer> m_stagingBuffers{};
             uint32_t m_leakID = ~0U;
         };
 
@@ -534,41 +788,6 @@ namespace VanK
         }
     };
     
-
-    // Define a structure to hold per-object data
-    struct GameObject
-    {
-        // Transform properties
-        glm::vec3 position = {0.0f, 0.0f, 0.0f};
-        glm::vec3 rotation = {0.0f, 0.0f, 0.0f};
-        glm::vec3 scale = {1.0f, 1.0f, 1.0f};
-
-        // Uniform buffer for this object (one per frame in flight)
-        std::vector<utils::Buffer> uniformBuffers;
-
-        // Descriptor sets for this object (one per frame in flight)
-        std::vector<vk::raii::DescriptorSet> descriptorSets;
-
-        // Calculate model matrix based on position, rotation, and scale
-        glm::mat4 getModelMatrix() const
-        {
-            glm::mat4 model = glm::mat4(1.0f);
-            model = glm::translate(model, position);
-            model = glm::rotate(model, rotation.x, glm::vec3(1.0f, 0.0f, 0.0f));
-            model = glm::rotate(model, rotation.y, glm::vec3(0.0f, 1.0f, 0.0f));
-            model = glm::rotate(model, rotation.z, glm::vec3(0.0f, 0.0f, 1.0f));
-            model = glm::scale(model, scale);
-            return model;
-        }
-    };
-
-    struct UniformBufferObject
-    {
-        alignas(16) glm::mat4 model;
-        alignas(16) glm::mat4 view;
-        alignas(16) glm::mat4 proj;
-    };
-
     /*const std::vector<Vertex> vertices = {
         {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
         {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
@@ -585,9 +804,7 @@ namespace VanK
         0, 1, 2, 2, 3, 0,
         4, 5, 6, 6, 7, 4
     };*/
-    static auto lastTime = std::chrono::high_resolution_clock::now();
-    static int frameCount = 0;
-    static float fps = 0.0f;
+    
 
     class VulkanRendererAPI : public RendererAPI
     {
@@ -606,17 +823,28 @@ namespace VanK
             linearSampler = m_samplerPool.acquireSampler(info);
             initImGui(); // todo remove from here because if you dont need it dont init
         }
-
-        void Render() override
-        {
-            mainLoop();
-        }
-    public:
-        vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const;
+    private:
+        uint32_t AddTextureToPool(utils::ImageResource&& imageResource);
+        void RemoveTextureFromPool(uint32_t index);
         VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) override;
+        void DestroyAllPipelines() override;
+        void DestroyPipeline(VanKPipeLine pipeline) override;
+        VanKCommandBuffer BeginCommandBuffer() override;
+        void EndCommandBuffer(VanKCommandBuffer cmd) override;
+        void BeginFrame() override;
+        void EndFrame() override;
         void BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline) override;
-        void DestroyAllPipelines();
-
+        void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) override;
+        void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info, VanKRenderOption render_option) override;
+        void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport) override;
+        void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) override;
+        void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings) override;
+        void BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize) override;
+        void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
+        void EndRendering(VanKCommandBuffer cmd) override;
+        void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) override;
+        /*-- Wait until GPU is done using the pipeline to safly destroy --*/
+        void waitForGraphicsQueueIdle() override;
     public:
         struct PipelineResource
         {
@@ -628,13 +856,17 @@ namespace VanK
         };
         std::unordered_map<vk::Pipeline, PipelineResource> m_PipelineResources;
 
-        vk::raii::PipelineLayout* m_currentGraphicPipelineLayout;
-        vk::raii::PipelineLayout* m_currentComputePipelineLayout;
-        
+        vk::PipelineLayout m_currentGraphicPipelineLayout;
+        vk::PipelineLayout m_currentComputePipelineLayout;
+
+        void RebuildSwapchain(bool vSyncVal) { vSync = vSyncVal; recreateSwapChain(); };
         void setFramebufferResized(bool resized) { framebufferResized = resized; }
-        void setWindowMinimized(bool minimized) { windowMinimized = minimized; }
         uint32_t getAPIVersion() const { return apiVersion; };
         vk::raii::Device& GetDevice() { return device; }
+        utils::ResourceAllocator& GetAllocator() { return allocator; }
+        ImTextureID getImTextureID(uint32_t index = 0) const override { return reinterpret_cast<ImTextureID>(uiDescriptorSet[index]); }
+        void setViewportSize(Extent2D viewportSize) override
+        { viewport = vk::Extent2D{viewportSize.width, viewportSize.height}; recreateImages(); }
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -658,6 +890,8 @@ namespace VanK
         vk::raii::PipelineLayout* pipelineLayout = nullptr;
         vk::raii::Pipeline* graphicsPipeline = nullptr;
 
+        std::vector<utils::ImageResource> images;
+        vk::Extent2D viewport;
         vk::raii::Image sceneImage = nullptr;
         vk::raii::DeviceMemory sceneImageMemory = nullptr;
         vk::raii::ImageView sceneImageView = nullptr;
@@ -678,15 +912,7 @@ namespace VanK
         vk::raii::Sampler linearSampler = nullptr;
         vk::raii::Sampler textureSampler = nullptr;
         vk::Format textureImageFormat = vk::Format::eUndefined;
-
-        std::vector<Vertex> vertices;
-        std::vector<uint32_t> indices;
-        utils::Buffer vertexBuffer = {};
-        utils::Buffer indexBuffer = {};
-
-        // Array of game objects to render
-        std::array<GameObject, MAX_OBJECTS> gameObjects;
-
+        
         vk::raii::DescriptorPool descriptorPool = nullptr;
         vk::raii::DescriptorPool uiDescriptorPool = nullptr; // imgui 
         std::vector<vk::raii::DescriptorSet> descriptorSets;
@@ -696,16 +922,18 @@ namespace VanK
 
         vk::raii::CommandPool commandPool = nullptr;
         std::vector<vk::raii::CommandBuffer> commandBuffers;
-
+        uint32_t currentImageIndex = {};
+        vk::Result currentResult = {};
+        
         std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
         std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
         std::vector<vk::raii::Fence> inFlightFences;
         uint32_t currentFrame = 0;
 
         bool framebufferResized = false;
-        bool windowMinimized = false;
         bool vSync = false;
         bool sceneImageInitialized = false;
+        VanKRenderOption m_renderOption = {};
 
         std::vector<const char*> requiredDeviceExtension =
         {
@@ -720,13 +948,15 @@ namespace VanK
 
         void initImGui();
 
-        void mainLoop();
+        void mainLoop(VanKCommandBuffer cmd);
 
         void cleanupSwapChain();
 
         void cleanup();
 
         void recreateSwapChain();
+        
+        void recreateImages();
 
         void createInstance();
 
@@ -745,8 +975,6 @@ namespace VanK
         //change this ? from chapter image view
         void createImageViews();
 
-        void createDescriptorSetLayout();
-
         void createCommandPool();
 
         void createSceneResources();
@@ -762,14 +990,12 @@ namespace VanK
 
         static bool hasStencilComponent(vk::Format format);
 
-        void createTextureImage();
+        void createTexture();
 
         void generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
                              uint32_t mipLevels);
 
         vk::SampleCountFlagBits getMaxUsableSampleCount();
-
-        void createTextureImageView();
 
         void createTextureSampler();
 
@@ -786,23 +1012,11 @@ namespace VanK
 
         /*void copyBufferToImage(const vk::raii::Buffer& buffer, vk::raii::Image& image, uint32_t width, uint32_t height,
                                uint64_t offset = 0, uint32_t mipLevel = 0);*/
-
-        void loadModel();
-
-        //change this to vma because of max allocation  maxMemoryAllocationCount  physical device limit,
-        void createVertexBuffer();
-
-        void createIndexBuffer();
-
-        // Initialize the game objects with different positions, rotations, and scales
-        void setupGameObjects();
-
-        // Create uniform buffers for each object
-        void createUniformBuffers();
-
+        
         void createDescriptorPool();
 
         void createDescriptorSets();
+        void updateGraphicsDescriptorSet();
 
         /*void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
                           vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);*/
@@ -817,9 +1031,7 @@ namespace VanK
         uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
         void createCommandBuffers();
-
-        void recordCommandBuffer(uint32_t imageIndex);
-
+        
         void transition_image_layout(
             uint32_t imageIndex,
             vk::ImageLayout old_layout,
@@ -842,10 +1054,6 @@ namespace VanK
         );
 
         void createSyncObjects();
-
-        void updateUniformBuffers();
-
-        void drawFrame();
 
         /*[[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const;*/
 

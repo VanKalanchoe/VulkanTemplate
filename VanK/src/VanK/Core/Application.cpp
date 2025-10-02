@@ -1,15 +1,17 @@
 #include "Application.h"
 
 #include <cassert>
-
-#define SDL_MAIN_USE_CALLBACKS
 #include <iostream>
 #include <glm/common.hpp>
-#include <SDL3/SDL_filesystem.h>
+
+#define SDL_MAIN_USE_CALLBACKS
+#include <backends/imgui_impl_SDL3.h>
 #include <SDL3/SDL_main.h>
+#include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_timer.h>
 
-#include "Platform/Vulkan/VulkanRendererAPI.h"
+#include "Log.h"
+#include "VanK/ImGui/ImGuiLayer.h"
 #include "VanK/Renderer/Renderer.h"
 
 namespace VanK
@@ -28,10 +30,15 @@ namespace VanK
         m_Window->initWindow();
 
         Renderer::Init(*m_Window);
+
+        /*// ImGui
+        PushLayer<ImGuiLayer>();*/
     }
 
     Application::~Application()
     {
+        Renderer::Shutdown();
+        
         m_Window->Destroy();
 
         s_Application = nullptr;
@@ -57,6 +64,26 @@ namespace VanK
         assert(s_Application);
         return *s_Application;
     }
+
+    void Application::SubmitToMainThread(const std::function<void()>& function)
+    {
+        std::scoped_lock<std::mutex> lock(m_MainThreadQueueMutex);
+        
+        m_MainThreadQueue.emplace_back(function);
+    }
+
+    void Application::ExecuteMainThreadQueue()
+    {
+        std::vector<std::function<void()>> copy;
+        {
+            std::scoped_lock<std::mutex> lock(m_MainThreadQueueMutex);
+            copy = m_MainThreadQueue;
+            m_MainThreadQueue.clear();
+        }
+        
+        for (auto& func : copy)
+            func();
+    }
     
     extern "C" {
         SDL_AppResult SDL_AppInit(void** appstate, int argc, char** argv)
@@ -65,6 +92,8 @@ namespace VanK
             
             try
             {
+                Log::Init();
+                
                 auto applicationState = new AppState();
                 applicationState->app = CreateApplication();
                 applicationState->lastTime = Application::GetTime();
@@ -83,6 +112,7 @@ namespace VanK
         {
             auto applicationState = static_cast<AppState*>(appstate);
 
+            applicationState->app->ExecuteMainThreadQueue();
             applicationState->app->Run(*applicationState);
             
             return SDL_APP_CONTINUE;
@@ -92,7 +122,7 @@ namespace VanK
         {
             auto applicationState = static_cast<AppState*>(appstate);
 
-            /*ImGui_ImplSDL3_ProcessEvent(event);*/
+            ImGui_ImplSDL3_ProcessEvent(event);
 
             switch (event->type)
             {

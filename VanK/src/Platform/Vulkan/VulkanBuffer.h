@@ -1,14 +1,14 @@
 #pragma once
-#include <deque>
-
 #include "VanK/Renderer/Buffer.h"
+
 #include "VulkanRendererAPI.h"
+
 namespace VanK
 {
     class VulkanVanKBuffer : public VanKBuffer
     {
     public:
-        VulkanVanKBuffer(uint64_t bufferSize);
+        VulkanVanKBuffer(uint64_t size);
         virtual ~VulkanVanKBuffer();
 
         virtual void Bind() const override;
@@ -25,7 +25,7 @@ namespace VanK
     class VulkanVertexBuffer : public VertexBuffer
     {
     public:
-        VulkanVertexBuffer(uint64_t bufferSize);
+        VulkanVertexBuffer(uint64_t size);
         virtual ~VulkanVertexBuffer();
 
         virtual void Bind() const override;
@@ -39,14 +39,13 @@ namespace VanK
         const utils::Buffer& GetBuffer() const { return m_vertexBuffer; }
 
     private:
-        uint32_t m_RendererID;
         utils::Buffer m_vertexBuffer;
     };
 
     class VulkanIndexBuffer : public IndexBuffer
     {
     public:
-        VulkanIndexBuffer(uint64_t bufferSize);
+        VulkanIndexBuffer(uint64_t size);
         virtual ~VulkanIndexBuffer();
 
         virtual void Bind() const override;
@@ -62,7 +61,6 @@ namespace VanK
         const utils::Buffer& GetBuffer() const { return m_indexBuffer; }
 
     private:
-        uint32_t m_RendererID;
         uint32_t m_Count;
         utils::Buffer m_indexBuffer;
     };
@@ -85,7 +83,6 @@ namespace VanK
         virtual void UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) override;
 
     private:
-        uint32_t m_RendererID;
         utils::Buffer m_transferBuffer;
         VkDeviceSize m_currentOffset = 0;
         VkDeviceSize m_size = 0;
@@ -108,7 +105,6 @@ namespace VanK
         const utils::Buffer& GetBuffer() const { return m_uniformBuffer; }
 
     private:
-        uint32_t m_RendererID;
         utils::Buffer m_uniformBuffer;
     };
 

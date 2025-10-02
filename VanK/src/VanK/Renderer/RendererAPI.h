@@ -6,6 +6,7 @@
 
 #include "Shader.h"
 #include "VanK/Renderer/Buffer.h"
+#include <imgui.h>
 
 namespace VanK
 {
@@ -278,6 +279,94 @@ namespace VanK
         Graphics,
         Compute
     };
+
+    enum VanKShaderStageFlags
+    {
+        VanKGraphics,
+        VanKCompute
+    };
+
+    struct TextureSamplerBinding
+    {
+        /*const Texture2D* texture;
+        const Sampler* sampler;*/
+    };
+
+    enum VanKLoadOp
+    {
+        VanK_LOADOP_LOAD = 0,
+        VanK_LOADOP_CLEAR = 1,
+        VanK_LOADOP_DONT_CARE = 2,
+    };
+
+    enum  VanKStoreOp
+    {
+        VanK_STOREOP_STORE,
+        VanK_STOREOP_DONT_CARE,
+        VanK_STOREOP_RESOLVE,
+        VanK_STOREOP_RESOLVE_AND_STORE
+    };
+
+    struct VanK_FColor
+    {
+        union
+        {
+            float f[4];
+            int32_t i[4];
+            uint32_t u[4];
+        };
+    };
+    
+    struct VanKColorTargetInfo
+    {
+        VanKFormat format;
+        VanKLoadOp loadOp;
+        VanKStoreOp storeOp;
+        VanK_FColor clearColor;
+        /*Ref<Texture2D> colorTexture = nullptr;*/ // 
+        int arrayElement = 0;
+    };
+
+    struct VanKDepthStencilTargetInfo
+    {
+        VanKLoadOp loadOp;
+        VanKStoreOp storeOp;
+        VanK_FColor clearColor;
+        /*Ref<Texture2D> depthStencilTexture = nullptr;*/ // shadowmap needed
+    };
+
+    enum VanKRenderOption
+    {
+        VanK_Render_None,
+        VanK_Render_Swapchain,
+        VanK_Render_ImGui
+    };
+
+    enum class VanKIndexElementSize
+    {
+        Uint16,
+        Uint32
+    };
+
+    struct VanKViewport
+    {
+        float x = 0.0f;
+        float y = 0.0f;
+        uint32_t width = 0.0f;
+        uint32_t height = 0.0f;
+        float minDepth = 0.0f;
+        float maxDepth = 1.0f;
+    };
+
+    struct VankRect
+    {
+        int32_t x = 0;
+        int32_t y = 0;
+        uint32_t width = 0;
+        uint32_t height = 0;
+    };
+
+    struct Extent2D { uint32_t width, height; };
     
     enum class RenderAPIType
     {
@@ -290,9 +379,28 @@ namespace VanK
         virtual ~RendererAPI() = default;
 
         // exposing
-        virtual void Render() = 0;
+        virtual void RebuildSwapchain(bool vSyncVal) = 0; 
+        virtual ImTextureID getImTextureID(uint32_t index = 0) const = 0;
+        virtual void setViewportSize(Extent2D viewportSize) = 0;
         virtual VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) = 0;
+        virtual void DestroyAllPipelines() = 0;
+        virtual void DestroyPipeline(VanKPipeLine pipeline) = 0;
+        virtual VanKCommandBuffer BeginCommandBuffer() { return nullptr; }
+        virtual void EndCommandBuffer(VanKCommandBuffer cmd) = 0;
+        virtual void BeginFrame() = 0;
+        virtual void EndFrame() = 0;
         virtual void BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline) = 0;
+        virtual void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) = 0;
+        virtual void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info, VanKRenderOption render_option) = 0;
+        virtual void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport) = 0;
+        virtual void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) = 0;
+        virtual void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings) = 0;
+        virtual void BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize) = 0;
+        virtual void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
+        virtual void EndRendering(VanKCommandBuffer cmd) = 0;
+        virtual void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) = 0;
+        virtual void waitForGraphicsQueueIdle() = 0;
+        //---------
         
         static RenderAPIType GetAPI() { return s_API; }
         static void SetAPI(RenderAPIType api) { s_API = api; }

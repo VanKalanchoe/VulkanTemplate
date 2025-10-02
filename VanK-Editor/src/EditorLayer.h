@@ -1,15 +1,15 @@
 #pragma once
 #include "VanK/Core/Layer.h"
 
-class EditorLayer : public VanK::Layer
+namespace VanK
 {
+    class EditorLayer : public Layer
+    {
     public:
-    EditorLayer();
-    virtual ~EditorLayer() override;
+        EditorLayer();
+        ~EditorLayer() override;
 
-    virtual void OnUpdate(float ts) override;
-    virtual void OnRender() override;
-
-    private:
-    
-};
+        void OnUpdate(float ts) override;
+        void OnRender() override;
+    };
+}

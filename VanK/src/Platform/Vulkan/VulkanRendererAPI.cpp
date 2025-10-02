@@ -13,12 +13,13 @@ printf("\n");                                                                   
 }
 #include "vk_mem_alloc.h"
 
-#define TINYGLTF_IMPLEMENTATION
-#define STB_IMAGE_WRITE_IMPLEMENTATION
-#include <tiny_gltf.h>
+
+#include <print>
+
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_vulkan.h>
 
+#include "VulkanBuffer.h"
 #include "VulkanShader.h"
 
 namespace  VanK
@@ -29,7 +30,7 @@ namespace  VanK
     {
         // Set this instance as the static instance
         s_instance = this;
-        
+
         init();
     }
 
@@ -74,26 +75,17 @@ namespace  VanK
     
         msaaSamples = getMaxUsableSampleCount();
         createSwapChain();
+        viewport = swapChainExtent;
         createImageViews();
-    
         createCommandPool();
         createSceneResources();
         createColorResources();
         createDepthResources();
         m_samplerPool.init(device);
-        createTextureImage();
-        createTextureImageView();
+        createTexture();
         createTextureSampler();
-    
-        /*createDescriptorSetLayout();*/
         createDescriptorPool();
         createDescriptorSets();
-        loadModel();
-        createVertexBuffer();
-        createIndexBuffer();
-        setupGameObjects();
-        createUniformBuffers();
-    
         createCommandBuffers();
         createSyncObjects();
     }
@@ -141,79 +133,6 @@ namespace  VanK
         }
     }
 
-    void VulkanRendererAPI::mainLoop()
-    {
-        if (windowMinimized)
-            return;
-        
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
-
-        /*--
-          * IMGUI Docking
-          * Create a dockspace and dock the viewport and settings window.
-          * The central node is named "Viewport", which can be used later with Begin("Viewport")
-          * to render the final image.
-         -*/
-        const ImGuiDockNodeFlags dockFlags = ImGuiDockNodeFlags_PassthruCentralNode |
-            ImGuiDockNodeFlags_NoDockingInCentralNode;
-        ImGuiID dockID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), dockFlags);
-        // Docking layout, must be done only if it doesn't exist
-        if (!ImGui::DockBuilderGetNode(dockID)->IsSplitNode() && !ImGui::FindWindowByName("Viewport"))
-        {
-            ImGui::DockBuilderDockWindow("Viewport", dockID); // Dock "Viewport" to  central node
-            ImGui::DockBuilderGetCentralNode(dockID)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-            // Remove "Tab" from the central node
-            ImGuiID leftID = ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Left, 0.2f, nullptr, &dockID);
-            // Split the central node
-            ImGui::DockBuilderDockWindow("Settings", leftID); // Dock "Settings" to the left node
-        }
-        // [optional] Show the menu bar
-        if (ImGui::BeginMainMenuBar())
-        {
-            if (ImGui::BeginMenu("File"))
-            {
-                if (ImGui::MenuItem("vSync", "", &vSync))
-                    recreateSwapChain(); // Recreate the swapchain with the new vSync setting
-                ImGui::Separator();
-                if (ImGui::MenuItem("Exit"))
-                {
-                    SDL_Event quitEvent;
-                    SDL_zero(quitEvent); // Zero-initialize
-                    quitEvent.type = SDL_EVENT_QUIT; // Set event type
-                    SDL_PushEvent(&quitEvent);
-                }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMainMenuBar();
-        }
-
-        // We define "viewport" with no padding an retrieve the rendering area
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::Begin("Viewport");
-        ImVec2 windowSize = ImGui::GetContentRegionAvail();
-        ImGui::End();
-        ImGui::PopStyleVar();
-
-        /*// Verify if the viewport has a new size and resize the G-Buffer accordingly.
-        const VkExtent2D viewportSize = {uint32_t(windowSize.x), uint32_t(windowSize.y)};
-        if (m_viewportSize.width != viewportSize.width || m_viewportSize.height != viewportSize.height)
-        {
-            onViewportSizeChange(viewportSize);
-        }*/
-
-        drawFrame();
-
-        // Update and Render additional Platform Windows (floating windows)
-        ImGui::EndFrame();
-        if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
-        {
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-        }
-    }
-
     void VulkanRendererAPI::cleanupSwapChain()
     {
         swapChainImages.clear();
@@ -223,28 +142,6 @@ namespace  VanK
 
     void VulkanRendererAPI::cleanup()
     {
-        // Clean up resources in each GameObject
-        for (auto& gameObject : gameObjects)
-        {
-            // Unmap memory
-            for (size_t i = 0; i < gameObject.uniformBuffers.size(); i++)
-            {
-                if (gameObject.uniformBuffers[i].buffer)
-                {
-                    allocator.destroyBuffer(gameObject.uniformBuffers[i]);
-                }
-            }
-
-            // Clear vectors to release resources
-            gameObject.uniformBuffers.clear();
-            /*gameObject.uniformBuffersMemory.clear();
-            gameObject.uniformBuffersMapped.clear();*/
-            gameObject.descriptorSets.clear();
-        }
-
-        allocator.destroyBuffer(vertexBuffer);
-        allocator.destroyBuffer(indexBuffer);
-    
         m_samplerPool.deinit();
         allocator.deinit();
 
@@ -260,9 +157,16 @@ namespace  VanK
         cleanupSwapChain();
         createSwapChain();
         createImageViews();
-        createSceneResources();
-        createColorResources();
-        createDepthResources();
+    }
+    
+    void VulkanRendererAPI::recreateImages()
+    {
+        device.waitIdle();
+        
+        // Recreate offscreen buffers to match viewport size
+        createSceneResources();//scene evertyhing drawn into this
+        createColorResources();//msaa
+        createDepthResources();//depth
         sceneImageInitialized = false;
 
         // Recreate the ImGui texture to point to the new sceneImageView
@@ -368,6 +272,7 @@ namespace  VanK
             throw std::runtime_error("failed to create window surface!");
         }
         surface = vk::raii::SurfaceKHR(instance, _surface);
+        DBG_VK_NAME(*surface);
     }
 
     void VulkanRendererAPI::pickPhysicalDevice()
@@ -485,7 +390,12 @@ namespace  VanK
         };
 
         device = vk::raii::Device(physicalDevice, deviceCreateInfo);
+        DBG_VK_NAME(*device);
+
+        debugUtilInitialize(device);
+        
         queue = vk::raii::Queue(device, queueIndex, 0);
+        DBG_VK_NAME(*queue);
     }
 
     void VulkanRendererAPI::createDynamicDispatcher()
@@ -502,7 +412,9 @@ namespace  VanK
     {
         auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         swapChainExtent = chooseSwapExtent(surfaceCapabilities);
+        
         swapChainSurfaceFormat = chooseSwapSurfaceFormat(physicalDevice.getSurfaceFormatsKHR(*surface));
+        
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{
             .surface = *surface,
             .minImageCount = chooseSwapMinImageCount(surfaceCapabilities),
@@ -517,9 +429,9 @@ namespace  VanK
             .presentMode = chooseSwapPresentMode(physicalDevice.getSurfacePresentModesKHR(*surface), vSync),
             .clipped = true
         };
-        std::cout << "Present mode chosen: " << static_cast<int>(swapChainCreateInfo.presentMode) << std::endl;
-
         swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
+        DBG_VK_NAME(*swapChain);
+        
         swapChainImages = swapChain.getImages();
     }
 
@@ -536,24 +448,12 @@ namespace  VanK
         for (auto image : swapChainImages)
         {
             imageViewCreateInfo.image = image;
-            swapChainImageViews.emplace_back(device, imageViewCreateInfo);
+            DBG_VK_NAME(image);
+            vk::raii::ImageView imageView(device, imageViewCreateInfo);
+            DBG_VK_NAME(*imageView);
+            swapChainImageViews.emplace_back(std::move(imageView));
         }
     }
-
-    /*void Renderer::createDescriptorSetLayout()
-    {
-        std::array bindings = {
-            vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eVertex,
-                                           nullptr),
-            vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eCombinedImageSampler, 1,
-                                           vk::ShaderStageFlagBits::eFragment, nullptr)
-        };
-    
-        vk::DescriptorSetLayoutCreateInfo layoutInfo{
-            .bindingCount = static_cast<uint32_t>(bindings.size()), .pBindings = bindings.data()
-        };
-        descriptorSetLayout = vk::raii::DescriptorSetLayout(device, layoutInfo);
-    }*/
 
     struct VertexInputDescription
     {
@@ -601,6 +501,35 @@ namespace  VanK
         return desc;
     }
 
+    uint32_t VulkanRendererAPI::AddTextureToPool(utils::ImageResource&& imageResource)
+    {
+        // Add the texture to the image vector
+        images.emplace_back(std::move(imageResource));
+
+        // Update the descriptor set to include the new texture
+
+        // Return the index of the new texture
+        return static_cast<uint32_t>(images.size() - 1);
+    }
+
+    void VulkanRendererAPI::RemoveTextureFromPool(uint32_t index)
+    {
+        // Safety checks
+        if (images.empty())
+        {
+            VK_CORE_WARN("Attempted to remove texture from empty pool");
+            return;
+        }
+        
+        if (index >= images.size())
+        {
+            VK_CORE_WARN("Attempted to remove texture at invalid index: %u (max: %zu)", index, images.size());
+            return;
+        }
+
+        VK_CORE_INFO("Removed texture at index %u, remaining textures: %zu", index, images.size());
+    }
+
     VanKPipeLine VulkanRendererAPI::createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification)
     {
         vk::raii::Pipeline tempPipeline = VK_NULL_HANDLE;
@@ -626,6 +555,7 @@ namespace  VanK
             .module = fragShaderModule,
             .pName = fragShaderEntryName.c_str(),
         };
+        
         vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
 
         VertexInputDescription vertexInput; // Keep this alive until vkCreateGraphicsPipelines finishes
@@ -658,8 +588,10 @@ namespace  VanK
         
         vk::PipelineViewportStateCreateInfo viewportState
         {
-            .viewportCount = 1,
-            .scissorCount = 1
+            .viewportCount = 0,
+            .pViewports = nullptr,
+            .scissorCount = 0,
+            .pScissors = nullptr
         };
         
         // The rasterizer is used to convert the primitives into fragments, and how it will appear
@@ -724,8 +656,8 @@ namespace  VanK
 
         std::vector dynamicStates =
         {
-            vk::DynamicState::eViewport,
-            vk::DynamicState::eScissor,
+            vk::DynamicState::eViewportWithCount,
+            vk::DynamicState::eScissorWithCount,
             vk::DynamicState::eLineWidth
         };
         
@@ -748,7 +680,8 @@ namespace  VanK
         };
 
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
-
+        DBG_VK_NAME(*tempPipelineLayout);
+        
         // Dynamic rendering: provide what the pipeline will render to
         std::vector<vk::Format> colorFormats;
         for (auto format : pipelineSpecification.RenderingCreateInfo.VanKColorAttachmentFormats)
@@ -781,9 +714,8 @@ namespace  VanK
         };
 
         tempPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
-
-        m_currentGraphicPipelineLayout = &tempPipelineLayout;
-
+        DBG_VK_NAME(*tempPipeline);
+        
         PipelineResource resource;
         resource.pipeline = std::move(tempPipeline);
         resource.layout = std::move(tempPipelineLayout);
@@ -791,9 +723,117 @@ namespace  VanK
         resource.spec = pipelineSpecification;
 
         auto rawHandle = *resource.pipeline; // raw VkPipeline before moving
+        m_currentGraphicPipelineLayout = *resource.layout;
         m_PipelineResources.emplace(rawHandle, std::move(resource));
         
         return Wrap(rawHandle);
+    }
+
+    void VulkanRendererAPI::DestroyAllPipelines()
+    {
+        // Clear the map completely
+        m_PipelineResources.clear();
+    }
+
+    /*--
+     * Destroy all resources and the Vulkan context
+   -*/
+
+    void VulkanRendererAPI::DestroyPipeline(VanKPipeLine pipeline)
+    {
+        auto it = m_PipelineResources.find(Unwrap(pipeline));
+        if (it != m_PipelineResources.end())
+        {
+            // not needed because of RAII
+            /*if (it->second.pipeline != VK_NULL_HANDLE)
+            {
+                VkDevice device = m_context.getDevice();
+                
+                vkDestroyPipeline(device, it->second.pipeline, nullptr);
+                it->second.pipeline = VK_NULL_HANDLE;
+                
+                vkDestroyPipelineLayout(device, it->second.layout, nullptr);
+                it->second.layout = VK_NULL_HANDLE;
+            }*/
+
+            m_PipelineResources.erase(it);
+        }
+    }
+
+    VanKCommandBuffer VulkanRendererAPI::BeginCommandBuffer()
+    {
+        commandBuffers[currentFrame].reset();
+        
+        commandBuffers[currentFrame].begin({});
+
+        auto cmd = new VanKCommandBuffer_T{&commandBuffers[currentFrame]};
+        
+        return cmd;
+    }
+
+    void VulkanRendererAPI::EndCommandBuffer(VanKCommandBuffer cmd)
+    {
+        Unwrap(cmd).end();
+    }
+
+    void VulkanRendererAPI::BeginFrame()
+    {
+        while (vk::Result::eTimeout == device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX));
+        auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[currentFrame],
+                                                               nullptr);
+
+        currentResult = result;
+        
+        currentImageIndex = imageIndex;
+        
+        if (result == vk::Result::eErrorOutOfDateKHR)
+        {
+            recreateSwapChain();
+            return;
+        }
+        
+        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
+        {
+            throw std::runtime_error("failed to acquire swap chain image!");
+        }
+        
+        device.resetFences(*inFlightFences[currentFrame]);
+    }
+
+    void VulkanRendererAPI::EndFrame()
+    {
+        vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
+        const vk::SubmitInfo submitInfo{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*presentCompleteSemaphores[currentFrame],
+            .pWaitDstStageMask = &waitDestinationStageMask,
+            .commandBufferCount = 1,
+            .pCommandBuffers = &*commandBuffers[currentFrame],
+            .signalSemaphoreCount = 1,
+            .pSignalSemaphores = &*renderFinishedSemaphores[currentImageIndex]
+        };
+        queue.submit(submitInfo, *inFlightFences[currentFrame]);
+
+        const vk::PresentInfoKHR presentInfoKHR{
+            .waitSemaphoreCount = 1,
+            .pWaitSemaphores = &*renderFinishedSemaphores[currentImageIndex],
+            .swapchainCount = 1,
+            .pSwapchains = &*swapChain,
+            .pImageIndices = &currentImageIndex
+        };
+        VkResult rawResult = vkQueuePresentKHR(*queue, reinterpret_cast<const VkPresentInfoKHR*>(&presentInfoKHR));
+        currentResult = static_cast<vk::Result>(rawResult);
+        //result = queue.presentKHR(presentInfoKHR); when resizing in hpp is fixed then use this https://github.com/KhronosGroup/Vulkan-Tutorial/issues/73
+        if (currentResult == vk::Result::eErrorOutOfDateKHR || currentResult == vk::Result::eSuboptimalKHR || framebufferResized)
+        {
+            framebufferResized = false;
+            recreateSwapChain();
+        }
+        else if (currentResult != vk::Result::eSuccess)
+        {
+            throw std::runtime_error("failed to present swap chain image!");
+        }
+        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void VulkanRendererAPI::BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline)
@@ -805,14 +845,321 @@ namespace  VanK
             return;
         }
 
-        graphicsPipeline = &it->second.pipeline;
-        pipelineLayout = &it->second.layout;
+        vk::Pipeline pipelineToBind = it->second.pipeline;
+        vk::PipelineLayout layoutToBind = it->second.layout;
+
+        if (!pipelineToBind || !layoutToBind)
+        {
+            VK_CORE_ERROR("BindPipeline: pipeline or layout is VK_NULL_HANDLE");
+            return;
+        }
+
+        vk::PipelineBindPoint vkBindPoint = (pipelineBindPoint == VanKPipelineBindPoint::Graphics) ? vk::PipelineBindPoint::eGraphics : vk::PipelineBindPoint::eCompute;
+
+        Unwrap(cmd).bindPipeline(vkBindPoint, pipelineToBind);
+
+        // Update current pipeline layout for push descriptors / push constants
+        if (pipelineBindPoint == VanKPipelineBindPoint::Graphics)
+            m_currentGraphicPipelineLayout = layoutToBind;
+        else
+            m_currentComputePipelineLayout = layoutToBind;
     }
 
-    void VulkanRendererAPI::DestroyAllPipelines()
+    void VulkanRendererAPI::BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement)
     {
-        // Clear the map completely
-        m_PipelineResources.clear();
+        vk::PipelineLayout layout = VK_NULL_HANDLE;
+
+        if (bindPoint == VanKPipelineBindPoint::Graphics) layout = m_currentGraphicPipelineLayout;
+        if (bindPoint == VanKPipelineBindPoint::Compute) layout = m_currentComputePipelineLayout;
+    
+        VulkanUniformBuffer* vulkanUBO = dynamic_cast<VulkanUniformBuffer*>(buffer);
+        if (!vulkanUBO)
+        {
+            return;
+        }
+
+        const utils::Buffer& vkBuffer = vulkanUBO->GetBuffer();
+    
+        // Setting up push descriptor information, we could choose dynamically the buffer to work on
+        const vk::DescriptorBufferInfo bufferInfo = { .buffer = vkBuffer.buffer, .offset = 0, .range = vk::WholeSize };
+
+        std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
+        writeDescriptorSets[0] = vk::WriteDescriptorSet{};
+        writeDescriptorSets[0].dstSet = nullptr;
+        writeDescriptorSets[0].dstBinding = binding;
+        writeDescriptorSets[0].dstArrayElement = arrayElement;
+        writeDescriptorSets[0].descriptorCount = 1;
+        writeDescriptorSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
+        writeDescriptorSets[0].pBufferInfo = &bufferInfo;
+        
+        // Push layout information with updated data
+        const vk::PushDescriptorSetInfoKHR pushDescriptorSetInfo
+        {
+            .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+            .layout = layout,
+            .set = set, // <--- Second set layout(set=1, binding=...) in the fragment shader
+            .descriptorWriteCount = writeDescriptorSets.size(),
+            .pDescriptorWrites = writeDescriptorSets.data(),
+        };
+    
+        // This is a push descriptor, allowing synchronization and dynamically changing data
+        Unwrap(cmd).pushDescriptorSet2(pushDescriptorSetInfo);
+    }
+
+    void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0, VanKDepthStencilTargetInfo depth_stencil_target_info = {}, VanKRenderOption render_option = VanK_Render_None)
+    {
+        DBG_VK_SCOPE(Unwrap(cmd));  // <-- Helps to debug in NSight
+
+        m_renderOption = render_option;
+        
+        if (render_option == VanK_Render_None)
+        {
+            // Before starting rendering, transition the images to the appropriate layouts
+            // Transition the multisampled color image to COLOR_ATTACHMENT_OPTIMAL
+            transition_image_layout_custom
+            (
+                colorImage,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                {},
+                vk::AccessFlagBits2::eColorAttachmentWrite,
+                vk::PipelineStageFlagBits2::eTopOfPipe,
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                vk::ImageAspectFlagBits::eColor
+            );
+
+            // Transition the depth image to DEPTH_ATTACHMENT_OPTIMAL
+            transition_image_layout_custom
+            (
+                depthImage,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eDepthAttachmentOptimal,
+                {},
+                vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+                vk::PipelineStageFlagBits2::eTopOfPipe,
+                vk::PipelineStageFlagBits2::eEarlyFragmentTests,
+                vk::ImageAspectFlagBits::eDepth
+            );
+
+            // 3) Bootstrap or re-transition resolve target (sceneImage) for FIRST pass
+            transition_image_layout_custom
+            (
+                sceneImage,
+                sceneImageInitialized ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                sceneImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead) : vk::AccessFlags2{},
+                vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+                sceneImageInitialized ? vk::PipelineStageFlagBits2::eFragmentShader : vk::PipelineStageFlagBits2::eTopOfPipe,
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                vk::ImageAspectFlagBits::eColor
+            );
+        
+            // First pass: render scene into MSAA color with resolve to single-sample sceneImage
+            vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+            vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+
+            // Color attachment (multisampled) with resolve attachment
+            vk::RenderingAttachmentInfo colorAttachment =
+            {
+                .imageView = colorImageView,
+                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .resolveMode = vk::ResolveModeFlagBits::eAverage,
+                .resolveImageView = sceneImageView,
+                .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .loadOp = vk::AttachmentLoadOp::eClear,
+                .storeOp = vk::AttachmentStoreOp::eStore,
+                .clearValue = clearColor
+            };
+
+            // Depth attachment
+            vk::RenderingAttachmentInfo depthAttachment =
+            {
+                .imageView = depthImageView,
+                .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+                .loadOp = vk::AttachmentLoadOp::eClear,
+                .storeOp = vk::AttachmentStoreOp::eDontCare,
+                .clearValue = clearDepth
+            };
+
+            vk::RenderingInfo renderingInfo =
+            {
+                .renderArea = {.offset = {0, 0}, .extent = viewport},
+                .layerCount = 1,
+                .colorAttachmentCount = 1,
+                .pColorAttachments = &colorAttachment,
+                .pDepthAttachment = &depthAttachment
+            };
+        
+            Unwrap(cmd).beginRendering(renderingInfo);
+        }
+        
+        if (render_option == VanK_Render_ImGui)
+        {
+            // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
+            transition_image_layout
+            (
+                currentImageIndex,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                {}, // srcAccessMask (no need to wait for previous operations)
+                vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
+                vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput // dstStage
+            );
+        
+            // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
+            transition_image_layout_custom(
+                sceneImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+                vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                vk::PipelineStageFlagBits2::eFragmentShader,
+                vk::ImageAspectFlagBits::eColor);
+            sceneImageInitialized = true;
+
+            // Second pass: draw ImGui to swapchain image
+            vk::RenderingAttachmentInfo swapColorAttachment =
+            {
+                .imageView = swapChainImageViews[currentImageIndex],
+                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .loadOp = vk::AttachmentLoadOp::eClear,
+                .storeOp = vk::AttachmentStoreOp::eStore
+            };
+        
+            vk::RenderingInfo renderingInfo2 =
+            {
+                .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
+                .layerCount = 1,
+                .colorAttachmentCount = 1,
+                .pColorAttachments = &swapColorAttachment
+            };
+
+            Unwrap(cmd).beginRendering(renderingInfo2);
+        }
+    }
+
+    void VulkanRendererAPI::SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport)
+    {
+        vk::Viewport vkViewport{ viewport.x, viewport.y, (float)viewport.width, (float)viewport.height, viewport.minDepth, viewport.maxDepth };
+
+        // Wrap the single viewport in an ArrayProxy (RAII-friendly)
+        std::vector<vk::Viewport> viewports(viewportCount, vkViewport);
+        
+        Unwrap(cmd).setViewportWithCount(viewports);
+    }
+
+    void VulkanRendererAPI::SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor)
+    {
+        vk::Rect2D vkScissor( vk::Offset2D(scissor.x, scissor.y), {scissor.width, scissor.height} );
+
+        // Wrap the single scissor in an ArrayProxy (RAII-friendly)
+        std::vector<vk::Rect2D> scissors(scissorCount, vkScissor);
+        
+        Unwrap(cmd).setScissorWithCount(scissors);
+    }
+
+    void VulkanRendererAPI::BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings)
+    {
+        if (num_bindings < 1)
+        {
+            VK_CORE_ERROR("num_bindings is less then 1 check: {}", num_bindings);
+        }
+        
+        // Cast to VulkanVertexBuffer
+        const VulkanVertexBuffer* vulkanVB = dynamic_cast<const VulkanVertexBuffer*>(&vertexBuffer);
+        if (!vulkanVB)
+        {
+            // Handle error: wrong buffer type
+            return; 
+        }
+
+        const utils::Buffer& vkBuffer = vulkanVB->GetBuffer();
+        std::vector<vk::Buffer> buffers(num_bindings, vkBuffer.buffer); // The actual VkBuffer
+
+        std::vector<vk::DeviceSize> offsets(num_bindings, 0);
+        
+        Unwrap(cmd).bindVertexBuffers(first_slot, buffers, offsets);
+    }
+
+    void VulkanRendererAPI::BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize)
+    {
+        // Cast to VulkanVertexBuffer
+        const VulkanIndexBuffer* vulkanIB = dynamic_cast<const VulkanIndexBuffer*>(&indexBuffer);
+        if (!vulkanIB)
+        {
+            // Handle error: wrong buffer type
+            return;
+        }
+
+        const utils::Buffer& vkBuffer = vulkanIB->GetBuffer();
+        vk::Buffer buffer = vkBuffer.buffer; // The actual VkBuffer
+
+        vk::IndexType vkIndexType = vk::IndexType::eNoneKHR;
+        switch (elementSize)
+        {
+        case VanKIndexElementSize::Uint16: vkIndexType = vk::IndexType::eUint16; break;
+        case VanKIndexElementSize::Uint32: vkIndexType = vk::IndexType::eUint32; break;
+        }
+
+        Unwrap(cmd).bindIndexBuffer(buffer, 0, vkIndexType);
+    }
+
+    void VulkanRendererAPI::DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
+    {
+        Unwrap(cmd).drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    }
+
+    void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
+    {
+        if (m_renderOption == VanK_Render_ImGui)
+            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
+
+        Unwrap(cmd).endRendering();
+        
+        if (m_renderOption == VanK_Render_None)
+            return;
+        
+        // After rendering, transition the images to appropriate layouts
+        
+        // Transition the swapchain image to PRESENT_SRC
+        transition_image_layout
+        (
+            currentImageIndex,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::ImageLayout::ePresentSrcKHR,
+            vk::AccessFlagBits2::eColorAttachmentWrite, // srcAccessMask
+            {}, // dstAccessMask
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
+            vk::PipelineStageFlagBits2::eBottomOfPipe // dstStage
+        );
+    }
+
+    void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
+    {
+        //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
+        // TextureSamplerBinding is empty check rendererapi strcut
+        /*-- 
+         * Binding the resources passed to the shader, using the descriptor set (holds the texture) 
+         * There are two descriptor layouts, one for the texture and one for the scene information,
+         * but only the texture is a set, the scene information is a push descriptor.
+        -*/
+        vk::DescriptorSet rawDescriptorSet = *descriptorSets[0];
+        vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
+        {
+            .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+            .layout = m_currentGraphicPipelineLayout,
+            .firstSet = 0,
+            .descriptorSetCount = 1,
+            .pDescriptorSets = &rawDescriptorSet,
+        };
+        Unwrap(cmd).bindDescriptorSets2(bindDescriptorSetsInfo);
+    }
+
+    void VulkanRendererAPI::waitForGraphicsQueueIdle()
+    {
+        queue.waitIdle();
     }
 
     void VulkanRendererAPI::createCommandPool()
@@ -822,6 +1169,7 @@ namespace  VanK
             .queueFamilyIndex = queueIndex
         };
         commandPool = vk::raii::CommandPool(device, poolInfo);
+        DBG_VK_NAME(*commandPool);
     }
 
     void VulkanRendererAPI::createSceneResources()
@@ -829,35 +1177,45 @@ namespace  VanK
         vk::Format colorFormat = swapChainSurfaceFormat.format;
         // single-sampled and SAMPLED
         createImage(
-            swapChainExtent.width, swapChainExtent.height,
+            viewport.width, viewport.height,
             1, vk::SampleCountFlagBits::e1, colorFormat,
             vk::ImageTiling::eOptimal,
             vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
             vk::MemoryPropertyFlagBits::eDeviceLocal,
             sceneImage, sceneImageMemory);
+
+        DBG_VK_NAME(*sceneImage);
+        
         sceneImageView = createImageView(sceneImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
+        DBG_VK_NAME(*sceneImageView);
     }
 
     void VulkanRendererAPI::createColorResources()
     {
         vk::Format colorFormat = swapChainSurfaceFormat.format;
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, colorFormat,
+        createImage(viewport.width, viewport.height, 1, msaaSamples, colorFormat,
                     vk::ImageTiling::eOptimal,
                     vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
                     vk::MemoryPropertyFlagBits::eDeviceLocal, colorImage, colorImageMemory);
+        DBG_VK_NAME(*colorImage);
+        
         colorImageView = createImageView(colorImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
+        DBG_VK_NAME(*colorImageView);
     }
 
     void VulkanRendererAPI::createDepthResources()
     {
         vk::Format depthFormat = findDepthFormat();
 
-        createImage(swapChainExtent.width, swapChainExtent.height, 1, msaaSamples, depthFormat,
+        createImage(viewport.width, viewport.height, 1, msaaSamples, depthFormat,
                     vk::ImageTiling::eOptimal,
                     vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal,
                     depthImage, depthImageMemory);
+        DBG_VK_NAME(*depthImage);
+        
         depthImageView = createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
+        DBG_VK_NAME(*depthImageView);
     }
 
     vk::Format VulkanRendererAPI::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
@@ -894,7 +1252,7 @@ namespace  VanK
         return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
     }
 
-    void VulkanRendererAPI::createTextureImage()
+    void VulkanRendererAPI::createTexture()
     {
         ktxTexture* kTexture;
         KTX_error_code result = ktxTexture_CreateFromNamedFile(
@@ -915,33 +1273,7 @@ namespace  VanK
         ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
 
         // Create staging buffer
-        /*vk::raii::Buffer stagingBuffer({});
-        vk::raii::DeviceMemory stagingBufferMemory({});
-        createBuffer(imageSize, vk::BufferUsageFlagBits::eTransferSrc,
-                     vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent,
-                     stagingBuffer, stagingBufferMemory);*/
-   
-        utils::Buffer stagingBuffer = allocator.createBuffer
-        (
-            imageSize,
-            vk::BufferUsageFlagBits2::eTransferSrc,
-                VMA_MEMORY_USAGE_CPU_TO_GPU,
-                VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-            );
-
-        // Copy texture data to staging buffer
-        /*void* data = stagingBufferMemory.mapMemory(0, imageSize);
-        memcpy(data, ktxTextureData, imageSize);
-        stagingBufferMemory.unmapMemory();*/
-        void* mappedPtr = nullptr;
-        if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
-        {
-            return; // todo
-        }
-
-        memcpy(mappedPtr, ktxTextureData, imageSize);
-
-        vmaUnmapMemory(allocator, stagingBuffer.allocation);
+        utils::Buffer stagingBuffer = allocator.createStagingBuffer(std::span(ktxTextureData, imageSize));
 
         // Determine the Vulkan format from KTX format
         vk::Format textureFormat;
@@ -976,6 +1308,8 @@ namespace  VanK
                         vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
                         textureImageMemory);
 
+            DBG_VK_NAME(*textureImage);
+
             // Copy data from staging buffer to texture image
             transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
                                   mipLevels);
@@ -988,8 +1322,7 @@ namespace  VanK
                 KTX_error_code result = ktxTexture_GetImageOffset(kTexture, i, 0, 0, &offset);
                 uint32_t mipWidth = std::max(1u, texWidth >> i);
                 uint32_t mipHeight = std::max(1u, texHeight >> i);
-                /*copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(mipWidth),
-                                  static_cast<uint32_t>(mipHeight), offset, i);*/
+                
                 allocator.copyBufferToImage(commandBuffer, stagingBuffer,textureImage, static_cast<uint32_t>(mipWidth), static_cast<uint32_t>(mipHeight), offset, i);
             }
             endSingleTimeCommands(*commandBuffer);
@@ -1008,17 +1341,24 @@ namespace  VanK
                         vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
                         textureImageMemory);
 
-            // Copy data from staging buffer to texture image
-            transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-                                  mipLevels);
+            DBG_VK_NAME(*textureImage);
 
-            /*copyBufferToImage(stagingBuffer, textureImage, static_cast<uint32_t>(texWidth),
-                              static_cast<uint32_t>(texHeight));*/
+            // Copy data from staging buffer to texture image
+            transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+            
             allocator.copyBufferToImage(commandBuffer, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
             endSingleTimeCommands(*commandBuffer);
             generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
         }
-        allocator.destroyBuffer(stagingBuffer); // not needed in the future with vulkanhpp
+
+        textureImageView = createImageView(textureImage, textureImageFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
+        DBG_VK_NAME(*textureImageView);
+        /*utils::ImageResource resource{};
+        resource.image = *textureImage;
+
+        images.emplace_back();*/
+        
+        allocator.freeStagingBuffers();
         // Cleanup KTX resources
         ktxTexture_Destroy(kTexture);
     }
@@ -1113,12 +1453,6 @@ namespace  VanK
         if (counts & vk::SampleCountFlagBits::e2) { return vk::SampleCountFlagBits::e2; }
 
         return vk::SampleCountFlagBits::e1;
-    }
-
-    void VulkanRendererAPI::createTextureImageView()
-    {
-        textureImageView = createImageView(textureImage, textureImageFormat, vk::ImageAspectFlagBits::eColor,
-                                           mipLevels);
     }
 
     void VulkanRendererAPI::createTextureSampler()
@@ -1220,267 +1554,6 @@ namespace  VanK
         endSingleTimeCommands(*commandBuffer);
     }
 
-    /*
-    void Renderer::copyBufferToImage(const vk::raii::Buffer& buffer, vk::raii::Image& image, uint32_t width,
-                                     uint32_t height,
-                                     uint64_t offset, uint32_t mipLevel)
-    {
-        std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = beginSingleTimeCommands();
-        vk::BufferImageCopy region
-        {
-            .bufferOffset = offset, .bufferRowLength = 0, .bufferImageHeight = 0,
-            .imageSubresource = {vk::ImageAspectFlagBits::eColor, mipLevel, 0, 1},
-            .imageOffset = {0, 0, 0},
-            .imageExtent = {width, height, 1}
-        };
-        commandBuffer->copyBufferToImage(buffer, image, vk::ImageLayout::eTransferDstOptimal, {region});
-        endSingleTimeCommands(*commandBuffer);
-    }
-    */
-
-    void VulkanRendererAPI::loadModel()
-    {
-        // Use tinygltf to load the model instead of tinyobjloader
-        tinygltf::Model model;
-        tinygltf::TinyGLTF loader;
-        std::string err;
-        std::string warn;
-
-        bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
-
-        if (!warn.empty())
-        {
-            std::cout << "glTF warning: " << warn << std::endl;
-        }
-
-        if (!err.empty())
-        {
-            std::cout << "glTF error: " << err << std::endl;
-        }
-
-        if (!ret)
-        {
-            throw std::runtime_error("Failed to load glTF model");
-        }
-
-        vertices.clear();
-        indices.clear();
-
-        // Process all meshes in the model
-        for (const auto& mesh : model.meshes)
-        {
-            for (const auto& primitive : mesh.primitives)
-            {
-                // Get indices
-                const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-                const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-                const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
-
-                // Get vertex positions
-                const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
-                const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
-                const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
-
-                // Get texture coordinates if available
-                bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
-                const tinygltf::Accessor* texCoordAccessor = nullptr;
-                const tinygltf::BufferView* texCoordBufferView = nullptr;
-                const tinygltf::Buffer* texCoordBuffer = nullptr;
-
-                if (hasTexCoords)
-                {
-                    texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
-                    texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
-                    texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
-                }
-
-                uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
-
-                for (size_t i = 0; i < posAccessor.count; i++)
-                {
-                    Vertex vertex{};
-
-                    const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor
-                        .byteOffset + i * 12]);
-                    vertex.pos = {pos[0], pos[1], pos[2]};
-
-                    if (hasTexCoords)
-                    {
-                        const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->
-                            byteOffset + texCoordAccessor->byteOffset + i * 8]);
-                        vertex.texCoord = {texCoord[0], texCoord[1]};
-                    }
-                    else
-                    {
-                        vertex.texCoord = {0.0f, 0.0f};
-                    }
-
-                    vertex.color = {1.0f, 1.0f, 1.0f};
-
-                    vertices.push_back(vertex);
-                }
-
-                const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-                size_t indexCount = indexAccessor.count;
-                size_t indexStride = 0;
-
-                // Determine index stride based on component type
-                if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                {
-                    indexStride = sizeof(uint16_t);
-                }
-                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                {
-                    indexStride = sizeof(uint32_t);
-                }
-                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                {
-                    indexStride = sizeof(uint8_t);
-                }
-                else
-                {
-                    throw std::runtime_error("Unsupported index component type");
-                }
-
-                indices.reserve(indices.size() + indexCount);
-
-                for (size_t i = 0; i < indexCount; i++)
-                {
-                    uint32_t index = 0;
-
-                    if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                    {
-                        index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
-                    }
-                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                    {
-                        index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
-                    }
-                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                    {
-                        index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
-                    }
-
-                    indices.push_back(baseVertex + index);
-                }
-            }
-        }
-    }
-
-    //change this to vma because of max allocation  maxMemoryAllocationCount  physical device limit,
-    void VulkanRendererAPI::createVertexBuffer()
-    {
-        vk::DeviceSize bufferSize = sizeof(vertices[0]) * vertices.size();
-
-        utils::Buffer stagingBuffer = allocator.createBuffer
-      (
-          bufferSize,
-          vk::BufferUsageFlagBits2::eTransferSrc,
-              VMA_MEMORY_USAGE_CPU_TO_GPU,
-              VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-              );
-    
-        void* mappedPtr = nullptr;
-        if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
-        {
-            return; // todo
-        }
-
-        memcpy(mappedPtr, vertices.data(), bufferSize);
-
-        vmaUnmapMemory(allocator, stagingBuffer.allocation);
-
-        /*createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eVertexBuffer,
-                     vk::MemoryPropertyFlagBits::eDeviceLocal, vertexBuffer, vertexBufferMemory);*/
-
-        vertexBuffer = allocator.createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eVertexBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
-
-        /*copyBuffer(stagingBuffer, vertexBuffer, bufferSize);*/
-        std::unique_ptr<vk::raii::CommandBuffer> commandbuffer = beginSingleTimeCommands();
-        allocator.copyBuffer(commandbuffer, stagingBuffer, vertexBuffer, bufferSize);
-        endSingleTimeCommands(*commandbuffer);
-
-        allocator.destroyBuffer(stagingBuffer); // not needed in the future with vulkanhpp
-    }
-
-    void VulkanRendererAPI::createIndexBuffer()
-    {
-        vk::DeviceSize bufferSize = sizeof(indices[0]) * indices.size();
-    
-        utils::Buffer stagingBuffer = allocator.createBuffer
-       (
-           bufferSize,
-           vk::BufferUsageFlagBits2::eTransferSrc,
-               VMA_MEMORY_USAGE_CPU_TO_GPU,
-               VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-               );
-    
-        void* mappedPtr = nullptr;
-        if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
-        {
-            return; // todo
-        }
-
-        memcpy(mappedPtr, indices.data(), bufferSize);
-
-        vmaUnmapMemory(allocator, stagingBuffer.allocation);
-
-        /*createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eIndexBuffer,
-                     vk::MemoryPropertyFlagBits::eDeviceLocal, indexBuffer, indexBufferMemory);*/
-        indexBuffer = allocator.createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eIndexBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
-
-        /*copyBuffer(stagingBuffer, indexBuffer, bufferSize);*/
-        std::unique_ptr<vk::raii::CommandBuffer> commandbuffer = beginSingleTimeCommands();
-        allocator.copyBuffer(commandbuffer, stagingBuffer, indexBuffer, bufferSize);
-        endSingleTimeCommands(*commandbuffer);
-        allocator.destroyBuffer(stagingBuffer);
-    }
-
-    // Initialize the game objects with different positions, rotations, and scales
-    void VulkanRendererAPI::setupGameObjects()
-    {
-        // Object 1 - Center
-        gameObjects[0].position = {0.0f, 0.0f, 0.0f};
-        gameObjects[0].rotation = {0.0f, glm::radians(-90.0f), 0.0f};
-        gameObjects[0].scale = {1.0f, 1.0f, 1.0f};
-
-        // Object 2 - Left
-        gameObjects[1].position = {-2.0f, 0.0f, -1.0f};
-        gameObjects[1].rotation = {0.0f, glm::radians(-45.0f), 0.0f};
-        gameObjects[1].scale = {0.75f, 0.75f, 0.75f};
-
-        // Object 3 - Right
-        gameObjects[2].position = {2.0f, 0.0f, -1.0f};
-        gameObjects[2].rotation = {0.0f, glm::radians(45.0f), 0.0f};
-        gameObjects[2].scale = {0.75f, 0.75f, 0.75f};
-    }
-
-    // Create uniform buffers for each object
-    void VulkanRendererAPI::createUniformBuffers()
-    {
-        // For each game object
-        for (auto& gameObject : gameObjects)
-        {
-            gameObject.uniformBuffers.clear();
-            /*gameObject.uniformBuffersMemory.clear();
-            gameObject.uniformBuffersMapped.clear();*/
-
-            // Create uniform buffers for each frame in flight
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                vk::DeviceSize bufferSize = sizeof(UniformBufferObject);
-                utils::Buffer buffer({});
-                /*createBuffer(bufferSize, vk::BufferUsageFlagBits::eUniformBuffer,
-                             vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, buffer,
-                             bufferMem);*/
-                buffer = allocator.createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eUniformBuffer, VMA_MEMORY_USAGE_GPU_ONLY);
-                gameObject.uniformBuffers.emplace_back(std::move(buffer));
-                /*gameObject.uniformBuffersMemory.emplace_back(std::move(bufferMem));
-                gameObject.uniformBuffersMapped.emplace_back(gameObject.uniformBuffersMemory[i].mapMemory(0, bufferSize));*/
-            }
-        }
-    }
-
     void VulkanRendererAPI::createDescriptorPool()
     {
         {
@@ -1502,6 +1575,7 @@ namespace  VanK
                 .pPoolSizes = poolSize.data()
             };
             descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+            DBG_VK_NAME(*descriptorPool);
         }
         // This is the descriptor pool for the ImGui UI, which is used to display the textures and other resources (GBuffers).
         {
@@ -1518,59 +1592,12 @@ namespace  VanK
                 .pPoolSizes = &poolSize,
             };
             uiDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+            DBG_VK_NAME(*uiDescriptorPool);
         }
     }
 
     void VulkanRendererAPI::createDescriptorSets()
     {
-        /*// For each game object
-        for (auto& gameObject : gameObjects)
-        {
-            // Create descriptor sets for each frame in flight
-            std::vector<vk::DescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, *descriptorSetLayout);
-            vk::DescriptorSetAllocateInfo allocInfo{
-                .descriptorPool = *descriptorPool,
-                .descriptorSetCount = static_cast<uint32_t>(layouts.size()),
-                .pSetLayouts = layouts.data()
-            };
-    
-            gameObject.descriptorSets.clear();
-            gameObject.descriptorSets = device.allocateDescriptorSets(allocInfo);
-    
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                vk::DescriptorBufferInfo bufferInfo{
-                    .buffer = *gameObject.uniformBuffers[i],
-                    .offset = 0,
-                    .range = sizeof(UniformBufferObject)
-                };
-                vk::DescriptorImageInfo imageInfo{
-                    .sampler = *textureSampler,
-                    .imageView = *textureImageView,
-                    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
-                };
-                std::array descriptorWrites{
-                    vk::WriteDescriptorSet{
-                        .dstSet = *gameObject.descriptorSets[i],
-                        .dstBinding = 0,
-                        .dstArrayElement = 0,
-                        .descriptorCount = 1,
-                        .descriptorType = vk::DescriptorType::eUniformBuffer,
-                        .pBufferInfo = &bufferInfo
-                    },
-                    vk::WriteDescriptorSet{
-                        .dstSet = *gameObject.descriptorSets[i],
-                        .dstBinding = 1,
-                        .dstArrayElement = 0,
-                        .descriptorCount = 1,
-                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                        .pImageInfo = &imageInfo
-                    }
-                };
-                device.updateDescriptorSets(descriptorWrites, {});
-            }
-        }*/
-
         // First describe the layout of the texture descriptor, what and how many
         {
             uint32_t numTextures = 10000; // We don't need to set the exact number of texture the scene have.
@@ -1613,7 +1640,7 @@ namespace  VanK
                 .pBindings = layoutBindings.data(),
             };
             descriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
-           
+            DBG_VK_NAME(*descriptorSetLayout);
             std::vector<vk::DescriptorSetLayout> layouts = { *descriptorSetLayout };
             // Allocate the descriptor set, needed only for larger descriptor sets
             vk::DescriptorSetAllocateInfo allocInfo = {
@@ -1622,6 +1649,7 @@ namespace  VanK
                 .pSetLayouts = layouts.data(),
             };
             descriptorSets = device.allocateDescriptorSets(allocInfo);
+            DBG_VK_NAME(*descriptorSets.back());
         }
 
         // Second this is another set which will be pushed
@@ -1643,8 +1671,13 @@ namespace  VanK
                 .pBindings = layoutBindings.data(),
             };
             commonDescriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
+            DBG_VK_NAME(*commonDescriptorSetLayout);
         }
-        
+        updateGraphicsDescriptorSet();
+    }
+
+    void VulkanRendererAPI::updateGraphicsDescriptorSet()
+    {
         // The sampler used for the texture
         vk::raii::Sampler sampler = m_samplerPool.acquireSampler({
             .magFilter = vk::Filter::eLinear,
@@ -1655,6 +1688,7 @@ namespace  VanK
             .addressModeW = vk::SamplerAddressMode::eRepeat,
             .maxLod = vk::LodClampNone,
         });
+        DBG_VK_NAME(*sampler);
     
         // Prepare imageInfos vector automatically sized to m_image's size
         std::vector<vk::DescriptorImageInfo> imageInfos;
@@ -1710,24 +1744,6 @@ namespace  VanK
         device.updateDescriptorSets(writeDescriptorSets, {});
     }
 
-    /*void Renderer::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
-                                vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
-    {
-        vk::BufferCreateInfo bufferInfo{
-            .size = size,
-            .usage = usage,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-        buffer = vk::raii::Buffer(device, bufferInfo);
-        vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
-        vk::MemoryAllocateInfo allocInfo{
-            .allocationSize = memRequirements.size,
-            .memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)
-        };
-        bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
-        buffer.bindMemory(*bufferMemory, 0);
-    }*/
-
     std::unique_ptr<vk::raii::CommandBuffer> VulkanRendererAPI::beginSingleTimeCommands()
     {
         vk::CommandBufferAllocateInfo allocInfo{
@@ -1754,18 +1770,7 @@ namespace  VanK
         queue.submit(submitInfo, nullptr);
         queue.waitIdle();
     }
-
-    /*
-    void Renderer::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
-    {
-        auto commandCopyBuffer = beginSingleTimeCommands();
     
-        commandCopyBuffer->copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy{.size = size});
-    
-        endSingleTimeCommands(*commandCopyBuffer);
-    }
-    */
-
     uint32_t VulkanRendererAPI::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     {
         vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
@@ -1789,178 +1794,10 @@ namespace  VanK
             .commandBufferCount = MAX_FRAMES_IN_FLIGHT
         };
         commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
-    }
-
-    void VulkanRendererAPI::recordCommandBuffer(uint32_t imageIndex)
-    {
-        commandBuffers[currentFrame].begin({});
-        // Before starting rendering, transition the images to the appropriate layouts
-        // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
-        transition_image_layout(
-            imageIndex,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            {}, // srcAccessMask (no need to wait for previous operations)
-            vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
-            vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput // dstStage
-        );
-
-        // Transition the multisampled color image to COLOR_ATTACHMENT_OPTIMAL
-        transition_image_layout_custom(
-            colorImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            {},
-            vk::AccessFlagBits2::eColorAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        // Transition the depth image to DEPTH_ATTACHMENT_OPTIMAL
-        transition_image_layout_custom(
-            depthImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eDepthAttachmentOptimal,
-            {},
-            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-            vk::ImageAspectFlagBits::eDepth
-        );
-
-        // 3) Bootstrap or re-transition resolve target (sceneImage) for FIRST pass
-        transition_image_layout_custom(
-            sceneImage,
-            sceneImageInitialized ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            sceneImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead) : vk::AccessFlags2{},
-            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-            sceneImageInitialized ? vk::PipelineStageFlagBits2::eFragmentShader : vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
-        // First pass: render scene into MSAA color with resolve to single-sample sceneImage
-        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-        vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
-
-        // Color attachment (multisampled) with resolve attachment
-        vk::RenderingAttachmentInfo colorAttachment = {
-            .imageView = colorImageView,
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .resolveMode = vk::ResolveModeFlagBits::eAverage,
-            .resolveImageView = sceneImageView,
-            .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-            .clearValue = clearColor
-        };
-
-        // Depth attachment
-        vk::RenderingAttachmentInfo depthAttachment = {
-            .imageView = depthImageView,
-            .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eDontCare,
-            .clearValue = clearDepth
-        };
-
-        vk::RenderingInfo renderingInfo = {
-            .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &colorAttachment,
-            .pDepthAttachment = &depthAttachment
-        };
-        commandBuffers[currentFrame].beginRendering(renderingInfo);
-        commandBuffers[currentFrame].bindPipeline(vk::PipelineBindPoint::eGraphics, *graphicsPipeline);
-        commandBuffers[currentFrame].setViewport(0, vk::Viewport(0.0f, 0.0f, static_cast<float>(swapChainExtent.width),
-                                                                 static_cast<float>(swapChainExtent.height), 0.0f,
-                                                                 1.0f));
-        commandBuffers[currentFrame].setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), swapChainExtent));
-        commandBuffers[currentFrame].bindVertexBuffers(0, vertexBuffer.buffer, {0});
-        commandBuffers[currentFrame].bindIndexBuffer(indexBuffer.buffer, 0, vk::IndexType::eUint32);
-
-        vk::DescriptorBufferInfo bufferInfo = { .buffer = gameObjects[0].uniformBuffers[0].buffer, .offset = 0, .range = vk::WholeSize };
-        std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
-        writeDescriptorSets[0] = vk::WriteDescriptorSet{};
-        writeDescriptorSets[0].dstSet = nullptr;
-        writeDescriptorSets[0].dstBinding = 0;
-        writeDescriptorSets[0].dstArrayElement = 0;
-        writeDescriptorSets[0].descriptorCount = 1;
-        writeDescriptorSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
-        writeDescriptorSets[0].pBufferInfo = &bufferInfo;
-    
-        vk::PushDescriptorSetInfoKHR pushDescriptorInfo
+        for (auto& commandBuffer : commandBuffers)
         {
-            .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
-            .layout = *pipelineLayout,
-            .set = 1,
-            .descriptorWriteCount = writeDescriptorSets.size(),
-            .pDescriptorWrites = writeDescriptorSets.data()
-        };
-        commandBuffers[currentFrame].pushDescriptorSet2(pushDescriptorInfo);
-        /*commandBuffers[currentFrame].bindDescriptorSets(vk::PipelineBindPoint::eGraphics, pipelineLayout, 0, *descriptorSets[currentFrame], nullptr);*/
-        // Draw each object with its own descriptor set
-    
-        // Bind the descriptor set for this object
-        commandBuffers[currentFrame].bindDescriptorSets(
-            vk::PipelineBindPoint::eGraphics,
-            *pipelineLayout,
-            0,
-            *descriptorSets[0],
-            nullptr
-        );
-    
-        // Draw the object
-        commandBuffers[currentFrame].drawIndexed(indices.size(), 1, 0, 0, 0);
-    
-        commandBuffers[currentFrame].endRendering();
-
-        // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
-        transition_image_layout_custom(
-            sceneImage,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::eShaderReadOnlyOptimal,
-            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-            vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::PipelineStageFlagBits2::eFragmentShader,
-            vk::ImageAspectFlagBits::eColor);
-        sceneImageInitialized = true;
-
-        // Second pass: draw ImGui to swapchain image
-        vk::RenderingAttachmentInfo swapColorAttachment = {
-            .imageView = swapChainImageViews[imageIndex],
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore
-        };
-        vk::RenderingInfo renderingInfo2 = {
-            .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
-            .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &swapColorAttachment
-        };
-
-        commandBuffers[currentFrame].beginRendering(renderingInfo2);
-        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *commandBuffers[currentFrame]);
-        commandBuffers[currentFrame].endRendering();
-
-        // After rendering, transition the images to appropriate layouts
-
-        // Transition the swapchain image to PRESENT_SRC
-        transition_image_layout(
-            imageIndex,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::ePresentSrcKHR,
-            vk::AccessFlagBits2::eColorAttachmentWrite, // srcAccessMask
-            {}, // dstAccessMask
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
-            vk::PipelineStageFlagBits2::eBottomOfPipe // dstStage
-        );
-        commandBuffers[currentFrame].end();
+            DBG_VK_NAME(*commandBuffer);
+        }
     }
 
     void VulkanRendererAPI::transition_image_layout(
@@ -2045,182 +1882,18 @@ namespace  VanK
         for (size_t i = 0; i < swapChainImages.size(); i++)
         {
             presentCompleteSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
+            DBG_VK_NAME(*presentCompleteSemaphores.back());
             renderFinishedSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
+            DBG_VK_NAME(*renderFinishedSemaphores.back());
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             inFlightFences.emplace_back(device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
+            DBG_VK_NAME(*inFlightFences.back());
         }
     }
-
-    void VulkanRendererAPI::updateUniformBuffers()
-    {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-        static auto lastFrameTime = startTime;
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float>(currentTime - startTime).count();
-        float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
-        lastFrameTime = currentTime;
-
-        // Camera and projection matrices (shared by all objects)
-        glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 6.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f),
-                                          static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.
-                                              height), 0.1f, 20.0f);
-        proj[1][1] *= -1;
-
-        // Update uniform buffers for each object
-        for (auto& gameObject : gameObjects)
-        {
-            // Apply continuous rotation to the object based on frame time
-            const float rotationSpeed = 0.5f; // Rotation speed in radians per second
-            gameObject.rotation.y += rotationSpeed * deltaTime; // Slow rotation around Y axis scaled by frame time
-
-            // Get the model matrix for this object
-            glm::mat4 model = gameObject.getModelMatrix();
-
-            // Create and update the UBO
-            UniformBufferObject ubo{
-                .model = model,
-                .view = view,
-                .proj = proj
-            };
-
-            /*// Copy the UBO data to the mapped memory
-            memcpy(gameObject.uniformBuffers[currentFrame].buffer, &ubo, sizeof(ubo));*/
-            utils::Buffer stagingBuffer = allocator.createBuffer
-       (
-           sizeof(ubo),
-           vk::BufferUsageFlagBits2::eTransferSrc,
-               VMA_MEMORY_USAGE_CPU_TO_GPU,
-               VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
-           );
-        
-            void* mappedPtr = nullptr;
-            if (static_cast<vk::Result>(vmaMapMemory(allocator, stagingBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
-            {
-                return; // todo
-            }
-
-            memcpy(mappedPtr, &ubo, sizeof(ubo));
-
-            vmaUnmapMemory(allocator, stagingBuffer.allocation);
-
-            std::unique_ptr<vk::raii::CommandBuffer> commandbuffer = beginSingleTimeCommands();
-            allocator.copyBuffer(commandbuffer, stagingBuffer, gameObject.uniformBuffers[currentFrame], sizeof(ubo));
-
-            endSingleTimeCommands(*commandbuffer);
-            allocator.destroyBuffer(stagingBuffer);
-        }
-    }
-
-    void VulkanRendererAPI::drawFrame()
-    {
-        while (vk::Result::eTimeout == device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX));
-        auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[currentFrame],
-                                                               nullptr);
-
-        if (result == vk::Result::eErrorOutOfDateKHR)
-        {
-            recreateSwapChain();
-            return;
-        }
-        if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
-        {
-            throw std::runtime_error("failed to acquire swap chain image!");
-        }
-
-        /*-- The ImGui code -*/
-
-        /*-- 
-         * The rendering of the scene is done using dynamic rendering with a G-Buffer (see recordGraphicCommands).
-         * The target image will be rendered/displayed using ImGui.
-         * Its placement will cover the entire viewport (ImGui draws a quad with the texture we provide),
-         * and the image will be displayed in the viewport.
-         * There are multiple ways to display the image, but this method is the most flexible.
-         * Other methods include:
-         *  - Blitting the image to the swapchain image, with the UI drawn on top. However, this makes it harder 
-         *    to fit the image within a specific area of the window.
-         *  - Using the image as a texture in a quad and rendering it to the swapchain image. This is what ImGui 
-         *    does, but we don't need to add a quad to the scene, as ImGui handles it for us.
-        -*/
-        // Using the dock "Viewport", this sets the window to cover the entire central viewport
-        if (ImGui::Begin("Viewport"))
-        {
-            // !!! This is where the GBuffer image is displayed !!!
-            ImGui::Image(uiDescriptorSet[0], ImGui::GetContentRegionAvail());
-
-            // Adding overlay text on the upper left corner
-            ImGui::SetCursorPos(ImVec2(0, 0));
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        }
-        ImGui::End();
-
-        ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
-
-        // Update uniform buffers for all objects
-        updateUniformBuffers();
-
-        device.resetFences(*inFlightFences[currentFrame]);
-        commandBuffers[currentFrame].reset();
-        recordCommandBuffer(imageIndex);
-
-        frameCount++;
-        auto now = std::chrono::high_resolution_clock::now();
-        float elapsed = std::chrono::duration<float>(now - lastTime).count();
-        if (elapsed >= 1.0f)
-        {
-            fps = frameCount / elapsed;
-            frameCount = 0;
-            lastTime = now;
-            std::cout << "FPS: " << fps << std::endl;
-        }
-
-        vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        const vk::SubmitInfo submitInfo{
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*presentCompleteSemaphores[currentFrame],
-            .pWaitDstStageMask = &waitDestinationStageMask,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &*commandBuffers[currentFrame],
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex]
-        };
-        queue.submit(submitInfo, *inFlightFences[currentFrame]);
-
-        const vk::PresentInfoKHR presentInfoKHR{
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
-            .swapchainCount = 1,
-            .pSwapchains = &*swapChain,
-            .pImageIndices = &imageIndex
-        };
-        VkResult rawResult = vkQueuePresentKHR(*queue, reinterpret_cast<const VkPresentInfoKHR*>(&presentInfoKHR));
-        result = static_cast<vk::Result>(rawResult);
-        //result = queue.presentKHR(presentInfoKHR); when resizing in hpp is fixed then use this https://github.com/KhronosGroup/Vulkan-Tutorial/issues/73
-        if (result == vk::Result::eErrorOutOfDateKHR || result == vk::Result::eSuboptimalKHR || framebufferResized)
-        {
-            framebufferResized = false;
-            recreateSwapChain();
-        }
-        else if (result != vk::Result::eSuccess)
-        {
-            throw std::runtime_error("failed to present swap chain image!");
-        }
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
-    }
-
-    /*[[nodiscard]] vk::raii::ShaderModule VulkanRendererAPI::createShaderModule(const std::vector<char>& code) const
-    {
-        vk::ShaderModuleCreateInfo createInfo{
-            .codeSize = code.size(), .pCode = reinterpret_cast<const uint32_t*>(code.data())
-        };
-        vk::raii::ShaderModule shaderModule{device, createInfo};
-
-        return shaderModule;
-    }*/
-
+    
     uint32_t VulkanRendererAPI::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities)
     {
         auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
@@ -2268,7 +1941,7 @@ namespace  VanK
         }
         int width, height;
         SDL_GetWindowSize(window, &width, &height);
-
+        
         return {
             std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
             std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)

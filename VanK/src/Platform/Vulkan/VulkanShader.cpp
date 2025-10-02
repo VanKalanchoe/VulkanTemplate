@@ -152,6 +152,7 @@ namespace VanK
         {
             std::cout << "entrypouint " << spirv.entryPointName << " module " << spirv.spirvCode.data() << std::endl;
             vk::raii::ShaderModule shaderModule = utils::createShaderModule(device, std::span<const uint32_t>(spirv.spirvCode.data(), spirv.spirvCode.size()));
+            DBG_VK_NAME(*shaderModule);
             m_ShaderModules.emplace(stage, ShaderModuleInfo{ std::move(shaderModule), spirv.entryPointName });
         }
         //maybe in the future store it in here and then only that specific shader has the correct stuff it overwrites grapgics because compute is last fixed inside sershadermodule

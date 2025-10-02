@@ -1,16 +1,15 @@
 struct VSInput 
 {
     [[vk::location(0)]]
-    float3 inPosition : POSITION;
+    float4 inPosition : POSITION;
     [[vk::location(1)]]
-    float3 inColor : COLOR;
+    float4 inColor : COLOR;
     [[vk::location(2)]]
-    float2 inTexCoord : TEXCOORD0;
+    float4 inTexCoord : TEXCOORD0;
 };
 
 struct UniformBuffer 
 {
-    float4x4 model;
     float4x4 view;
     float4x4 proj;
 };
@@ -32,9 +31,15 @@ struct VSOutput
 [shader("vertex")]
 VSOutput vertexMain(VSInput input) {
     VSOutput output;
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(ubo.model, float4(input.inPosition, 1.0))));
-    output.fragColor = input.inColor;
-    output.fragTexCoord = input.inTexCoord;
+     float4x4 model = float4x4(
+        1,0,0,0,
+        0,1,0,0,
+        0,0,1,0,
+        0,0,0,1
+    );
+    output.pos = mul(ubo.proj, mul(ubo.view, mul(model, input.inPosition)));
+    output.fragColor = input.inColor.xyz;
+    output.fragTexCoord = input.inTexCoord.xy;
     return output;
 }
 [[vk::binding(0, 0)]]
