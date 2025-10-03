@@ -34,6 +34,11 @@ namespace VanK
             return s_RendererAPI ? s_RendererAPI->createGraphicsPipeline(pipelineSpecification) : nullptr;
         }
 
+        static VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification)
+        {
+            return s_RendererAPI ? s_RendererAPI->createComputeShaderPipeline(computePipelineSpecification) : nullptr;
+        }
+
         static void DestroyAllPipelines()
         {
             if (s_RendererAPI) s_RendererAPI->DestroyAllPipelines();
@@ -79,6 +84,11 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->BeginRendering(cmd, color_target_info, num_color_targets, depth_stencil_target_info, render_option);
         }
 
+        static void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
+        {
+            if (s_RendererAPI) s_RendererAPI->BindFragmentSamplers(cmd, firstSlot, samplers, num_bindings);
+        }
+        
         static void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport)
         {
             if (s_RendererAPI) s_RendererAPI->SetViewport(cmd, viewportCount, viewport);
@@ -103,15 +113,43 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->DrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
         }
+        
+        static void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+        {
+            if (s_RendererAPI) s_RendererAPI->DrawIndexedIndirectCount(cmd, indirectBuffer, indirectBufferOffset, countBuffer, countBufferOffset, maxDrawCount, stride);       
+        }
 
         static void EndRendering(VanKCommandBuffer cmd)
         {
             if (s_RendererAPI) s_RendererAPI->EndRendering(cmd);
         }
 
-        static void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
+        /**
+        * @brief Begins a compute pass with an optional vertex buffer
+        *
+        * To prevent vertex buffer usage while Computing provide it here or no guarantee to sync.
+        * 
+        * Inserts memory barriers to ensure safe access before compute operations.
+        * 
+        * @param cmd The Vulkan command buffer to record into.
+        * @param buffer Optional vertex buffer to write to during the compute pass.
+        *               If null, no write barrier is added.
+        * 
+        * @return A pointer to the created compute pass handle.
+        */
+        static VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer = nullptr)
         {
-            if (s_RendererAPI) s_RendererAPI->BindFragmentSamplers(cmd, firstSlot, samplers, num_bindings);
+            return s_RendererAPI ? s_RendererAPI->BeginComputePass(cmd, buffer) : nullptr;
+        }
+
+        static void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+        {
+            if (s_RendererAPI) s_RendererAPI->DispatchCompute(computePass, groupCountX, groupCountY, groupCountZ);
+        }
+
+        static void EndComputePass(VanKComputePass* computePass)
+        {
+            if (s_RendererAPI) s_RendererAPI->EndComputePass(computePass);
         }
 
         static void waitForGraphicsQueueIdle()

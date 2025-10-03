@@ -1,20 +1,19 @@
-struct VSInput 
+struct InstancedVertexData
 {
-    [[vk::location(0)]]
-    float4 inPosition : POSITION;
-    [[vk::location(1)]]
-    float4 inColor : COLOR;
-    [[vk::location(2)]]
-    float4 inTexCoord : TEXCOORD0;
+    float3 inPosition;
+    float4 inColor;
+    float2 inTexCoord;
 };
 
 struct UniformBuffer 
 {
     float4x4 view;
     float4x4 proj;
+    uint64_t buffer;
+    uint32_t num;
 };
 [[vk::binding(0, 1)]]
-ConstantBuffer<UniformBuffer> ubo;
+ConstantBuffer<UniformBuffer, ScalarDataLayout> ubo;
 
 // Specialization constant - can be set at pipeline creation time
 // Note: This is equivalent to GLSL's layout(constant_id = X)
@@ -24,12 +23,12 @@ const bool useTexture = false; // Controls whether texture sampling is enabled
 struct VSOutput
 {
     float4 pos : SV_Position;
-    float3 fragColor : TEXCOORD0;
+    float4 fragColor : TEXCOORD0;
     float2 fragTexCoord : TEXCOORD1;
 };
 
 [shader("vertex")]
-VSOutput vertexMain(VSInput input) {
+VSOutput vertexMain(uint vertexID : SV_VertexID) {
     VSOutput output;
      float4x4 model = float4x4(
         1,0,0,0,
@@ -37,9 +36,13 @@ VSOutput vertexMain(VSInput input) {
         0,0,1,0,
         0,0,0,1
     );
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(model, input.inPosition)));
-    output.fragColor = input.inColor.xyz;
-    output.fragTexCoord = input.inTexCoord.xy;
+ 
+    InstancedVertexData* vertex = (InstancedVertexData*)ubo.buffer;
+    InstancedVertexData vertexData = vertex[vertexID];
+
+    output.pos = mul(ubo.proj, mul(ubo.view, mul(model, float4(vertexData.inPosition, 1.0))));
+    output.fragColor = vertexData.inColor;
+    output.fragTexCoord = vertexData.inTexCoord.xy;
     return output;
 }
 [[vk::binding(0, 0)]]
@@ -48,5 +51,5 @@ Sampler2D texture[];
 [shader("pixel")]
 float4 fragmentMain(VSOutput vertIn) : SV_TARGET0 {
     
-   return texture[0].Sample(vertIn.fragTexCoord);
+   return vertIn.fragColor * texture[0].Sample(vertIn.fragTexCoord);
 }

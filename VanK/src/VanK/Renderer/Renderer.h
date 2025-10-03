@@ -8,7 +8,7 @@ namespace VanK
 {struct Vertex
 {
     glm::vec3 pos;
-    glm::vec3 color;
+    glm::vec4 color;
     glm::vec2 texCoord;
 };
     class Renderer
@@ -62,8 +62,12 @@ namespace VanK
         inline static ShaderLibrary m_ShaderLibrary;
         inline static VanKPipeLine m_GraphicsDebugPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_GraphicsDebugPipelineSpecification = {};
+        inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};
+        inline static VanKComputePipelineSpecification m_ComputeDrawIndirectPipelineSpecification = {};
         inline static Ref<UniformBuffer> uniformScene;
         inline static Ref<TransferBuffer> transferRing;
+        inline static Ref<IndirectBuffer> indirectBuffer;
+        inline static Ref<IndirectBuffer> countBuffer;
         inline static Ref<VertexBuffer> vertexMesh;
         inline static Ref<IndexBuffer> indexMesh;
     };

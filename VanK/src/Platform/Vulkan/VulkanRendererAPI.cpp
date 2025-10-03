@@ -307,13 +307,17 @@ namespace  VanK
                                                                    });
                                     });
 
-            auto features = device.template getFeatures2<
+            auto features = device.template getFeatures2
+            <
                 vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features,
-                vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>();
+                vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+                vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR
+            >();
             bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceFeatures2>().features.
                                                      samplerAnisotropy &&
                 features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
-                features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState;
+                features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
+                features.template get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>().timelineSemaphore;    
 
             return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
         });
@@ -334,7 +338,8 @@ namespace  VanK
         // get the first index into queueFamilyProperties which supports both graphics and present
         for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
         {
-            if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics) &&
+            if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics &&
+                queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eCompute) &&
                 physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface))
             {
                 // found a queue family that supports both graphics and present
@@ -351,29 +356,32 @@ namespace  VanK
         vk::StructureChain
         <
             vk::PhysicalDeviceFeatures2,
-            vk::PhysicalDeviceVulkan11Features, // added myself
+            vk::PhysicalDeviceVulkan11Features,
+            vk::PhysicalDeviceVulkan12Features,
             vk::PhysicalDeviceVulkan13Features,
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-            vk::PhysicalDeviceDescriptorIndexingFeatures,
-            vk::PhysicalDeviceBufferDeviceAddressFeatures,
             vk::PhysicalDeviceMaintenance5Features
         >
         featureChain =
         {
-            {.features = {.sampleRateShading = true, .samplerAnisotropy = true}}, // vk::PhysicalDeviceFeatures2
-            {.shaderDrawParameters = true}, // <-- enable // added myself
-            {.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
-            {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+            {.features = {.sampleRateShading = true, .samplerAnisotropy = true, .shaderInt64 = true}}, // vk::PhysicalDeviceFeatures2
+            {.shaderDrawParameters = true},
             {
+                .drawIndirectCount = true,
+                .descriptorIndexing = true, 
                 .shaderSampledImageArrayNonUniformIndexing = true,
                 .descriptorBindingSampledImageUpdateAfterBind = true,
                 .descriptorBindingUpdateUnusedWhilePending = true,
                 .descriptorBindingPartiallyBound = true,
                 .descriptorBindingVariableDescriptorCount = true,
-                .runtimeDescriptorArray = true
+                .runtimeDescriptorArray = true,
+                .scalarBlockLayout = true,
+                .timelineSemaphore = true,
+                .bufferDeviceAddress = true
             },
-            {.bufferDeviceAddress = true},
-            {.maintenance5 = true}
+            {.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
+            {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+            {.maintenance5 = true},
         };
 
         // create a Device
@@ -729,6 +737,69 @@ namespace  VanK
         return Wrap(rawHandle);
     }
 
+    VanKPipeLine VulkanRendererAPI::createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification)
+    {
+        vk::raii::Pipeline tempPipeline = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout tempPipelineLayout = VK_NULL_HANDLE;
+        
+        auto specShader = dynamic_cast<VulkanShader*>(computePipelineSpecification.ComputePipelineCreateInfo.VanKShader);
+        std::string computeEntryName = specShader->GetShaderEntryName(vk::ShaderStageFlagBits::eCompute);
+        auto& compute = specShader->GetShaderModule(vk::ShaderStageFlagBits::eCompute);
+
+        // Create the pipeline layout used by the compute shader
+        /*
+        const std::array<VkPushConstantRange, 1> pushRanges =
+        {
+            {{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(shaderio::PushConstantCompute)}}
+        };
+        */
+
+        vk::PipelineShaderStageCreateInfo computeShaderStageInfo
+        {
+            .stage = vk::ShaderStageFlagBits::eCompute,
+            .module = compute,
+            .pName = computeEntryName.c_str()
+        };
+
+        const std::array<vk::DescriptorSetLayout, 2> computeDescriptorSetLayouts =
+        {
+            descriptorSetLayout,
+            commonDescriptorSetLayout // <-- This is your new, shared layout
+        };
+
+        // The pipeline layout is used to pass data to the pipeline, anything with "layout" in the shader
+        const vk::PipelineLayoutCreateInfo pipelineLayoutInfo
+        {
+            .setLayoutCount = uint32_t(computeDescriptorSetLayouts.size()),
+            .pSetLayouts = computeDescriptorSetLayouts.data(),
+            /*.pushConstantRangeCount = uint32_t(pushRanges.size()),
+            .pPushConstantRanges = pushRanges.data(),*/
+        };
+        tempPipelineLayout = vk::raii::PipelineLayout( device, pipelineLayoutInfo );
+        DBG_VK_NAME(*tempPipelineLayout);
+
+        // Creating the pipeline to run the compute shader
+        vk::ComputePipelineCreateInfo pipelineInfo
+        {
+            .stage = computeShaderStageInfo,
+            .layout = tempPipelineLayout
+        };
+        tempPipeline = vk::raii::Pipeline( device, nullptr, pipelineInfo );
+        DBG_VK_NAME(*tempPipeline);
+        
+        PipelineResource resource;
+        resource.pipeline = std::move(tempPipeline);
+        resource.layout = std::move(tempPipelineLayout);
+        resource.bindPoint = VanKPipelineBindPoint::Compute;
+        resource.computeSpec = computePipelineSpecification;
+
+        auto rawHandle = *resource.pipeline; // raw VkPipeline before moving
+        m_currentComputePipelineLayout = *resource.layout;
+        m_PipelineResources.emplace(rawHandle, std::move(resource));
+
+        return Wrap(rawHandle);
+    }
+
     void VulkanRendererAPI::DestroyAllPipelines()
     {
         // Clear the map completely
@@ -836,6 +907,53 @@ namespace  VanK
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
+    VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer)
+    {
+        auto* result = new VanKComputePass
+        {
+            .VanKCommandBuffer = cmd,
+            .VanKVertexBuffer = buffer
+        };
+
+        if (buffer != nullptr)
+        {
+            // Add a barrier to make sure nothing was writing to it, before updating its content
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(cmd),
+                static_cast<VkBuffer>(buffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
+                vk::PipelineStageFlagBits2::eTransfer
+            );
+        }
+        
+        return result;
+    }
+
+    void VulkanRendererAPI::DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+    {
+        // Execute the compute shader
+        // The workgroup is set to 256, and we only have 3 vertex to deal with, so one group is enough
+        commandBuffers[currentFrame].dispatch(groupCountX, groupCountY, groupCountZ);
+    }
+
+    void VulkanRendererAPI::EndComputePass(VanKComputePass* computePass)
+    {
+        if (computePass->VanKVertexBuffer != nullptr)
+        {
+            // Add barrier to make sure the compute shader is finished before the vertex buffer is used
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(computePass->VanKCommandBuffer),
+                static_cast<VkBuffer>(computePass->VanKVertexBuffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eComputeShader,
+                vk::PipelineStageFlagBits2::eVertexShader
+            );
+        }
+        
+        delete computePass;
+    }
+
     void VulkanRendererAPI::BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline)
     {
         auto it = m_PipelineResources.find(Unwrap(pipeline));
@@ -891,11 +1009,22 @@ namespace  VanK
         writeDescriptorSets[0].descriptorCount = 1;
         writeDescriptorSets[0].descriptorType = vk::DescriptorType::eUniformBuffer;
         writeDescriptorSets[0].pBufferInfo = &bufferInfo;
+
+        vk::ShaderStageFlags stage_flags;
+
+        if (bindPoint == VanKPipelineBindPoint::Compute)
+        {
+            stage_flags = vk::ShaderStageFlagBits::eCompute;
+        }
+        else
+        {
+            stage_flags = vk::ShaderStageFlagBits::eAllGraphics;
+        }
         
         // Push layout information with updated data
         const vk::PushDescriptorSetInfoKHR pushDescriptorSetInfo
         {
-            .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
+            .stageFlags = stage_flags,
             .layout = layout,
             .set = set, // <--- Second set layout(set=1, binding=...) in the fragment shader
             .descriptorWriteCount = writeDescriptorSets.size(),
@@ -1109,6 +1238,30 @@ namespace  VanK
     void VulkanRendererAPI::DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
         Unwrap(cmd).drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    }
+
+    void VulkanRendererAPI::DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+    {
+        if (stride < sizeof(vk::DrawIndexedIndirectCommand))
+            throw std::runtime_error("drawIndexedIndirectCount: stride too small");
+        
+        // Cast to VulkanVertexBuffer
+        const VulkanIndirectBuffer* vulkanIB = dynamic_cast<const VulkanIndirectBuffer*>(&indirectBuffer);
+        if (!vulkanIB)
+            throw std::runtime_error("DrawIndexedIndirectCount: indirectBuffer is not a VulkanIndirectBuffer");
+
+        const utils::Buffer& vkBuffer = vulkanIB->GetBuffer();
+        vk::Buffer bufferIndirect = vkBuffer.buffer; // The actual VkBuffer
+
+        // Cast to VulkanVertexBuffer
+        const VulkanIndirectBuffer* vulkanCB = dynamic_cast<const VulkanIndirectBuffer*>(&countBuffer);
+        if (!vulkanCB)
+            throw std::runtime_error("DrawIndexedIndirectCount: countBuffer is not a VulkanIndirectBuffer");
+
+        const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
+        vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
+        
+        Unwrap(cmd).drawIndexedIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)

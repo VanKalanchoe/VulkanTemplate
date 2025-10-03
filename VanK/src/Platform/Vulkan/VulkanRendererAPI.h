@@ -274,6 +274,8 @@ namespace VanK
             // Handle each possible stage bit
             if ((stage & vk::PipelineStageFlagBits2::eComputeShader))
                 access |= src ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlagBits2::eShaderWrite;
+            if ((stage & vk::PipelineStageFlagBits2::eVertexShader))
+                access |= src ? vk::AccessFlagBits2::eShaderWrite : vk::AccessFlagBits2::eShaderRead;
             if ((stage & vk::PipelineStageFlagBits2::eFragmentShader))
                 access |= src ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlagBits2::eShaderWrite;
             if ((stage & vk::PipelineStageFlagBits2::eVertexAttributeInput))
@@ -478,7 +480,7 @@ namespace VanK
                 };
                 /*vk::DispatchLoaderDynamic dld(instance, m_device);
                 resultBuffer.address = m_device.getBufferAddress(info);*/
-                /*resultBuffer.address = vkGetBufferDeviceAddress(m_device, static_cast<VkBufferDeviceAddressInfo>(&info));*/
+                resultBuffer.address = vkGetBufferDeviceAddress(m_device, info);
                 {
                     // Find leaks
                     static uint32_t counter = 0U;
@@ -827,6 +829,7 @@ namespace VanK
         uint32_t AddTextureToPool(utils::ImageResource&& imageResource);
         void RemoveTextureFromPool(uint32_t index);
         VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) override;
+        VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) override;
         void DestroyAllPipelines() override;
         void DestroyPipeline(VanKPipeLine pipeline) override;
         VanKCommandBuffer BeginCommandBuffer() override;
@@ -836,13 +839,18 @@ namespace VanK
         void BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline) override;
         void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) override;
         void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info, VanKRenderOption render_option) override;
+        void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) override;
         void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport) override;
         void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) override;
         void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings) override;
         void BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize) override;
         void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
+        void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void EndRendering(VanKCommandBuffer cmd) override;
-        void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) override;
+        VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer) override;
+        void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
+        void EndComputePass(VanKComputePass* computePass) override;
+        
         /*-- Wait until GPU is done using the pipeline to safly destroy --*/
         void waitForGraphicsQueueIdle() override;
     public:
@@ -927,6 +935,10 @@ namespace VanK
         
         std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
         std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
+        // Update timeline value for this frame
+
+        vk::raii::Semaphore semaphore = nullptr;
+        uint64_t timelineValue = 0;
         std::vector<vk::raii::Fence> inFlightFences;
         uint32_t currentFrame = 0;
 
@@ -947,8 +959,6 @@ namespace VanK
         void initVulkan();
 
         void initImGui();
-
-        void mainLoop(VanKCommandBuffer cmd);
 
         void cleanupSwapChain();
 

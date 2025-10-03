@@ -127,4 +127,24 @@ namespace VanK
     private:
         utils::Buffer m_storageBuffer;
     };
+
+    class VulkanIndirectBuffer : public IndirectBuffer
+    {
+    public:
+        VulkanIndirectBuffer(uint64_t size);
+        virtual ~VulkanIndirectBuffer();
+
+        virtual void Bind() const override;
+        virtual void Unbind() const override;
+        virtual uint64_t GetBufferAddress() const override { return m_indirectBuffer.address; }
+        virtual void* GetNativeHandle() const override { return (void*)m_indirectBuffer.buffer; }
+
+        // Upload for initial setup
+        virtual void Upload(const void* data, size_t size, size_t offset) override;
+
+        const utils::Buffer& GetBuffer() const { return m_indirectBuffer; }
+
+    private:
+        utils::Buffer m_indirectBuffer;
+    };
 }

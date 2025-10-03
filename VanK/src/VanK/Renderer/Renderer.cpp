@@ -13,6 +13,7 @@
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
+
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -27,6 +28,8 @@ namespace VanK
         {
             alignas(16) glm::mat4 view;
             alignas(16) glm::mat4 proj;
+            uint64_t vertexAddress;
+            uint32_t numVertices;
         };
         CameraData camData;
     };
@@ -110,7 +113,7 @@ namespace VanK
                         vertex.texCoord = {0.0f, 0.0f};
                     }
 
-                    vertex.color = {1.0f, 1.0f, 1.0f};
+                    vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};
 
                     vertices.push_back(vertex);
                 }
@@ -172,6 +175,7 @@ namespace VanK
 
         // Shader creation
         auto DebugShader = GetShaderLibrary().Load("DebugShader", "shader.slang");
+        auto DrawIndirectShader = GetShaderLibrary().Load("DrawIndirectShader", "DrawIndirectShader.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -191,16 +195,16 @@ namespace VanK
             .specializationInfo = specInfo
         };
 
-        BufferLayout DebugLayout
+        /*BufferLayout DebugLayout
         {
             {ShaderDataType::Float3, "Position"},
             {ShaderDataType::Float3, "Color"},
             {ShaderDataType::Float2, "TexCoord"},
-        };
+        };*/
         
         VanKPipelineVertexInputStateCreateInfo VertexInputStateCreateInfo
         {
-            .VanKBufferLayout = DebugLayout
+            .VanKBufferLayout = {}
         };
 
         VanKPipelineInputAssemblyStateCreateInfo InputAssemblyStateCreateInfo
@@ -264,6 +268,22 @@ namespace VanK
         m_GraphicsDebugPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsDebugPipelineSpecification);
         RegisterPipelineForShaderWatcher("DebugShader", "shader.slang", &m_GraphicsDebugPipelineSpecification, nullptr, &m_GraphicsDebugPipeline, VanKGraphics);
 
+        // Compute Pipelines creations
+        VanKComputePipelineCreateInfo ComputePipelineCreateInfo
+        {
+            .VanKShader = DrawIndirectShader
+        };
+        
+        VanKComputePipelineSpecification computePipelineSpecification
+        {
+            .ComputePipelineCreateInfo = ComputePipelineCreateInfo
+        };
+        
+        m_ComputeDrawIndirectPipelineSpecification = computePipelineSpecification;
+        
+        m_ComputeDrawIndirectPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawIndirectPipelineSpecification);
+        RegisterPipelineForShaderWatcher("DrawIndirectShader", "DrawIndirectShader.slang", nullptr, &m_ComputeDrawIndirectPipelineSpecification, &m_ComputeDrawIndirectPipeline, VanKCompute);
+
         WatchShaderFiles(); // has to be after rednerer2d init othwerise it cant watch it beacuse not created shaders
 
         uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.camData)));
@@ -276,7 +296,14 @@ namespace VanK
         size_t indexBufferSize = sizeof(indices[0]) * indices.size();
         indexMesh.reset(IndexBuffer::Create(indexBufferSize));
 
-        size_t transferSize = vertexBufferSize + indexBufferSize;
+        uint32_t maxDraws = 1;
+        size_t indirectBufferSize = sizeof(VanKDrawIndexedIndirectCommand) * maxDraws;
+        indirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
+
+        size_t countBufferSize = sizeof(uint32_t);
+        countBuffer.reset(IndirectBuffer::Create(countBufferSize));
+
+        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + countBufferSize;
         transferRing.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
     }
     
@@ -293,6 +320,10 @@ namespace VanK
         uniformScene.reset();
 
         transferRing.reset();
+
+        indirectBuffer.reset();
+
+        countBuffer.reset();
 
         vertexMesh.reset();
         
@@ -323,6 +354,22 @@ namespace VanK
         
         UploadBufferToGpuWithTransferRing(cmd, transferRing, vertexMesh, vertices, Vertex, 0);
         UploadBufferToGpuWithTransferRing(cmd, transferRing, indexMesh, indices, uint32_t, 0);
+
+        std::vector<VanKDrawIndexedIndirectCommand> drawCommands(1);
+
+        for (uint32_t i = 0; i < 1; i++)
+        {
+            drawCommands[i].indexCount   = indices.size();
+            drawCommands[i].instanceCount= 1;
+            drawCommands[i].firstIndex   = 0;
+            drawCommands[i].vertexOffset = 0;
+            drawCommands[i].firstInstance = i;
+        }
+        UploadBufferToGpuWithTransferRing(cmd, transferRing, indirectBuffer, drawCommands, VanKDrawIndexedIndirectCommand, 0);
+
+        uint32_t drawCount = 1;
+        std::vector<uint32_t> countVec = { drawCount };
+        UploadBufferToGpuWithTransferRing(cmd, transferRing, countBuffer, countVec, uint32_t, 0);
         
         frameCount++;
         auto now = std::chrono::high_resolution_clock::now();
@@ -421,42 +468,6 @@ namespace VanK
         }
         ImGui::End();
 
-        if (ImGui::Begin("sett"))
-        {
-           
-            // Adding overlay text on the upper left corner
-            ImGui::SetCursorPos(ImVec2(0, 0));
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        }
-        ImGui::End();
-
-        if (ImGui::Begin("sett2"))
-        {
-           
-            // Adding overlay text on the upper left corner
-            ImGui::SetCursorPos(ImVec2(0, 0));
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        }
-        ImGui::End();
-
-        if (ImGui::Begin("sett3"))
-        {
-           
-            // Adding overlay text on the upper left corner
-            ImGui::SetCursorPos(ImVec2(0, 0));
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        }
-        ImGui::End();
-
-        if (ImGui::Begin("sett4"))
-        {
-           
-            // Adding overlay text on the upper left corner
-            ImGui::SetCursorPos(ImVec2(0, 0));
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        }
-        ImGui::End();
-
         ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
         
         static auto startTime = std::chrono::high_resolution_clock::now();
@@ -475,10 +486,21 @@ namespace VanK
         
         s_Data.camData.view = view;
         s_Data.camData.proj = proj;
+        s_Data.camData.vertexAddress = vertexMesh->GetBufferAddress();
+        s_Data.camData.numVertices = static_cast<uint32_t>(vertices.size());
 
         uniformScene->Update(cmd, &s_Data.camData, sizeof(s_Data.camData));
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
+        RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
+        
+        VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, vertexMesh.get());
+        
+        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
+        
+        RenderCommand::DispatchCompute(computePass, (vertices.size() + 255) / 256, 1, 1);
 
+        RenderCommand::EndComputePass(computePass);
+        
         std::vector<VanKColorTargetInfo> colorAttachments;
         colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
 
@@ -496,12 +518,12 @@ namespace VanK
         
         RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
         
-        RenderCommand::BindVertexBuffer(cmd, 0, *vertexMesh, 1);
+        /*RenderCommand::BindVertexBuffer(cmd, 0, *vertexMesh, 1);*/
 
         RenderCommand::BindIndexBuffer(cmd, *indexMesh, VanKIndexElementSize::Uint32);
 
-        RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);
-
+        /*RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);*/
+        RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, 1, sizeof(VanKDrawIndexedIndirectCommand));
         RenderCommand::EndRendering(cmd);
 
         RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo, VanK_Render_ImGui);

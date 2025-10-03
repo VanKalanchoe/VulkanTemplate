@@ -133,14 +133,7 @@ void VanK::VulkanTransferBuffer::Unbind() const
 void* VanK::VulkanTransferBuffer::MapTransferBuffer(uint64_t size, uint64_t alignment, uint64_t& outOffset)
 {
     auto& instance = VulkanRendererAPI::Get();
-
-    // Map and copy data to the staging buffer
-    void* mappedPtr = nullptr;
-    if (static_cast<vk::Result>(vmaMapMemory(instance.GetAllocator(), m_transferBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
-    {
-        return nullptr;
-    }
-
+    
     //ring buffer offset
 
     // --- check if request itself is too large ---
@@ -149,18 +142,34 @@ void* VanK::VulkanTransferBuffer::MapTransferBuffer(uint64_t size, uint64_t alig
         VK_CORE_ASSERT(false, "Transfer size too large!");
     }
 
-    // Align offset
+    // Calculate aligned offset without committing
     VkDeviceSize alignedOffset = (m_currentOffset + alignment - 1) & ~(alignment - 1);
 
-    // Check if we have enough space
+    // Check if space from current offset to end is enough
     if (alignedOffset + size > m_size)
     {
         // wrap around
         alignedOffset = 0;
+
+        // If wrapped space is still not enough, fail early
+        if (size > m_currentOffset) {
+            VK_CORE_ERROR("Not enough space in transfer buffer. Requested {0}, buffer size {1}, current offset {2}", size, m_size, m_currentOffset);
+            VK_CORE_ASSERT(false, "Transfer buffer overflow!");
+            return nullptr;
+        }
+    }
+
+    // Only map memory now that we know there is enough space
+    // Map and copy data to the staging buffer 
+    void* mappedPtr = nullptr;
+    if (static_cast<vk::Result>(vmaMapMemory(instance.GetAllocator(), m_transferBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
+    {
+        VK_CORE_ERROR("Failed to map transfer buffer memory!");
+        return nullptr;
     }
     
     outOffset = alignedOffset;
-    m_currentOffset = alignedOffset + size;
+    m_currentOffset = alignedOffset + size; // now commit
 
     return static_cast<uint8_t*>(mappedPtr) + alignedOffset;
 }
@@ -293,5 +302,39 @@ void VanK::VulkanStorageBuffer::Unbind() const
 }
 
 void VanK::VulkanStorageBuffer::Upload(const void* data, size_t size, size_t offset)
+{
+}
+
+VanK::VulkanIndirectBuffer::VulkanIndirectBuffer(uint64_t size)
+{
+    VK_CORE_INFO("Created IndirectBuffer");
+    auto& instance = VulkanRendererAPI::Get();
+
+    m_indirectBuffer = instance.GetAllocator().createBuffer
+    (
+        size,
+        vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
+        VMA_MEMORY_USAGE_CPU_TO_GPU
+    );
+    DBG_VK_NAME(m_indirectBuffer.buffer);
+}
+
+VanK::VulkanIndirectBuffer::~VulkanIndirectBuffer()
+{
+    VK_CORE_INFO("Destroyed IndirectBuffer");
+    auto& instance = VulkanRendererAPI::Get();
+    
+    instance.GetAllocator().destroyBuffer(m_indirectBuffer);
+}
+
+void VanK::VulkanIndirectBuffer::Bind() const
+{
+}
+
+void VanK::VulkanIndirectBuffer::Unbind() const
+{
+}
+
+void VanK::VulkanIndirectBuffer::Upload(const void* data, size_t size, size_t offset)
 {
 }

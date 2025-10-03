@@ -43,7 +43,7 @@ namespace VanK
             vk::ShaderStageFlagBits stage;
             if (entryPoint == "vertexMain")         stage = vk::ShaderStageFlagBits::eVertex;
             else if (entryPoint == "fragmentMain")  stage = vk::ShaderStageFlagBits::eFragment;
-            else if (entryPoint == "main")          stage = vk::ShaderStageFlagBits::eCompute;
+            else if (entryPoint == "compMain")          stage = vk::ShaderStageFlagBits::eCompute;
             else continue;
                 
             std::string fileName = m_Name + "." + entryPoint;
@@ -65,7 +65,7 @@ namespace VanK
     {
         if (entry == "vertexMain")   return vk::ShaderStageFlagBits::eVertex;
         if (entry == "fragmentMain") return vk::ShaderStageFlagBits::eFragment;
-        if (entry == "main")         return vk::ShaderStageFlagBits::eCompute;
+        if (entry == "compMain")         return vk::ShaderStageFlagBits::eCompute;
         throw std::runtime_error("Unknown entry point: " + entry);
     }
     std::expected<std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo>, std::string> VulkanShader::compileSlang()
@@ -76,7 +76,7 @@ namespace VanK
         {
             "vertexMain",
             "fragmentMain",
-            "main", // maybe i can call this computemain ? will see
+            "compMain", // maybe i can call this computemain ? will see
         };
 
         std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> spirvPerStage;

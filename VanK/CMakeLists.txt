@@ -113,7 +113,7 @@ function(add_chapter CHAPTER_NAME)
 
     # Copy shaders to build folder
     if(DEFINED CHAPTER_SHADER)
-        list(TRANSFORM CHAPTER_SHADER PREPEND "${CMAKE_SOURCE_DIR}/shaders/")
+        list(TRANSFORM CHAPTER_SHADER PREPEND "${CMAKE_SOURCE_DIR}/VanK-Editor/shaders/")
         file(COPY ${CHAPTER_SHADER} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/shaders)
     endif()
 
@@ -135,7 +135,7 @@ endfunction()
 
 add_chapter(
     VanK
-    SHADER shader.slang
+    SHADER shader.slang DrawIndirectShader.slang
     MODELS viking_room.obj viking_room.glb
     TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg ../textures/viking_room2.ktx2 
     LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui GPUOpen::VulkanMemoryAllocator spdlog::spdlog xxHash::xxhash

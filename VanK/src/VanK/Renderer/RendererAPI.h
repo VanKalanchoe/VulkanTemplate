@@ -274,6 +274,12 @@ namespace VanK
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo;
     };
 
+    struct VanKComputePass
+    {
+        VanKCommandBuffer VanKCommandBuffer;
+        VertexBuffer* VanKVertexBuffer;
+    };
+
     enum class VanKPipelineBindPoint
     {
         Graphics,
@@ -367,6 +373,15 @@ namespace VanK
     };
 
     struct Extent2D { uint32_t width, height; };
+ 
+    struct VanKDrawIndexedIndirectCommand
+    {
+        uint32_t indexCount;
+        uint32_t instanceCount;
+        uint32_t firstIndex;
+        int32_t  vertexOffset;
+        uint32_t firstInstance;
+    };
     
     enum class RenderAPIType
     {
@@ -383,6 +398,7 @@ namespace VanK
         virtual ImTextureID getImTextureID(uint32_t index = 0) const = 0;
         virtual void setViewportSize(Extent2D viewportSize) = 0;
         virtual VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) = 0;
+        virtual VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) = 0;
         virtual void DestroyAllPipelines() = 0;
         virtual void DestroyPipeline(VanKPipeLine pipeline) = 0;
         virtual VanKCommandBuffer BeginCommandBuffer() { return nullptr; }
@@ -392,13 +408,17 @@ namespace VanK
         virtual void BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline) = 0;
         virtual void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) = 0;
         virtual void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info, VanKRenderOption render_option) = 0;
+        virtual void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) = 0;
         virtual void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport) = 0;
         virtual void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) = 0;
         virtual void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings) = 0;
         virtual void BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize) = 0;
         virtual void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
+        virtual void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;
-        virtual void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) = 0;
+        virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer = nullptr) = 0;
+        virtual void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
+        virtual void EndComputePass(VanKComputePass* computePass) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;
         //---------
         

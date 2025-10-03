@@ -119,7 +119,7 @@ namespace VanK
         virtual uint64_t GetBufferAddress() const = 0;
         virtual void* GetNativeHandle() const = 0;
 
-        static VanKBuffer* Create(uint64_t bufferSize);
+        static VanKBuffer* Create(uint64_t size);
     };
 
     class VertexBuffer : public VanKBuffer
@@ -135,7 +135,7 @@ namespace VanK
         // Upload for initial setup
         virtual void Upload(const void* data, size_t size) = 0;
 
-        static VertexBuffer* Create(uint64_t bufferSize);
+        static VertexBuffer* Create(uint64_t size);
     };
 
     class IndexBuffer : public VanKBuffer
@@ -222,6 +222,22 @@ namespace VanK
         // Upload - for initial setup (creates its own command buffer)
         virtual void Upload(const void* data, size_t size, size_t offset) = 0;
 
-        static StorageBuffer* Create(uint64_t bufferSize);
+        static StorageBuffer* Create(uint64_t size);
+    };
+
+    class IndirectBuffer : public VanKBuffer
+    {
+    public:
+        virtual ~IndirectBuffer() = default;
+
+        virtual void Bind() const override = 0;
+        virtual void Unbind() const override = 0;
+        virtual uint64_t GetBufferAddress() const override = 0;
+        virtual void* GetNativeHandle() const override = 0;
+
+        // Upload - for initial setup (creates its own command buffer)
+        virtual void Upload(const void* data, size_t size, size_t offset) = 0;
+
+        static IndirectBuffer* Create(uint64_t size);
     };
 }
