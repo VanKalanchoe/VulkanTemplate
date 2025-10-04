@@ -29,7 +29,11 @@ namespace VanK
             alignas(16) glm::mat4 view;
             alignas(16) glm::mat4 proj;
             uint64_t vertexAddress;
+            uint64_t indexAddress;
+            uint64_t indirectAddress;
+            uint64_t countAddress;
             uint32_t numVertices;
+            uint32_t numindicies;
         };
         CameraData camData;
     };
@@ -96,7 +100,7 @@ namespace VanK
 
                 for (size_t i = 0; i < posAccessor.count; i++)
                 {
-                    Vertex vertex{};
+                    shaderio::Vertex vertex{};
 
                     const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor
                         .byteOffset + i * 12]);
@@ -240,6 +244,13 @@ namespace VanK
             .VanKColorBlendAttachmentState = ColorBlendAttachmentStates
         };
 
+        VanKPipelineMultisampleStateCreateInfo MultisampleStateCreateInfo
+        {
+            .sampleCount = VanK_SAMPLE_COUNT_64_BIT,
+            .sampleShadingEnable = true,
+            .minSampleShading = 0.2f
+        };
+
         VanKPipelineDepthStencilStateCreateInfo DepthStencilStateCreateInfo
         {
             .depthTestEnable = true,
@@ -259,6 +270,7 @@ namespace VanK
             .InputAssemblyStateCreateInfo = InputAssemblyStateCreateInfo,
             .RasterizationStateCreateInfo = RasterizationStateCreateInfo,
             .ColorBlendStateCreateInfo = ColorBlendStateCreateInfo,
+            .MultisampleStateCreateInfo = MultisampleStateCreateInfo,
             .DepthStateInfo = DepthStencilStateCreateInfo,
             .RenderingCreateInfo = RenderingCreateInfo,
         };
@@ -267,7 +279,7 @@ namespace VanK
 
         m_GraphicsDebugPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsDebugPipelineSpecification);
         RegisterPipelineForShaderWatcher("DebugShader", "shader.slang", &m_GraphicsDebugPipelineSpecification, nullptr, &m_GraphicsDebugPipeline, VanKGraphics);
-
+        
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
         {
@@ -288,7 +300,56 @@ namespace VanK
 
         uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.camData)));
 
-        loadModel();
+        /*loadModel();*/
+        // Clear and reserve to avoid reallocations
+        vertices.clear();
+        vertices.reserve(24);
+
+        // Front face (+Z)
+        vertices.push_back({{-0.5f, -0.5f,  0.5f}, {1,1,1,1}, {0,0}});
+        vertices.push_back({{ 0.5f, -0.5f,  0.5f}, {1,1,1,1}, {1,0}});
+        vertices.push_back({{ 0.5f,  0.5f,  0.5f}, {1,1,1,1}, {1,1}});
+        vertices.push_back({{-0.5f,  0.5f,  0.5f}, {1,1,1,1}, {0,1}});
+
+        // Back face (-Z)
+        vertices.push_back({{ 0.5f, -0.5f, -0.5f}, {1,1,1,1}, {0,0}});
+        vertices.push_back({{-0.5f, -0.5f, -0.5f}, {1,1,1,1}, {1,0}});
+        vertices.push_back({{-0.5f,  0.5f, -0.5f}, {1,1,1,1}, {1,1}});
+        vertices.push_back({{ 0.5f,  0.5f, -0.5f}, {1,1,1,1}, {0,1}});
+
+        // Top face (+Y)
+        vertices.push_back({{-0.5f,  0.5f,  0.5f}, {1,1,1,1}, {0,0}});
+        vertices.push_back({{ 0.5f,  0.5f,  0.5f}, {1,1,1,1}, {1,0}});
+        vertices.push_back({{ 0.5f,  0.5f, -0.5f}, {1,1,1,1}, {1,1}});
+        vertices.push_back({{-0.5f,  0.5f, -0.5f}, {1,1,1,1}, {0,1}});
+
+        // Bottom face (-Y)
+        vertices.push_back({{-0.5f, -0.5f, -0.5f}, {1,1,1,1}, {0,0}});
+        vertices.push_back({{ 0.5f, -0.5f, -0.5f}, {1,1,1,1}, {1,0}});
+        vertices.push_back({{ 0.5f, -0.5f,  0.5f}, {1,1,1,1}, {1,1}});
+        vertices.push_back({{-0.5f, -0.5f,  0.5f}, {1,1,1,1}, {0,1}});
+
+        // Right face (+X)
+        vertices.push_back({{ 0.5f, -0.5f,  0.5f}, {1,1,1,1}, {0,0}});
+        vertices.push_back({{ 0.5f, -0.5f, -0.5f}, {1,1,1,1}, {1,0}});
+        vertices.push_back({{ 0.5f,  0.5f, -0.5f}, {1,1,1,1}, {1,1}});
+        vertices.push_back({{ 0.5f,  0.5f,  0.5f}, {1,1,1,1}, {0,1}});
+
+        // Left face (-X)
+        vertices.push_back({{-0.5f, -0.5f, -0.5f}, {1,1,1,1}, {0,0}});
+        vertices.push_back({{-0.5f, -0.5f,  0.5f}, {1,1,1,1}, {1,0}});
+        vertices.push_back({{-0.5f,  0.5f,  0.5f}, {1,1,1,1}, {1,1}});
+        vertices.push_back({{-0.5f,  0.5f, -0.5f}, {1,1,1,1}, {0,1}});
+
+        // 12 triangles (2 per face) → 36 indices
+        indices = {
+            0, 1, 2, 2, 3, 0,       // front
+            4, 5, 6, 6, 7, 4,       // back
+            8, 9,10,10,11, 8,       // top
+           12,13,14,14,15,12,       // bottom
+           16,17,18,18,19,16,       // right
+           20,21,22,22,23,20        // left
+        };
 
         size_t vertexBufferSize = sizeof(vertices[0]) * vertices.size();
         vertexMesh.reset(VertexBuffer::Create(vertexBufferSize));
@@ -297,7 +358,7 @@ namespace VanK
         indexMesh.reset(IndexBuffer::Create(indexBufferSize));
 
         uint32_t maxDraws = 1;
-        size_t indirectBufferSize = sizeof(VanKDrawIndexedIndirectCommand) * maxDraws;
+        size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * maxDraws;
         indirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
 
         size_t countBufferSize = sizeof(uint32_t);
@@ -305,6 +366,10 @@ namespace VanK
 
         size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + countBufferSize;
         transferRing.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
+        // 4            4        156         152                   152
+        //draw calls, meshes, instances, actualy instances, draws saved by instancing
+        //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
+
     }
     
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
@@ -352,10 +417,10 @@ namespace VanK
         if (windowMinimized)
             return;
         
-        UploadBufferToGpuWithTransferRing(cmd, transferRing, vertexMesh, vertices, Vertex, 0);
+        UploadBufferToGpuWithTransferRing(cmd, transferRing, vertexMesh, vertices, shaderio::Vertex, 0);
         UploadBufferToGpuWithTransferRing(cmd, transferRing, indexMesh, indices, uint32_t, 0);
 
-        std::vector<VanKDrawIndexedIndirectCommand> drawCommands(1);
+        /*std::vector<VanKDrawIndexedIndirectCommand> drawCommands(1);
 
         for (uint32_t i = 0; i < 1; i++)
         {
@@ -369,7 +434,7 @@ namespace VanK
 
         uint32_t drawCount = 1;
         std::vector<uint32_t> countVec = { drawCount };
-        UploadBufferToGpuWithTransferRing(cmd, transferRing, countBuffer, countVec, uint32_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, transferRing, countBuffer, countVec, uint32_t, 0);*/
         
         frameCount++;
         auto now = std::chrono::high_resolution_clock::now();
@@ -487,8 +552,11 @@ namespace VanK
         s_Data.camData.view = view;
         s_Data.camData.proj = proj;
         s_Data.camData.vertexAddress = vertexMesh->GetBufferAddress();
+        s_Data.camData.indexAddress = indexMesh->GetBufferAddress();
+        s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
+        s_Data.camData.countAddress = countBuffer->GetBufferAddress();
         s_Data.camData.numVertices = static_cast<uint32_t>(vertices.size());
-
+        s_Data.camData.numindicies = static_cast<uint32_t>(indices.size());
         uniformScene->Update(cmd, &s_Data.camData, sizeof(s_Data.camData));
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
@@ -497,38 +565,43 @@ namespace VanK
         
         RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
         
-        RenderCommand::DispatchCompute(computePass, (vertices.size() + 255) / 256, 1, 1);
+        RenderCommand::DispatchCompute(computePass, 1, 1, 1);
 
         RenderCommand::EndComputePass(computePass);
-        
-        std::vector<VanKColorTargetInfo> colorAttachments;
-        colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
+        {
+            std::vector<VanKColorTargetInfo> colorAttachments;
+            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
 
-        VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
-        
-        RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo, VanK_Render_None);
-        
-        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
-        
-        VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
-        RenderCommand::SetViewport(cmd, 1, viewPort);
+            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
+            
+            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo, VanK_Render_None);
+            
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
+            
+            VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
+            RenderCommand::SetViewport(cmd, 1, viewPort);
 
-        VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
-        RenderCommand::SetScissor(cmd, 1, rect);
+            VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
+            RenderCommand::SetScissor(cmd, 1, rect);
+            
+            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+            
+            /*RenderCommand::BindVertexBuffer(cmd, 0, *vertexMesh, 1);*/
+
+            RenderCommand::BindIndexBuffer(cmd, *indexMesh, VanKIndexElementSize::Uint32);
+
+            /*RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);*/
+            RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, 1, sizeof(shaderio::DrawIndexedIndirectCommand));
+
+            RenderCommand::EndRendering(cmd);
+        }
         
-        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+        {
+            RenderCommand::BeginRendering(cmd, {}, {}, {}, VanK_Render_ImGui);
+            
+            RenderCommand::EndRendering(cmd);
+        }
         
-        /*RenderCommand::BindVertexBuffer(cmd, 0, *vertexMesh, 1);*/
-
-        RenderCommand::BindIndexBuffer(cmd, *indexMesh, VanKIndexElementSize::Uint32);
-
-        /*RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);*/
-        RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, 1, sizeof(VanKDrawIndexedIndirectCommand));
-        RenderCommand::EndRendering(cmd);
-
-        RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo, VanK_Render_ImGui);
-        RenderCommand::EndRendering(cmd);
-
         ImGui::EndFrame();
         if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
         {

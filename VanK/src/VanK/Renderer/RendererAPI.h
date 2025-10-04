@@ -222,6 +222,24 @@ namespace VanK
         std::vector<VanKPipelineColorBlendAttachmentState> VanKColorBlendAttachmentState;
     };
 
+    enum VanKSampleCountFlagBits
+    {
+        VanK_SAMPLE_COUNT_1_BIT,
+        VanK_SAMPLE_COUNT_2_BIT,
+        VanK_SAMPLE_COUNT_4_BIT,
+        VanK_SAMPLE_COUNT_8_BIT,
+        VanK_SAMPLE_COUNT_16_BIT,
+        VanK_SAMPLE_COUNT_32_BIT,
+        VanK_SAMPLE_COUNT_64_BIT
+    };
+    
+    struct VanKPipelineMultisampleStateCreateInfo
+    {
+        VanKSampleCountFlagBits sampleCount;
+        bool sampleShadingEnable;
+        float minSampleShading;
+    };
+
     enum VanKdepthCompareOp
     {
         VanK_COMPARE_OP_NEVER,
@@ -260,6 +278,7 @@ namespace VanK
         VanKPipelineInputAssemblyStateCreateInfo InputAssemblyStateCreateInfo;
         VanKPipelineRasterizationStateCreateInfo RasterizationStateCreateInfo;
         VanKPipelineColorBlendStateCreateInfo ColorBlendStateCreateInfo;
+        VanKPipelineMultisampleStateCreateInfo MultisampleStateCreateInfo;
         VanKPipelineDepthStencilStateCreateInfo DepthStateInfo;
         VanKPipelineRenderingCreateInfo RenderingCreateInfo;
     };
@@ -373,15 +392,6 @@ namespace VanK
     };
 
     struct Extent2D { uint32_t width, height; };
- 
-    struct VanKDrawIndexedIndirectCommand
-    {
-        uint32_t indexCount;
-        uint32_t instanceCount;
-        uint32_t firstIndex;
-        int32_t  vertexOffset;
-        uint32_t firstInstance;
-    };
     
     enum class RenderAPIType
     {
@@ -413,6 +423,7 @@ namespace VanK
         virtual void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) = 0;
         virtual void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings) = 0;
         virtual void BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize) = 0;
+        virtual void Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
         virtual void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
         virtual void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;

@@ -1,27 +1,30 @@
-struct InstancedVertexData
-{
-    float3 inPosition;
-    float4 inColor;
-    float2 inTexCoord;
-};
+#include "shaderIO.h"
 
-struct UniformBuffer 
-{
-    float4x4 view;
-    float4x4 proj;
-    uint64_t buffer;
-    uint32_t num;
-};
+//------------------------------------------------------------------------------
+// Resource Bindings
+//------------------------------------------------------------------------------
+
 [[vk::binding(0, 1)]]
 ConstantBuffer<UniformBuffer, ScalarDataLayout> ubo;
 
 [shader("compute")]
-[numthreads(256,1,1)]
+[numthreads(1,1,1)]
 void compMain(uint3 GlobalInvocationID : SV_DispatchThreadID)
 {
     uint index = GlobalInvocationID.x;
-    if(index > ubo.num) return;
-    
-    InstancedVertexData* vertex = (InstancedVertexData*)ubo.buffer;
-    vertex[index].inColor = float4(1.0f, 1.0f, 1.0f, 1.0f);
+    // only one thread (index 0) fills the indirect command
+    if (index == 0)
+    {
+        DrawIndexedIndirectCommand* indirect = (DrawIndexedIndirectCommand*)ubo.indirectBuffer;
+
+        indirect[0].indexCount    = ubo.numindic;   // total number of indices
+        indirect[0].instanceCount = 1;              // number of instances
+        indirect[0].firstIndex    = 0;              // start of index buffer
+        indirect[0].vertexOffset  = 0;              // offset added to vertex indices
+        indirect[0].firstInstance = 0;              // first instance ID
+
+        // optionally, write draw count
+        uint* count = (uint*)ubo.countBuffer;
+        count[0] = 1; // one draw command
+    }
 }

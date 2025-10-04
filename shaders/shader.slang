@@ -1,17 +1,33 @@
-struct InstancedVertexData
+#include "shaderIO.h"
+
+//------------------------------------------------------------------------------
+// Input Structures
+//------------------------------------------------------------------------------
+
+// Define the data that will be interpolated and passed from vertex to fragment shader
+// Note: SV_Position is a special semantic in Slang/HLSL for the clip-space position
+struct VertexOutput
 {
-    float3 inPosition;
-    float4 inColor;
-    float2 inTexCoord;
+    float4 pos : SV_Position;
+    float4 fragColor : TEXCOORD0;
+    float2 fragTexCoord : TEXCOORD1;
 };
 
-struct UniformBuffer 
+// Define the final output of the fragment shader
+// Note: SV_TARGET specifies this is the color output to the render target
+struct PixelOutput
 {
-    float4x4 view;
-    float4x4 proj;
-    uint64_t buffer;
+    float4 Color : SV_TARGET0; // Final color output (RGBA)
 };
-[[vk::binding(0, 1)]]
+
+//------------------------------------------------------------------------------
+// Resource Bindings
+//------------------------------------------------------------------------------
+
+[[vk::binding(LBindTextures, LSetTextures)]]
+Sampler2D texture[];
+
+[[vk::binding(LBindSceneInfo, LSetScene)]]
 ConstantBuffer<UniformBuffer, ScalarDataLayout> ubo;
 
 // Specialization constant - can be set at pipeline creation time
@@ -19,16 +35,15 @@ ConstantBuffer<UniformBuffer, ScalarDataLayout> ubo;
 [[vk::constant_id(0)]]
 const bool useTexture = false; // Controls whether texture sampling is enabled
 
-struct VSOutput
-{
-    float4 pos : SV_Position;
-    float4 fragColor : TEXCOORD0;
-    float2 fragTexCoord : TEXCOORD1;
-};
+//------------------------------------------------------------------------------
+// Vertex Shader
+//------------------------------------------------------------------------------
 
+// Note: [shader("vertex")] is Slang's way of marking the vertex shader entry point
 [shader("vertex")]
-VSOutput vertexMain(uint vertexID : SV_VertexID) {
-    VSOutput output;
+VertexOutput vertexMain(uint vertexID : SV_VertexID) {
+    VertexOutput output;
+
      float4x4 model = float4x4(
         1,0,0,0,
         0,1,0,0,
@@ -36,19 +51,27 @@ VSOutput vertexMain(uint vertexID : SV_VertexID) {
         0,0,0,1
     );
  
-    InstancedVertexData* vertex = (InstancedVertexData*)ubo.buffer;
+    InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertbuffer;
     InstancedVertexData vertexData = vertex[vertexID];
 
     output.pos = mul(ubo.proj, mul(ubo.view, mul(model, float4(vertexData.inPosition, 1.0))));
     output.fragColor = vertexData.inColor;
     output.fragTexCoord = vertexData.inTexCoord.xy;
+
     return output;
 }
-[[vk::binding(0, 0)]]
-Sampler2D texture[];
 
+//------------------------------------------------------------------------------
+// Fragment/Pixel Shader
+//------------------------------------------------------------------------------
+
+// Note: [shader("pixel")] is Slang's way of marking the fragment shader entry point
 [shader("pixel")]
-float4 fragmentMain(VSOutput vertIn) : SV_TARGET0 {
-    
-   return texture[0].Sample(vertIn.fragTexCoord);
+PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0 
+{
+    PixelOutput output;
+
+    output.Color = input.fragColor * texture[0].Sample(input.fragTexCoord);
+
+   return output;
 }

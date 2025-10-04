@@ -88,6 +88,10 @@ namespace  VanK
         createDescriptorSets();
         createCommandBuffers();
         createSyncObjects();
+
+        //statistics not important
+        createQueryPool();
+        createQueryBuffer();
     }
 
     void VulkanRendererAPI::initImGui()
@@ -143,6 +147,7 @@ namespace  VanK
     void VulkanRendererAPI::cleanup()
     {
         m_samplerPool.deinit();
+        allocator.destroyBuffer(queryBuffer); // statistics
         allocator.deinit();
 
         ImGui_ImplVulkan_Shutdown();
@@ -364,7 +369,7 @@ namespace  VanK
         >
         featureChain =
         {
-            {.features = {.sampleRateShading = true, .samplerAnisotropy = true, .shaderInt64 = true}}, // vk::PhysicalDeviceFeatures2
+            {.features = {.sampleRateShading = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true, .shaderInt64 = true}}, // vk::PhysicalDeviceFeatures2
             {.shaderDrawParameters = true},
             {
                 .drawIndirectCount = true,
@@ -430,7 +435,7 @@ namespace  VanK
             .imageColorSpace = swapChainSurfaceFormat.colorSpace,
             .imageExtent = swapChainExtent,
             .imageArrayLayers = 1,
-            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment,
+            .imageUsage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eTransferDst,
             .imageSharingMode = vk::SharingMode::eExclusive,
             .preTransform = surfaceCapabilities.currentTransform,
             .compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque,
@@ -453,7 +458,7 @@ namespace  VanK
             .format = swapChainSurfaceFormat.format,
             .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
         };
-        for (auto image : swapChainImages)
+        for (auto& image : swapChainImages)
         {
             imageViewCreateInfo.image = image;
             DBG_VK_NAME(image);
@@ -616,9 +621,9 @@ namespace  VanK
         rasterizer.lineWidth = 1.0f; // dont needed dynamic now
         vk::PipelineMultisampleStateCreateInfo multisampling // todo expose this as api
         {
-            .rasterizationSamples = msaaSamples,
-            .sampleShadingEnable = vk::True,
-            .minSampleShading = 0.2f, // min fraction for sample shading; closer to one is smoother
+            .rasterizationSamples = pipelineSpecification.MultisampleStateCreateInfo.sampleCount == VanK_SAMPLE_COUNT_1_BIT ? vk::SampleCountFlagBits::e1 : msaaSamples,
+            .sampleShadingEnable = pipelineSpecification.MultisampleStateCreateInfo.sampleShadingEnable,
+            .minSampleShading = pipelineSpecification.MultisampleStateCreateInfo.minSampleShading, // min fraction for sample shading; closer to one is smoother
         };
         
         // Instruct how the depth buffer will be used
@@ -837,13 +842,18 @@ namespace  VanK
         
         commandBuffers[currentFrame].begin({});
 
+        //statistics
+        commandBuffers[currentFrame].resetQueryPool(queryPool, 0, 1);
+        commandBuffers[currentFrame].beginQuery(queryPool, 0);
+        
         auto cmd = new VanKCommandBuffer_T{&commandBuffers[currentFrame]};
         
         return cmd;
     }
-
+    
     void VulkanRendererAPI::EndCommandBuffer(VanKCommandBuffer cmd)
     {
+        Unwrap(cmd).endQuery(queryPool, 0);
         Unwrap(cmd).end();
     }
 
@@ -905,6 +915,7 @@ namespace  VanK
             throw std::runtime_error("failed to present swap chain image!");
         }
         currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        /*downloadQueryBuffer();*/
     }
 
     VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer)
@@ -1122,7 +1133,7 @@ namespace  VanK
             Unwrap(cmd).beginRendering(renderingInfo);
         }
         
-        if (render_option == VanK_Render_ImGui)
+        if (render_option == VanK_Render_ImGui || render_option == VanK_Render_Swapchain)
         {
             // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
             transition_image_layout
@@ -1145,7 +1156,8 @@ namespace  VanK
                 vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                 vk::PipelineStageFlagBits2::eFragmentShader,
-                vk::ImageAspectFlagBits::eColor);
+                vk::ImageAspectFlagBits::eColor
+                );
             sceneImageInitialized = true;
 
             // Second pass: draw ImGui to swapchain image
@@ -1235,6 +1247,11 @@ namespace  VanK
         Unwrap(cmd).bindIndexBuffer(buffer, 0, vkIndexType);
     }
 
+    void VulkanRendererAPI::Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
+    {
+        Unwrap(cmd).draw(vertexCount, instanceCount, firstVertex, firstInstance);
+    }
+
     void VulkanRendererAPI::DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
         Unwrap(cmd).drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
@@ -1264,29 +1281,139 @@ namespace  VanK
         Unwrap(cmd).drawIndexedIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
+   
+            /*transition_image_layout
+            (
+                currentImageIndex,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                {}, // srcAccessMask (no need to wait for previous operations)
+                vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
+                vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput // dstStage
+            );
+        
+            // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
+            transition_image_layout_custom(
+                sceneImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+                vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                vk::PipelineStageFlagBits2::eFragmentShader,
+                vk::ImageAspectFlagBits::eColor);
+            sceneImageInitialized = true;*/
+
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
     {
+        if (m_renderOption == VanK_Render_None)
+        {
+            Unwrap(cmd).endRendering();
+            
+            return;
+        }
+        
         if (m_renderOption == VanK_Render_ImGui)
+        {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
 
-        Unwrap(cmd).endRendering();
-        
-        if (m_renderOption == VanK_Render_None)
+            Unwrap(cmd).endRendering();
+            
+            // Transition the swapchain image to PRESENT_SRC
+            transition_image_layout
+            (
+                currentImageIndex,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::ePresentSrcKHR,
+                vk::AccessFlagBits2::eColorAttachmentWrite, // srcAccessMask
+                {}, // dstAccessMask
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
+                vk::PipelineStageFlagBits2::eBottomOfPipe // dstStage
+            );
+
             return;
+        }
         
-        // After rendering, transition the images to appropriate layouts
+        if (m_renderOption == VanK_Render_Swapchain)
+        {
+            Unwrap(cmd).endRendering();
+            
+            // Transition images before blit
+            transition_image_layout_custom
+            (
+                sceneImage,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::ImageLayout::eTransferSrcOptimal,
+                vk::AccessFlagBits2::eShaderRead,
+                vk::AccessFlagBits2::eTransferRead,
+                vk::PipelineStageFlagBits2::eFragmentShader,
+                vk::PipelineStageFlagBits2::eTransfer,
+                vk::ImageAspectFlagBits::eColor
+            );
+
+            transition_image_layout
+            (
+                currentImageIndex,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eTransferDstOptimal,
+                {},
+                vk::AccessFlagBits2::eTransferWrite,
+                vk::PipelineStageFlagBits2::eBottomOfPipe,
+                vk::PipelineStageFlagBits2::eTransfer
+            );
+            
+            vk::ImageSubresourceLayers subresource{};
+            subresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+            subresource.baseArrayLayer = 0;
+            subresource.layerCount = 1;
+            subresource.mipLevel = 0;
+            
+            vk::ImageBlit2 blitRegion{};
+            blitRegion.srcSubresource = subresource;
+            blitRegion.srcOffsets[0] = {0, 0, 0};
+            blitRegion.srcOffsets[1] = { static_cast<int32_t>(viewport.width), static_cast<int32_t>(viewport.height), 1 };
+            blitRegion.dstSubresource = subresource;
+            blitRegion.dstOffsets[0] = {0, 0, 0};
+            blitRegion.dstOffsets[1] = { static_cast<int32_t>(swapChainExtent.width), static_cast<int32_t>(swapChainExtent.height), 1 };
+            
+            vk::BlitImageInfo2 blitInfo{};
+            blitInfo.srcImage = sceneImage;
+            blitInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
+            blitInfo.dstImage = swapChainImages[currentImageIndex];
+            blitInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+            blitInfo.regionCount = 1;
+            blitInfo.pRegions = &blitRegion;
+            blitInfo.filter = vk::Filter::eNearest;
+            
+            Unwrap(cmd).blitImage2(blitInfo);
+
+            // After rendering, transition the images to appropriate layouts
+
+            // Transition images before blit
+            transition_image_layout_custom(
+                sceneImage,
+                vk::ImageLayout::eTransferSrcOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::AccessFlagBits2::eTransferRead,
+                vk::AccessFlagBits2::eColorAttachmentWrite,
+                vk::PipelineStageFlagBits2::eTransfer,
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                vk::ImageAspectFlagBits::eColor
+            );
         
-        // Transition the swapchain image to PRESENT_SRC
-        transition_image_layout
-        (
-            currentImageIndex,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::ImageLayout::ePresentSrcKHR,
-            vk::AccessFlagBits2::eColorAttachmentWrite, // srcAccessMask
-            {}, // dstAccessMask
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
-            vk::PipelineStageFlagBits2::eBottomOfPipe // dstStage
-        );
+            // Transition the swapchain image to PRESENT_SRC
+            transition_image_layout
+            (
+                currentImageIndex,
+                vk::ImageLayout::eTransferDstOptimal,
+                vk::ImageLayout::ePresentSrcKHR,
+                vk::AccessFlagBits2::eTransferWrite, // srcAccessMask
+                {}, // dstAccessMask
+                vk::PipelineStageFlagBits2::eTransfer, // srcStage
+                vk::PipelineStageFlagBits2::eBottomOfPipe // dstStage
+            );
+        }
     }
 
     void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
@@ -1333,7 +1460,7 @@ namespace  VanK
             viewport.width, viewport.height,
             1, vk::SampleCountFlagBits::e1, colorFormat,
             vk::ImageTiling::eOptimal,
-            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled,
+            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
             vk::MemoryPropertyFlagBits::eDeviceLocal,
             sceneImage, sceneImageMemory);
 
@@ -2045,6 +2172,57 @@ namespace  VanK
             inFlightFences.emplace_back(device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
             DBG_VK_NAME(*inFlightFences.back());
         }
+    }
+
+    void VulkanRendererAPI::createQueryPool()
+    {
+        vk::QueryPoolCreateInfo poolInfo
+        {
+            .queryType = vk::QueryType::ePipelineStatistics,
+            .queryCount = 1,
+            .pipelineStatistics =
+                vk::QueryPipelineStatisticFlagBits::eInputAssemblyVertices |
+                vk::QueryPipelineStatisticFlagBits::eInputAssemblyPrimitives |
+                vk::QueryPipelineStatisticFlagBits::eVertexShaderInvocations |
+                vk::QueryPipelineStatisticFlagBits::eFragmentShaderInvocations |
+                vk::QueryPipelineStatisticFlagBits::eComputeShaderInvocations |
+                vk::QueryPipelineStatisticFlagBits::eClippingInvocations |
+                vk::QueryPipelineStatisticFlagBits::eClippingPrimitives
+        };
+
+        queryPool = vk::raii::QueryPool(device, poolInfo);
+        DBG_VK_NAME(*queryPool);
+    }
+
+    void VulkanRendererAPI::createQueryBuffer()
+    {
+        // 7 pipelineStatistics, 1 querycount
+        queryBuffer = allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, VMA_MEMORY_USAGE_GPU_TO_CPU);
+    }
+
+    void VulkanRendererAPI::downloadQueryBuffer()
+    {
+        auto cmd = beginSingleTimeCommands();
+        
+        cmd->copyQueryPoolResults(queryPool, 0, 1, queryBuffer.buffer, 0, 0, vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+
+        endSingleTimeCommands(*cmd);
+
+        void* mappedData = nullptr;
+        vmaMapMemory(allocator, queryBuffer.allocation, &mappedData);
+
+        uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
+
+        std::cout << std::dec;
+        std::cout << "Input assembly vertices: "        << stats[0] << "\n";
+        std::cout << "Input assembly primitives: "      << stats[1] << "\n";
+        std::cout << "Vertex shader invocations: "      << stats[2] << "\n";
+        std::cout << "Clipping invocations: "           << stats[3] << "\n";
+        std::cout << "Clipping primitives: "            << stats[4] << "\n";
+        std::cout << "Fragment shader invocations: "    << stats[5] << "\n";
+        std::cout << "Compute shader invocations: "     << stats[6] << "\n";
+
+        vmaUnmapMemory(allocator, queryBuffer.allocation);
     }
     
     uint32_t VulkanRendererAPI::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities)

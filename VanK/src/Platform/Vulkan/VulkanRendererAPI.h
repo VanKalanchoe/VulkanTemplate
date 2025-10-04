@@ -844,6 +844,7 @@ namespace VanK
         void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) override;
         void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings) override;
         void BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize) override;
+        void Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
         void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
         void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void EndRendering(VanKCommandBuffer cmd) override;
@@ -946,6 +947,10 @@ namespace VanK
         bool vSync = false;
         bool sceneImageInitialized = false;
         VanKRenderOption m_renderOption = {};
+
+        //statistic
+        vk::raii::QueryPool queryPool = nullptr;
+        utils::Buffer queryBuffer;
 
         std::vector<const char*> requiredDeviceExtension =
         {
@@ -1064,6 +1069,11 @@ namespace VanK
         );
 
         void createSyncObjects();
+        
+        void createQueryPool();
+        
+        void createQueryBuffer();
+        void downloadQueryBuffer();
 
         /*[[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const;*/
 

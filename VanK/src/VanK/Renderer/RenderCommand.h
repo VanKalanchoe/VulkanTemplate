@@ -109,6 +109,11 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->BindIndexBuffer(cmd, indexBuffer, elementSize);
         }
 
+        static void Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
+        {
+            if (s_RendererAPI) s_RendererAPI->Draw(cmd, vertexCount, instanceCount, firstVertex, firstInstance);
+        }
+
         static void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
         {
             if (s_RendererAPI) s_RendererAPI->DrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
