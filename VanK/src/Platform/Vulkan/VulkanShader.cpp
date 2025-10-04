@@ -46,8 +46,9 @@ namespace VanK
             else if (entryPoint == "compMain")          stage = vk::ShaderStageFlagBits::eCompute;
             else continue;
                 
-            std::string fileName = m_Name + "." + entryPoint;
-            std::string fullPath = cachePath + fileName + ".spv";
+            std::string fileName = m_Name + "." + entryPoint + ".spv";
+            std::filesystem::path fullPath = std::filesystem::path(cachePath) / fileName;
+            
             // Check existence first
             if (!std::filesystem::exists(fullPath))
             {
@@ -55,8 +56,9 @@ namespace VanK
                 continue;  
             }
                 
-            auto data = Utility::LoadSpvFromPath(fullPath);
+            auto data = Utility::LoadSpvFromPath(fullPath.string());
             if (data.empty()) continue;
+            
             spirvPerStage[stage] = ShaderStageInfo{entryPoint, std::move(data)};
         }
         return spirvPerStage;
@@ -82,21 +84,30 @@ namespace VanK
         };
 
         std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> spirvPerStage;
-
+        
         std::string cachePath = Utility::GetCachePath();
+        
+        std::filesystem::path shaderFolder = std::filesystem::path(cachePath) / m_Name;
 
-        std::string fileHashName = m_Name; // shader.CircleComp
+        // Create folder if it doesn't exist
+        if (!std::filesystem::exists(shaderFolder))
+        {
+            std::filesystem::create_directories(shaderFolder);
+        }
+
+        std::string hashFileName = m_Name + ".hash";
+        std::filesystem::path hashFilePath = shaderFolder / hashFileName;
         XXH128_hash_t currentHash = Utility::calcul_hash_streaming(m_FilePath); // ../../../VanK-Editor/assets/shaders/shader.CircleComp.slang
         XXH128_hash_t cachedHash{};
-        std::string hashFile = cachePath + fileHashName + ".hash";
-        bool hashMatches = Utility::loadHashFromFile(hashFile, cachedHash) && (cachedHash.low64 == currentHash.low64 && cachedHash.high64 == currentHash.high64);
+        bool hashMatches = Utility::loadHashFromFile(hashFilePath.string(), cachedHash) && (cachedHash.low64 == currentHash.low64 && cachedHash.high64 == currentHash.high64);
         std::cout << "[Hash] Current: " << std::hex << currentHash.high64 << currentHash.low64 << '\n';
         std::cout << "[Hash] Cached : " << std::hex << cachedHash.high64 << cachedHash.low64 << '\n';
 
         if (hashMatches && !forceCompile)
         {
+            std::cout << "[Hash] Hash matches, loading cached spirv\n";
             spirvPerStage.clear();
-            return loadCachedSpv(EntryPoints, cachePath, spirvPerStage);
+            return loadCachedSpv(EntryPoints, shaderFolder.string(), spirvPerStage);
         }
         
         std::filesystem::path shaderFilePath = std::filesystem::path(m_FilePath).make_preferred();
@@ -149,10 +160,10 @@ namespace VanK
             if (!slangModule)
             {
                 spirvPerStage.clear();
-                return loadCachedSpv(EntryPoints, cachePath, spirvPerStage);
+                return loadCachedSpv(EntryPoints, shaderFolder.string(), spirvPerStage);
             }
         }
-
+        
         for (auto& entry : EntryPoints)
         {
             Slang::ComPtr<slang::IEntryPoint> entryPoint;
@@ -208,12 +219,12 @@ namespace VanK
                 spirvCodeToUint32.assign(ptr, ptr + byteSize / sizeof(uint32_t));
             }
 
-            std::string fileName = m_Name + "." + entry;;
-            std::string fullPath = cachePath + fileName + ".spv";
+            std::string fileName = m_Name + "." + entry + ".spv";;
+            std::filesystem::path fullPath = shaderFolder / fileName;
             
-            Utility::SaveToFile(fullPath.c_str(), spirvCodeToUint32.data(), spirvCodeToUint32.size() * sizeof(uint32_t));
+            Utility::SaveToFile(fullPath.string().c_str(), spirvCodeToUint32.data(), spirvCodeToUint32.size() * sizeof(uint32_t));
             
-            Utility::saveHashToFile(hashFile, currentHash);
+            Utility::saveHashToFile(hashFilePath.string(), currentHash);
 
             spirvPerStage[mapEntryToStage(entry)] = ShaderStageInfo{entry, spirvCodeToUint32};
         }
@@ -246,7 +257,7 @@ namespace VanK
         std::string rootPath = Application::Get().GetExecutableRootPath();
         const std::vector<std::string> searchPaths =
         {
-            rootPath + "../../VanK/shaders"
+            rootPath + "../../../VanK-Editor/shaders"
         };
 
         std::string shaderFile = utils::findFile(fileName, searchPaths);
