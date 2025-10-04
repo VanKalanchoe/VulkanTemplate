@@ -61,6 +61,7 @@ namespace VanK
         }
         return spirvPerStage;
     }
+    
     vk::ShaderStageFlagBits mapEntryToStage(const std::string& entry)
     {
         if (entry == "vertexMain")   return vk::ShaderStageFlagBits::eVertex;
@@ -68,6 +69,7 @@ namespace VanK
         if (entry == "compMain")         return vk::ShaderStageFlagBits::eCompute;
         throw std::runtime_error("Unknown entry point: " + entry);
     }
+    
     std::expected<std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo>, std::string> VulkanShader::compileSlang()
     {
         bool forceCompile = false;
@@ -96,45 +98,126 @@ namespace VanK
             spirvPerStage.clear();
             return loadCachedSpv(EntryPoints, cachePath, spirvPerStage);
         }
-
-        // ─────────────────────────────────────────────
-        // Compile with slangc
-        // ─────────────────────────────────────────────
-        std::filesystem::path slangcPath("C:/VulkanSDK/1.4.321.1/bin/slangc.exe");
-        slangcPath = slangcPath.make_preferred();
-        std::filesystem::path cacheDir = std::filesystem::path(cachePath).make_preferred();
-        std::filesystem::create_directories(cacheDir); // ensure folder exists
-
+        
         std::filesystem::path shaderFilePath = std::filesystem::path(m_FilePath).make_preferred();
+
+        // First we need to create slang global session with work with the Slang API.
+        Slang::ComPtr<slang::IGlobalSession> slangGlobalSession;
+        if (SLANG_FAILED(slang::createGlobalSession(slangGlobalSession.writeRef())))
+        {
+            return std::unexpected<std::string>("Slang Failed to create Global Session");
+        }
+
+        // Next we create a compilation session to generate SPIRV code from Slang source.
+        slang::SessionDesc sessionDesc = {};
+        slang::TargetDesc targetDesc = {};
+        targetDesc.format = SLANG_SPIRV;
+        targetDesc.profile = slangGlobalSession->findProfile("spirv_1_5");
+        targetDesc.flags = 0;
+
+        sessionDesc.targets = &targetDesc;
+        sessionDesc.targetCount = 1;
+
+        std::array<slang::CompilerOptionEntry, 3> options = 
+        {
+            {
+                slang::CompilerOptionName::GLSLForceScalarLayout,
+                { slang::CompilerOptionValueKind::Int, 1, 0, nullptr, nullptr },
+                
+                slang::CompilerOptionName::EmitSpirvDirectly,
+                {slang::CompilerOptionValueKind::Int, 1, 0, nullptr, nullptr},
+            
+                slang::CompilerOptionName::VulkanUseEntryPointName,
+                { slang::CompilerOptionValueKind::Int, 1, 0, nullptr, nullptr },
+            }
+        };
+        sessionDesc.compilerOptionEntries = options.data();
+        sessionDesc.compilerOptionEntryCount = options.size();
+
+        Slang::ComPtr<slang::ISession> session;
+        if (SLANG_FAILED(slangGlobalSession->createSession(sessionDesc, session.writeRef())))
+        {
+            return std::unexpected<std::string>("Slang Failed to create Session");
+        }
+
+        slang::IModule* slangModule = nullptr;
+        {
+            Slang::ComPtr<slang::IBlob> diagnosticBlob;
+            std::string path = shaderFilePath.string();
+            slangModule = session->loadModule(path.c_str(), diagnosticBlob.writeRef());
+            diagnoseIfNeeded(diagnosticBlob);
+            if (!slangModule)
+            {
+                spirvPerStage.clear();
+                return loadCachedSpv(EntryPoints, cachePath, spirvPerStage);
+            }
+        }
 
         for (auto& entry : EntryPoints)
         {
-            std::filesystem::path outPath = cacheDir / (fileHashName + "." + entry + ".spv");
-            std::string outFile = outPath.make_preferred().string();
-
-            std::stringstream cmd;
-            cmd << slangcPath.string() << " "
-                << shaderFilePath.string() << " "
-                << "-target spirv -profile spirv_1_5 "
-                << "-emit-spirv-directly "
-                << "-fvk-use-entrypoint-name "
-                << "-entry " << entry << " "
-                << "-o " << outFile;
-
-            int ret = std::system(cmd.str().c_str());
-            if (ret != 0)
+            Slang::ComPtr<slang::IEntryPoint> entryPoint;
+            slangModule->findEntryPointByName(entry.c_str(), entryPoint.writeRef());
+            if (!entryPoint)
             {
-                std::cout << "[SlangC] Skipping entry point '" << entry << "' (not found or failed)\n";
-                continue; // ignore failure and move to next entry
+                std::cout << "[Slang] Entry point '" << entry << "' not found in module '" << m_Name << "'\n";
+                continue;
             }
 
-            spirvPerStage[mapEntryToStage(entry)] = ShaderStageInfo{entry, Utility::LoadSpvFromPath(outFile)};
+            std::vector<slang::IComponentType*> componentTypes;
+            componentTypes.emplace_back(slangModule);
+            componentTypes.emplace_back(entryPoint);
+
+            Slang::ComPtr<slang::IComponentType> composedProgram;
+            {
+                Slang:Slang::ComPtr<slang::IBlob> diagnosticBlob;
+                SlangResult result = session->createCompositeComponentType
+                (
+                    componentTypes.data(),
+                    componentTypes.size(),
+                    composedProgram.writeRef(),
+                    diagnosticBlob.writeRef()
+                );
+                diagnoseIfNeeded(diagnosticBlob);
+                if (SLANG_FAILED(result))
+                    return std::unexpected<std::string>("Slang operation composedProgram failed with code: " + std::to_string(result));
+            }
+
+            Slang::ComPtr<slang::IBlob> spirvCode;
+            {
+                Slang::ComPtr<slang::IBlob> diagnosticBlob;
+                SlangResult result = composedProgram->getEntryPointCode
+                (
+                    0,
+                    0,
+                    spirvCode.writeRef(),
+                    diagnosticBlob.writeRef()
+                );
+                diagnoseIfNeeded(diagnosticBlob);
+                if (SLANG_FAILED(result))
+                {
+                    std::cout << "[Slang] Failed to spirvCode from composedProgram for entry: " << entry << "\n";
+                    continue;
+                }
+            }
+
+            // converting to usable byte code and saving cache/hash
+            std::vector<uint32_t> spirvCodeToUint32;
+            {
+                auto byteSize = spirvCode->getBufferSize();
+                auto ptr = static_cast<const uint32_t*>(spirvCode->getBufferPointer());
+                spirvCodeToUint32.assign(ptr, ptr + byteSize / sizeof(uint32_t));
+            }
+
+            std::string fileName = m_Name + "." + entry;;
+            std::string fullPath = cachePath + fileName + ".spv";
+            
+            Utility::SaveToFile(fullPath.c_str(), spirvCodeToUint32.data(), spirvCodeToUint32.size() * sizeof(uint32_t));
+            
+            Utility::saveHashToFile(hashFile, currentHash);
+
+            spirvPerStage[mapEntryToStage(entry)] = ShaderStageInfo{entry, spirvCodeToUint32};
         }
-
-        // Save hash so next time we can skip recompilation
-        Utility::saveHashToFile(hashFile, currentHash);
-
-        // Now reuse your loader to fill spirvPerStage
+        
         return spirvPerStage;
     }
     

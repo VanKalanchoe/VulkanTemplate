@@ -448,13 +448,14 @@ namespace VanK
         }
         if (s_IsPipelineReloadFinished.exchange(false))
         {
-            s_IsPipelineReloadFinished = false;
+            IsShaderReloadFinished = false;
             if (s_ShaderWatcher.empty())
                 WatchShaderFiles();
 
             EndSubmit();
             ReloadPipelines();
             BeginSubmit();
+            return;
         }
 
         ImGui_ImplVulkan_NewFrame();
@@ -691,11 +692,11 @@ namespace VanK
                 entry.graphicsSpec->ShaderStageCreateInfo.VanKShader = Shader;
                 *entry.Pipeline = RenderCommand::createGraphicsPipeline(*entry.graphicsSpec);
             }
-            /*else
+            else
             {
                 entry.computeSpec->ComputePipelineCreateInfo.VanKShader = Shader;
                 *entry.Pipeline = RenderCommand::createComputeShaderPipeline(*entry.computeSpec); 
-            }*/
+            }
         }
     }
 }

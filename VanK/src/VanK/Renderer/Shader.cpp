@@ -69,7 +69,10 @@ namespace VanK
         for (const auto& [name, shader] : m_Shaders)
         {
             if (shader)
+            {
+                std::cout << "[ShaderLibrary] Shader '" << name << "' path: " << shader->GetFilePath() << std::endl;
                 paths.push_back(shader->GetFilePath());
+            }
         }
         return paths;
     }
