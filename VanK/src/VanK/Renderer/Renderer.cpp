@@ -14,6 +14,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
+
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -100,24 +101,24 @@ namespace VanK
 
                 for (size_t i = 0; i < posAccessor.count; i++)
                 {
-                    shaderio::Vertex vertex{};
+                    shaderio::InstancedVertexData vertex{};
 
                     const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor
                         .byteOffset + i * 12]);
-                    vertex.pos = {pos[0], pos[1], pos[2]};
+                    vertex.position = {pos[0], pos[1], pos[2]};
 
                     if (hasTexCoords)
                     {
                         const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->
                             byteOffset + texCoordAccessor->byteOffset + i * 8]);
-                        vertex.texCoord = {texCoord[0], texCoord[1]};
+                        vertex.texcoords = {texCoord[0], texCoord[1]};
                     }
                     else
                     {
-                        vertex.texCoord = {0.0f, 0.0f};
+                        vertex.texcoords = {0.0f, 0.0f};
                     }
 
-                    vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};
+                    /*vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};*/
 
                     vertices.push_back(vertex);
                 }
@@ -300,62 +301,16 @@ namespace VanK
 
         uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.camData)));
 
-        /*loadModel();*/
-        // Clear and reserve to avoid reallocations
-        vertices.clear();
-        vertices.reserve(24);
+        loadModel();
 
-        // Front face (+Z)
-        vertices.push_back({{-0.5f, -0.5f,  0.5f}, {1,1,1,1}, {0,0}});
-        vertices.push_back({{ 0.5f, -0.5f,  0.5f}, {1,1,1,1}, {1,0}});
-        vertices.push_back({{ 0.5f,  0.5f,  0.5f}, {1,1,1,1}, {1,1}});
-        vertices.push_back({{-0.5f,  0.5f,  0.5f}, {1,1,1,1}, {0,1}});
-
-        // Back face (-Z)
-        vertices.push_back({{ 0.5f, -0.5f, -0.5f}, {1,1,1,1}, {0,0}});
-        vertices.push_back({{-0.5f, -0.5f, -0.5f}, {1,1,1,1}, {1,0}});
-        vertices.push_back({{-0.5f,  0.5f, -0.5f}, {1,1,1,1}, {1,1}});
-        vertices.push_back({{ 0.5f,  0.5f, -0.5f}, {1,1,1,1}, {0,1}});
-
-        // Top face (+Y)
-        vertices.push_back({{-0.5f,  0.5f,  0.5f}, {1,1,1,1}, {0,0}});
-        vertices.push_back({{ 0.5f,  0.5f,  0.5f}, {1,1,1,1}, {1,0}});
-        vertices.push_back({{ 0.5f,  0.5f, -0.5f}, {1,1,1,1}, {1,1}});
-        vertices.push_back({{-0.5f,  0.5f, -0.5f}, {1,1,1,1}, {0,1}});
-
-        // Bottom face (-Y)
-        vertices.push_back({{-0.5f, -0.5f, -0.5f}, {1,1,1,1}, {0,0}});
-        vertices.push_back({{ 0.5f, -0.5f, -0.5f}, {1,1,1,1}, {1,0}});
-        vertices.push_back({{ 0.5f, -0.5f,  0.5f}, {1,1,1,1}, {1,1}});
-        vertices.push_back({{-0.5f, -0.5f,  0.5f}, {1,1,1,1}, {0,1}});
-
-        // Right face (+X)
-        vertices.push_back({{ 0.5f, -0.5f,  0.5f}, {1,1,1,1}, {0,0}});
-        vertices.push_back({{ 0.5f, -0.5f, -0.5f}, {1,1,1,1}, {1,0}});
-        vertices.push_back({{ 0.5f,  0.5f, -0.5f}, {1,1,1,1}, {1,1}});
-        vertices.push_back({{ 0.5f,  0.5f,  0.5f}, {1,1,1,1}, {0,1}});
-
-        // Left face (-X)
-        vertices.push_back({{-0.5f, -0.5f, -0.5f}, {1,1,1,1}, {0,0}});
-        vertices.push_back({{-0.5f, -0.5f,  0.5f}, {1,1,1,1}, {1,0}});
-        vertices.push_back({{-0.5f,  0.5f,  0.5f}, {1,1,1,1}, {1,1}});
-        vertices.push_back({{-0.5f,  0.5f, -0.5f}, {1,1,1,1}, {0,1}});
-
-        // 12 triangles (2 per face) → 36 indices
-        indices = {
-            0, 1, 2, 2, 3, 0,       // front
-            4, 5, 6, 6, 7, 4,       // back
-            8, 9,10,10,11, 8,       // top
-           12,13,14,14,15,12,       // bottom
-           16,17,18,18,19,16,       // right
-           20,21,22,22,23,20        // left
-        };
-
+        /*vertices = GeometryData::cubeVertices;
+        indices = GeometryData::cubeIndices;*/
+        
         size_t vertexBufferSize = sizeof(vertices[0]) * vertices.size();
-        vertexMesh.reset(VertexBuffer::Create(vertexBufferSize));
+        m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
 
         size_t indexBufferSize = sizeof(indices[0]) * indices.size();
-        indexMesh.reset(IndexBuffer::Create(indexBufferSize));
+        m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
 
         uint32_t maxDraws = 1;
         size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * maxDraws;
@@ -365,7 +320,7 @@ namespace VanK
         countBuffer.reset(IndirectBuffer::Create(countBufferSize));
 
         size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + countBufferSize;
-        transferRing.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
+        m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         // 4            4        156         152                   152
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
         //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
@@ -384,15 +339,17 @@ namespace VanK
 
         uniformScene.reset();
 
-        transferRing.reset();
+        m_TransferRingBuffer.reset();
 
         indirectBuffer.reset();
 
         countBuffer.reset();
 
-        vertexMesh.reset();
+        m_InstancedVertexBuffer.reset();
         
-        indexMesh.reset();
+        m_InstancedIndexBuffer.reset();
+
+        m_InstancedStorageBuffer.reset();
     }
 
     void Renderer::BeginSubmit()
@@ -417,8 +374,8 @@ namespace VanK
         if (windowMinimized)
             return;
         
-        UploadBufferToGpuWithTransferRing(cmd, transferRing, vertexMesh, vertices, shaderio::Vertex, 0);
-        UploadBufferToGpuWithTransferRing(cmd, transferRing, indexMesh, indices, uint32_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, vertices, shaderio::InstancedVertexData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, indices, uint32_t, 0);
 
         /*std::vector<VanKDrawIndexedIndirectCommand> drawCommands(1);
 
@@ -552,8 +509,8 @@ namespace VanK
         
         s_Data.camData.view = view;
         s_Data.camData.proj = proj;
-        s_Data.camData.vertexAddress = vertexMesh->GetBufferAddress();
-        s_Data.camData.indexAddress = indexMesh->GetBufferAddress();
+        s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
+        s_Data.camData.indexAddress = m_InstancedIndexBuffer->GetBufferAddress();
         s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
         s_Data.camData.countAddress = countBuffer->GetBufferAddress();
         s_Data.camData.numVertices = static_cast<uint32_t>(vertices.size());
@@ -562,7 +519,7 @@ namespace VanK
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
         
-        VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, vertexMesh.get());
+        VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get());
         
         RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
         
@@ -589,7 +546,7 @@ namespace VanK
             
             /*RenderCommand::BindVertexBuffer(cmd, 0, *vertexMesh, 1);*/
 
-            RenderCommand::BindIndexBuffer(cmd, *indexMesh, VanKIndexElementSize::Uint32);
+            RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
 
             /*RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);*/
             RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, 1, sizeof(shaderio::DrawIndexedIndirectCommand));

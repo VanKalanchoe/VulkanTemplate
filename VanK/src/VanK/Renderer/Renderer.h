@@ -4,11 +4,7 @@
 #include "FileWatch.h"
 #include "VanK/Core/core.h"
 
-namespace shaderio
-{  // Shader IO namespace - use to share code between device and host
-    using namespace glm;  // Allow to use GLSL type, without glm:: prefix and without leaking in global namespace
-#include "shaderIO.h"
-}  // namespace shaderio
+#include "Geometry.h"
 
 namespace VanK
 {
@@ -52,8 +48,16 @@ namespace VanK
                                                      VanKPipeLine* pipeline, VanKShaderStageFlags flag);
         static void WatchShaderFiles();
         static void ReloadPipelines();
+    public:
+        inline static std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> InstancedIndexRanges;
+        inline static std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> InstancedVertexRanges;
+        inline static std::unordered_map<std::string, std::pair<uint32_t, uint32_t>> InstancedDataRanges;
+        inline static Ref<IndexBuffer> m_InstancedIndexBuffer;
+        inline static Ref<VertexBuffer> m_InstancedVertexBuffer; // change to storage in the future maybe ? 
+        inline static Ref<TransferBuffer> m_TransferRingBuffer;
+        inline static Ref<StorageBuffer> m_InstancedStorageBuffer;
     private:
-        inline static std::vector<shaderio::Vertex> vertices;
+        inline static std::vector<shaderio::InstancedVertexData> vertices;
         inline static std::vector<uint32_t> indices;
         inline static bool vSync = false;
         inline static bool windowMinimized = false;
@@ -69,10 +73,8 @@ namespace VanK
         inline static VanKComputePipelineSpecification m_ComputeDrawIndirectPipelineSpecification = {};
         
         inline static Ref<UniformBuffer> uniformScene;
-        inline static Ref<TransferBuffer> transferRing;
+        
         inline static Ref<IndirectBuffer> indirectBuffer;
         inline static Ref<IndirectBuffer> countBuffer;
-        inline static Ref<VertexBuffer> vertexMesh;
-        inline static Ref<IndexBuffer> indexMesh;
     };
 }

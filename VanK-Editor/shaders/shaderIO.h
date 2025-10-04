@@ -33,18 +33,37 @@ struct UniformBuffer
     uint32_t numindic;
 };
 
-struct InstancedVertexData
+struct InstancedIndexData
 {
-    vec3 inPosition;
-    vec4 inColor;
-    vec2 inTexCoord;
+  int indices;
 };
 
-struct Vertex
+struct InstancedVertexData
 {
-    vec3 pos;
-    vec4 color;
-    vec2 texCoord;
+    vec3 position;
+    vec3 normals;
+    vec2 texcoords;
+    vec3 tangent;
+    vec3 bitangent;
+};
+
+struct InstancedStorageData
+{
+  mat4 Model;
+  mat3 normalMatrix;
+
+  //with texture
+  uint32_t albedoMap;
+  uint32_t normalMap;
+  uint32_t metallicMap;
+  uint32_t roughnessMap;
+  uint32_t aoMap;
+
+  //without texture
+  vec3 albedo;
+  float metallic;
+  float roughness;
+  float ao;
 };
 
 struct DrawIndexedIndirectCommand

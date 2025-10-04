@@ -9,7 +9,6 @@
 struct VertexOutput
 {
     float4 pos : SV_Position;
-    float4 fragColor : TEXCOORD0;
     float2 fragTexCoord : TEXCOORD1;
 };
 
@@ -54,9 +53,8 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID) {
     InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertbuffer;
     InstancedVertexData vertexData = vertex[vertexID];
 
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(model, float4(vertexData.inPosition, 1.0))));
-    output.fragColor = vertexData.inColor;
-    output.fragTexCoord = vertexData.inTexCoord.xy;
+    output.pos = mul(ubo.proj, mul(ubo.view, mul(model, float4(vertexData.position, 1.0))));
+    output.fragTexCoord = vertexData.texcoords.xy;
 
     return output;
 }
@@ -71,7 +69,7 @@ PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0
 {
     PixelOutput output;
 
-    output.Color = input.fragColor * texture[0].Sample(input.fragTexCoord);
+    output.Color = texture[0].Sample(input.fragTexCoord);
 
    return output;
 }
