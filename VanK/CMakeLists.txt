@@ -70,7 +70,7 @@ find_package(stb REQUIRED)
 set(STB_INCLUDEDIR ${stb_INCLUDE_DIRS})
 
 function(add_chapter CHAPTER_NAME)
-    cmake_parse_arguments(CHAPTER "" "SHADER" "LIBS;TEXTURES;MODELS" ${ARGN})
+    cmake_parse_arguments(CHAPTER "" "" "SHADER;LIBS;TEXTURES;MODELS" ${ARGN})
 
     # Gather all .cpp files in the chapter folder
     file(GLOB_RECURSE CHAPTER_SOURCES
@@ -136,7 +136,7 @@ endfunction()
 
 add_chapter(
     VanK
-    SHADER shader.slang DrawIndirectShader.slang SwapChain.slang
+    SHADER shader.slang DrawIndirectShader.slang
     MODELS viking_room.obj viking_room.glb
     TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg ../textures/viking_room2.ktx2 
     LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui GPUOpen::VulkanMemoryAllocator spdlog::spdlog xxHash::xxhash

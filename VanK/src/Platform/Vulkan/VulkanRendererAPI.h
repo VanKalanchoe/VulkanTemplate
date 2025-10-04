@@ -1022,32 +1022,24 @@ namespace VanK
                          vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
                          vk::raii::DeviceMemory& imageMemory);
 
-        void transitionImageLayout(const vk::raii::Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout,
-                                   uint32_t mipLevels);
-
-        /*void copyBufferToImage(const vk::raii::Buffer& buffer, vk::raii::Image& image, uint32_t width, uint32_t height,
-                               uint64_t offset = 0, uint32_t mipLevel = 0);*/
+        void transitionImageLayout(const vk::raii::Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels);
         
         void createDescriptorPool();
 
         void createDescriptorSets();
+        
         void updateGraphicsDescriptorSet();
-
-        /*void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties,
-                          vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);*/
 
         std::unique_ptr<vk::raii::CommandBuffer> beginSingleTimeCommands();
 
         void endSingleTimeCommands(const vk::raii::CommandBuffer& commandBuffer) const;
-
-        /*//change this to use the above functions check images chapter or 1 before idk
-        void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);*/
-
+        
         uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
         void createCommandBuffers();
         
-        void transition_image_layout(
+        void transition_image_layout
+        (
             uint32_t imageIndex,
             vk::ImageLayout old_layout,
             vk::ImageLayout new_layout,
@@ -1057,7 +1049,8 @@ namespace VanK
             vk::PipelineStageFlags2 dst_stage_mask
         );
 
-        void transition_image_layout_custom(
+        void transition_image_layout_custom
+        (
             vk::raii::Image& image,
             vk::ImageLayout old_layout,
             vk::ImageLayout new_layout,
@@ -1069,20 +1062,19 @@ namespace VanK
         );
 
         void createSyncObjects();
-        
+
+        //statisitcs
         void createQueryPool();
         
         void createQueryBuffer();
+        
         void downloadQueryBuffer();
-
-        /*[[nodiscard]] vk::raii::ShaderModule createShaderModule(const std::vector<char>& code) const;*/
 
         static uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
 
         static vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
 
-        static vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes,
-                                                        bool vsync);
+        static vk::PresentModeKHR chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes, bool vsync);
 
         vk::Extent2D chooseSwapExtent(const vk::SurfaceCapabilitiesKHR& capabilities);
 

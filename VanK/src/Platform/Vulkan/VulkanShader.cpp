@@ -161,8 +161,9 @@ namespace VanK
     VulkanShader::VulkanShader(const std::string& fileName)
     {
         std::string rootPath = Application::Get().GetExecutableRootPath();
-        const std::vector<std::string> searchPaths = {
-            rootPath +  ".", "shaders", "../shaders", "../../shaders", "../../../VanK-Editor/assets/shaders"
+        const std::vector<std::string> searchPaths =
+        {
+            rootPath + "../../VanK/shaders"
         };
 
         std::string shaderFile = utils::findFile(fileName, searchPaths);
@@ -185,16 +186,6 @@ namespace VanK
     VulkanShader::~VulkanShader()
     {
         std::cout << "Shader destroyed: " << m_Name << '\n';
-        /*auto& instance = VulkanRendererAPI::Get();
-        vk::Device device = instance.GetDevice();
-        for (auto& [stage, module] : m_ShaderModules)
-        {
-            if (module.module)
-            {
-                device.destroyShaderModule(module.module);
-                /*vkDestroyShaderModule(device, module.module, nullptr);#1#
-            }
-        }*/
 
         m_ShaderModules.clear();
     }
