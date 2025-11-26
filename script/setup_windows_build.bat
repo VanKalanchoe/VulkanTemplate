@@ -2,7 +2,7 @@
 set "VCPKG_ROOT=%~dp0..\VanK\vendor\vcpkg"
 set "PATH=%VCPKG_ROOT%;%PATH%"
 
-cmake -B ../build -S .. -DCMAKE_TOOLCHAIN_FILE=%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake
+cmake -B "../build" -S ".." -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake"
 :: cmake --build build
 
 pause
