@@ -24,9 +24,4 @@ namespace VanK
     {
         
     }
-
-    void ImGuiLayer::OnEvent(Event& event)
-    {
-        /*ImGui_ImplSDL3_ProcessEvent(event);*/
-    }
 }

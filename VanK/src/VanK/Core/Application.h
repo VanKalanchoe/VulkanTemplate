@@ -5,8 +5,9 @@
 #include <string>
 #include <vector>
 
-#include "Layer.h"
+#include "VanK/Core/Layer.h"
 #include "VanK/Core/Window.h"
+#include "VanK/Events/Event.h"
 
 namespace VanK
 {
@@ -16,6 +17,9 @@ namespace VanK
     {
         std::string Name = "Application";
         WindowSpecification WindowSpec;
+        
+        using EventCallbackFn = std::function<void(Event&)>;
+        EventCallbackFn EventCallback;
     };
 
     struct AppState
@@ -31,6 +35,8 @@ namespace VanK
         ~Application();
 
         void Run(AppState& applicationState);
+        
+        void RaiseEvent(Event& event);
 
         template<typename TLayer>
         requires(std::is_base_of_v<Layer, TLayer>)

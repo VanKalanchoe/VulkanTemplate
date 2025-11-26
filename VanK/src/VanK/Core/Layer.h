@@ -4,7 +4,7 @@
 #include <memory>
 #include <utility>
 
-#include "Event.h"
+#include "VanK/Events/Event.h"
 
 namespace VanK
 {

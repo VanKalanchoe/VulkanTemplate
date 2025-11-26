@@ -8,9 +8,8 @@ namespace VanK
     public:
         ImGuiLayer();
         ~ImGuiLayer() override;
-
+        
         void OnUpdate(float ts) override;
         void OnRender() override;
-        void OnEvent(Event& event) override;
     };
 }

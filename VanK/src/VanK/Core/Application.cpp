@@ -2,15 +2,19 @@
 
 #include <cassert>
 #include <iostream>
-#include <glm/common.hpp>
+#include <ranges>
 
 #define SDL_MAIN_USE_CALLBACKS
-#include <backends/imgui_impl_SDL3.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_timer.h>
 
+#include <glm/common.hpp>
+#include <backends/imgui_impl_SDL3.h>
+
 #include "Log.h"
+#include "VanK/Events/InputEvents.h"
+#include "VanK/Events/WindowEvents.h"
 #include "VanK/ImGui/ImGuiLayer.h"
 #include "VanK/Renderer/Renderer.h"
 
@@ -57,6 +61,16 @@ namespace VanK
         // NOTE: rendering can be done elsewhere (eg. render thread)
         for (const std::unique_ptr<Layer>& layer : m_LayerStack)
             layer->OnRender();
+    }
+
+    void Application::RaiseEvent(Event& event)
+    {
+        for (auto& layer : std::views::reverse(m_LayerStack))
+        {
+            layer->OnEvent(event);
+            if (event.Handled)
+                break;
+        }
     }
 
     Application& Application::Get()
@@ -118,13 +132,13 @@ namespace VanK
             return SDL_APP_CONTINUE;
         }
 
-        SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* event)
+        SDL_AppResult SDL_AppEvent(void* appstate, SDL_Event* sdlEvent)
         {
             auto applicationState = static_cast<AppState*>(appstate);
 
-            ImGui_ImplSDL3_ProcessEvent(event);
+            ImGui_ImplSDL3_ProcessEvent(sdlEvent);
 
-            switch (event->type)
+            switch (sdlEvent->type)
             {
             case SDL_EVENT_QUIT:
                 {
@@ -133,6 +147,12 @@ namespace VanK
             case SDL_EVENT_WINDOW_RESIZED:
                 {
                     /*app->setFramebufferResized(true);*/
+                    int width, height;
+                    SDL_GetWindowSizeInPixels(applicationState->app->getWindow()->getWindowHandle(), &width, &height);
+                    
+                    WindowResizeEvent event(width, height); //maybe uint32_t in the future cast ?
+                    applicationState->app->RaiseEvent(event);
+                    
                     return SDL_APP_CONTINUE;
                 }
             case SDL_EVENT_WINDOW_MINIMIZED:
@@ -146,9 +166,32 @@ namespace VanK
                     app->setFramebufferResized(true); // force swapchain recreation*/
                     return SDL_APP_CONTINUE;
                 }
+            case SDL_EVENT_MOUSE_MOTION:
+                {
+                    SDL_MouseMotionEvent motion = sdlEvent->motion;
+                    
+                    int x = motion.x; // X position in **pixels** relative to the window
+                    int y = motion.y; // Y position in pixels
+                    int dx = motion.xrel; // Delta X since last event
+                    int dy = motion.yrel; // Delta Y since last event
+                    
+                    MouseMovedEvent event(x, y);
+                    applicationState->app->RaiseEvent(event);
+                    
+                    return SDL_APP_CONTINUE;
+                }
+            case SDL_EVENT_MOUSE_BUTTON_DOWN:
+                {
+                    Uint8 sdlButton = sdlEvent->button.button;
+                    
+                    MouseButtonPressedEvent event(sdlButton);
+                    applicationState->app->RaiseEvent(event);
+                    
+                    return SDL_APP_CONTINUE;
+                }
             case SDL_EVENT_KEY_DOWN:
                 {
-                    if (event->key.scancode == SDL_SCANCODE_ESCAPE)
+                    if (sdlEvent->key.scancode == SDL_SCANCODE_ESCAPE)
                     {
                         return SDL_APP_SUCCESS;
                     }
