@@ -11,6 +11,10 @@
     "ktx",
     "vulkan-memory-allocator",
     "xxhash",
-    "spdlog"
+    "spdlog",
+    "yaml-cpp",
+    "box2d",
+    "freetype",
+    "skia"
   ]
-}
+} 

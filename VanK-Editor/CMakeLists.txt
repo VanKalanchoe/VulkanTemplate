@@ -1,15 +1,14 @@
-set(SOURCES
-    src/Main.cpp
-    src/EditorLayer.h
-    src/EditorLayer.cpp
+# Recursively include ALL folders under src
+file(GLOB_RECURSE EDITOR_ALL_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.*"
 )
 
 add_executable(VanK-Editor)
 
-target_sources(VanK-Editor PRIVATE ${SOURCES})
+target_sources(VanK-Editor PRIVATE ${EDITOR_ALL_FILES})
 
 # Match VS filters to directory structure on disk
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" FILES ${SOURCES})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" FILES ${EDITOR_ALL_FILES})
 
 target_link_libraries(VanK-Editor VanK)
 
