@@ -2,3 +2,6 @@
 	path = VanK/vendor/imgui
 	url = https://github.com/VanKalanchoe/imgui
 	branch = docking
+[submodule "VanK/vendor/msdf-atlas-gen"]
+	path = VanK/vendor/msdf-atlas-gen
+	url = https://github.com/Chlumsky/msdf-atlas-gen.git
