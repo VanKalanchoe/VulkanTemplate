@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "VanK/Core/core.h"
 #include "VanK/Core/Layer.h"
 #include "VanK/Core/Window.h"
 #include "VanK/Events/Event.h"
@@ -12,10 +13,25 @@
 namespace VanK
 {
     class Application;
+    
+    struct ApplicationCommandLineArgs
+    {
+        int Count = 0;
+        char** Args = nullptr;
+
+        const char* operator[](int index) const
+        {
+            VK_CORE_ASSERT(index < Count, "index out of range");
+            return Args[index];
+        }
+    };
 
     struct ApplicationSpecification
     {
         std::string Name = "Application";
+        std::string WorkingDirectory;
+        //app args ApplicationCommandLineArgs CommandLineArgs;
+        ApplicationCommandLineArgs CommandLineArgs;
         WindowSpecification WindowSpec;
         
         using EventCallbackFn = std::function<void(Event&)>;
@@ -63,6 +79,10 @@ namespace VanK
         static float GetTime();
         static std::string GetExecutableRootPath();
         std::shared_ptr<Window> getWindow() { return m_Window; }
+        const ApplicationSpecification& GetSpecification() const { return m_Specification; }
+        static void Shutdown();
+        void BlockEvents(bool block) { m_BlockEvents = block; }
+        bool m_BlockEvents = false;
     private:
         std::vector<std::function<void()>> m_MainThreadQueue;
         std::mutex m_MainThreadQueueMutex;

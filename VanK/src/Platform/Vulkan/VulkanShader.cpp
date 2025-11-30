@@ -1,12 +1,8 @@
 #include "VulkanShader.h"
 
-#include <print>
-#include <expected>
 #include <filesystem>
 #include <utility>
-#include <functional>
 #include "VanK/Renderer/Shader.h"
-
 #include "VulkanRendererAPI.h"
 #include "VanK/Utils.h"
 

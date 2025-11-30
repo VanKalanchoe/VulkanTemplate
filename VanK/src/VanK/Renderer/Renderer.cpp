@@ -174,7 +174,7 @@ namespace VanK
     {
         RendererAPI::Config config;
         config.window = window.getWindowHandle();
-
+        m_window = window.getWindowHandle();
         RenderCommand::SetConfig(config);
         RenderCommand::Init();
 
@@ -305,7 +305,7 @@ namespace VanK
 
         /*vertices = GeometryData::cubeVertices;
         indices = GeometryData::cubeIndices;*/
-        
+        //fix upload in geometry.cpp maybe stagingbuffer will see
         size_t vertexBufferSize = sizeof(vertices[0]) * vertices.size();
         m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
 
@@ -354,7 +354,10 @@ namespace VanK
 
     void Renderer::BeginSubmit()
     {
-        RenderCommand::BeginFrame();
+        if (isEditor)
+            RenderCommand::BeginFrame(VanK_Render_ImGui);
+        else
+            RenderCommand::BeginFrame(VanK_Render_Swapchain);
         
         cmd = RenderCommand::BeginCommandBuffer();
         if (!cmd)
@@ -363,6 +366,10 @@ namespace VanK
 
     void Renderer::EndSubmit()
     {
+        {
+            RenderCommand::SubmitRendering(cmd);
+        }
+        
         RenderCommand::EndCommandBuffer(cmd);
         RenderCommand::EndFrame();
     }
@@ -415,63 +422,96 @@ namespace VanK
             return;
         }
 
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
-
-        /*--
-          * IMGUI Docking
-          * Create a dockspace and dock the viewport and settings window.
-          * The central node is named "Viewport", which can be used later with Begin("Viewport")
-          * to render the final image.
-         -*/
-        const ImGuiDockNodeFlags dockFlags = ImGuiDockNodeFlags_PassthruCentralNode |
-            ImGuiDockNodeFlags_NoDockingInCentralNode;
-        ImGuiID dockID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), dockFlags);
-        // Docking layout, must be done only if it doesn't exist
-        if (!ImGui::DockBuilderGetNode(dockID)->IsSplitNode() && !ImGui::FindWindowByName("Viewport"))
-        {
-            ImGui::DockBuilderDockWindow("Viewport", dockID); // Dock "Viewport" to  central node
-            ImGui::DockBuilderGetCentralNode(dockID)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
-            // Remove "Tab" from the central node
-            ImGuiID leftID = ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Left, 0.2f, nullptr, &dockID);
-            // Split the central node
-            ImGui::DockBuilderDockWindow("Settings", leftID); // Dock "Settings" to the left node
-        }
-        // [optional] Show the menu bar
-        if (ImGui::BeginMainMenuBar())
-        {
-            if (ImGui::BeginMenu("File"))
+        /*if (isEditor)
+        {*/
+            /*--
+              * IMGUI Docking
+              * Create a dockspace and dock the viewport and settings window.
+              * The central node is named "Viewport", which can be used later with Begin("Viewport")
+              * to render the final image.
+             -*/
+            /*const ImGuiDockNodeFlags dockFlags = ImGuiDockNodeFlags_PassthruCentralNode |
+                ImGuiDockNodeFlags_NoDockingInCentralNode;
+            ImGuiID dockID = ImGui::DockSpaceOverViewport(0, ImGui::GetMainViewport(), dockFlags);
+            // Docking layout, must be done only if it doesn't exist
+            if (!ImGui::DockBuilderGetNode(dockID)->IsSplitNode() && !ImGui::FindWindowByName("Viewport"))
             {
-                if (ImGui::MenuItem("vSync", "", &vSync))
+                ImGui::DockBuilderDockWindow("Viewport", dockID); // Dock "Viewport" to  central node
+                ImGui::DockBuilderGetCentralNode(dockID)->LocalFlags |= ImGuiDockNodeFlags_NoTabBar;
+                // Remove "Tab" from the central node
+                ImGuiID leftID = ImGui::DockBuilderSplitNode(dockID, ImGuiDir_Left, 0.2f, nullptr, &dockID);
+                // Split the central node
+                ImGui::DockBuilderDockWindow("Settings", leftID); // Dock "Settings" to the left node
+            }*/
+            /*// [optional] Show the menu bar
+            if (ImGui::BeginMainMenuBar())
+            {
+                if (ImGui::BeginMenu("File"))
                 {
-                    RenderCommand::RebuildSwapchain(vSync); // Recreate the swapchain with the new vSync setting
+                    if (ImGui::MenuItem("vSync", "", &vSync))
+                    {
+                        RenderCommand::RebuildSwapchain(vSync); // Recreate the swapchain with the new vSync setting
+                    }
+                    ImGui::Separator();
+                    if (ImGui::MenuItem("Exit"))
+                    {
+                        SDL_Event quitEvent;
+                        SDL_zero(quitEvent); // Zero-initialize
+                        quitEvent.type = SDL_EVENT_QUIT; // Set event type
+                        SDL_PushEvent(&quitEvent);
+                    }
+                    ImGui::EndMenu();
                 }
-                ImGui::Separator();
-                if (ImGui::MenuItem("Exit"))
+                ImGui::EndMainMenuBar();
+            }*/
+
+            /*
+            // We define "viewport" with no padding an retrieve the rendering area
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+            ImGui::Begin("Viewport");
+            ImVec2 windowSize = ImGui::GetContentRegionAvail();
+            ImGui::End();
+            ImGui::PopStyleVar();
+            */
+
+            /*if (ImGui::Begin("Viewport"))
+            {
+                ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+                m_ViewportSize =
                 {
-                    SDL_Event quitEvent;
-                    SDL_zero(quitEvent); // Zero-initialize
-                    quitEvent.type = SDL_EVENT_QUIT; // Set event type
-                    SDL_PushEvent(&quitEvent);
-                }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMainMenuBar();
-        }
+                std::max(1u, static_cast<uint32_t>(viewportSize.x)),
+                std::max(1u, static_cast<uint32_t>(viewportSize.y))
+                };
 
-        // We define "viewport" with no padding an retrieve the rendering area
-        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
-        ImGui::Begin("Viewport");
-        ImVec2 windowSize = ImGui::GetContentRegionAvail();
-        ImGui::End();
-        ImGui::PopStyleVar();
+                if (m_ViewportSize.width != lastViewportExtent.width || m_ViewportSize.height != lastViewportExtent.height)
+                {
+                
+                    lastViewportExtent.width = m_ViewportSize.width;
+                    lastViewportExtent.height = m_ViewportSize.height;
 
-        if (ImGui::Begin("Viewport"))
-        {
-            ImVec2 viewportSize = ImGui::GetContentRegionAvail();
-            m_ViewportSize = { std::max(1u, static_cast<uint32_t>(viewportSize.x)),
-                         std::max(1u, static_cast<uint32_t>(viewportSize.y)) };
+                    RenderCommand::setViewportSize(m_ViewportSize);
+                }*/
+            
+                /*// !!! This is where the GBuffer image is displayed !!!
+                ImGui::Image(RenderCommand::getImTextureID(0), viewportSize);*/
+
+                /*// Adding overlay text on the upper left corner
+                ImGui::SetCursorPos(ImVec2(0, 0));
+                ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);*/
+            /*}*/
+            /*ImGui::End();
+            ImGui::EndFrame();*/
+        /*}
+        else
+        {*/
+            /*int width, height;
+            SDL_GetWindowSize(m_window, &width, &height);
+            
+            m_ViewportSize =
+            {
+            std::max(1u, static_cast<uint32_t>(width)),
+            std::max(1u, static_cast<uint32_t>(height))
+            };
 
             if (m_ViewportSize.width != lastViewportExtent.width || m_ViewportSize.height != lastViewportExtent.height)
             {
@@ -480,18 +520,9 @@ namespace VanK
                 lastViewportExtent.height = m_ViewportSize.height;
 
                 RenderCommand::setViewportSize(m_ViewportSize);
-            }
-            
-            // !!! This is where the GBuffer image is displayed !!!
-            ImGui::Image(RenderCommand::getImTextureID(0), viewportSize);
-
-            // Adding overlay text on the upper left corner
-            ImGui::SetCursorPos(ImVec2(0, 0));
-            ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        }
-        ImGui::End();
-
-        ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
+            }*/
+        /*}
+        */
         
         static auto startTime = std::chrono::high_resolution_clock::now();
         static auto lastFrameTime = startTime;
@@ -532,7 +563,7 @@ namespace VanK
 
             VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
             
-            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo, VanK_Render_None);
+            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
             
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
             
@@ -554,25 +585,14 @@ namespace VanK
             RenderCommand::EndRendering(cmd);
         }
         
-        {
-            RenderCommand::BeginRendering(cmd, {}, {}, {}, VanK_Render_ImGui);
-            
-            RenderCommand::EndRendering(cmd);
-        }
         
-        ImGui::EndFrame();
-        if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
-        {
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-        }
     }
 
     void Renderer::Flush()
     {
-        BeginSubmit();
+        /*BeginSubmit();*/
         DrawFrame();
-        EndSubmit();
+        /*EndSubmit();*/
     }
 
     struct PipelineReloadEntry

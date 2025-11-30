@@ -11,16 +11,17 @@
 printf((format), __VA_ARGS__);                                                                                     \
 printf("\n");                                                                                                      \
 }
+#include <iostream>
+
 #include "vk_mem_alloc.h"
-
-
-#include <print>
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_vulkan.h>
 
 #include "VulkanBuffer.h"
 #include "VulkanShader.h"
+#include "VanK/Core/core.h"
+#include "VanK/Core/logger.h"
 
 namespace  VanK
 {
@@ -96,9 +97,13 @@ namespace  VanK
 
     void VulkanRendererAPI::initImGui()
     {
-        IMGUI_CHECKVERSION();
+        /*IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        ImGui::StyleColorsDark();
+        ImGui::StyleColorsDark();*/
+        
+        /*// Acquiring the sampler which will be used for displaying the GBuffer
+        const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
+        linearSampler = m_samplerPool.acquireSampler(info);*/
 
         ImGui_ImplSDL3_InitForVulkan(window);
         static VkFormat imageFormats[] = {static_cast<VkFormat>(swapChainSurfaceFormat.format)};
@@ -150,9 +155,9 @@ namespace  VanK
         allocator.destroyBuffer(queryBuffer); // statistics
         allocator.deinit();
 
-        ImGui_ImplVulkan_Shutdown();
+        /*ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL3_Shutdown();
-        ImGui::DestroyContext();
+        ImGui::DestroyContext();*/
     }
 
     void VulkanRendererAPI::recreateSwapChain()
@@ -518,8 +523,9 @@ namespace  VanK
     {
         // Add the texture to the image vector
         images.emplace_back(std::move(imageResource));
-
+        
         // Update the descriptor set to include the new texture
+        updateGraphicsDescriptorSet();
 
         // Return the index of the new texture
         return static_cast<uint32_t>(images.size() - 1);
@@ -539,7 +545,16 @@ namespace  VanK
             VK_CORE_WARN("Attempted to remove texture at invalid index: %u (max: %zu)", index, images.size());
             return;
         }
-
+        
+        /*// Destroy the texture resource
+        m_allocator.destroyImageResource(m_image[index]);*/
+        
+        // Remove the texture from the image vector
+        images.erase(images.begin() + index);
+        
+        // Update the descriptor set to include the new texture
+        updateGraphicsDescriptorSet(); 
+        
         VK_CORE_INFO("Removed texture at index %u, remaining textures: %zu", index, images.size());
     }
 
@@ -857,11 +872,19 @@ namespace  VanK
         Unwrap(cmd).end();
     }
 
-    void VulkanRendererAPI::BeginFrame()
+    void VulkanRendererAPI::BeginFrame(VanKRenderOption renderOption)
     {
+        m_renderOption = renderOption;
+        
+        if (m_renderOption == VanK_Render_ImGui)
+        {
+            ImGui_ImplVulkan_NewFrame();
+            ImGui_ImplSDL3_NewFrame();
+            ImGui::NewFrame();
+        }
+        
         while (vk::Result::eTimeout == device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX));
-        auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[currentFrame],
-                                                               nullptr);
+        auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[currentFrame], nullptr);
 
         currentResult = result;
         
@@ -883,6 +906,16 @@ namespace  VanK
 
     void VulkanRendererAPI::EndFrame()
     {
+        if (m_renderOption == VanK_Render_ImGui)
+        {
+            ImGui::EndFrame();
+            if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
+            {
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+            }
+        }
+        
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
         const vk::SubmitInfo submitInfo{
             .waitSemaphoreCount = 1,
@@ -1046,139 +1079,87 @@ namespace  VanK
         Unwrap(cmd).pushDescriptorSet2(pushDescriptorSetInfo);
     }
 
-    void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0, VanKDepthStencilTargetInfo depth_stencil_target_info = {}, VanKRenderOption render_option = VanK_Render_None)
+    void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0, VanKDepthStencilTargetInfo depth_stencil_target_info = {})
     {
         DBG_VK_SCOPE(Unwrap(cmd));  // <-- Helps to debug in NSight
-
-        m_renderOption = render_option;
         
-        if (render_option == VanK_Render_None)
+        // Before starting rendering, transition the images to the appropriate layouts
+        // Transition the multisampled color image to COLOR_ATTACHMENT_OPTIMAL
+        transition_image_layout_custom
+        (
+            colorImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            {},
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor
+        );
+
+        // Transition the depth image to DEPTH_ATTACHMENT_OPTIMAL
+        transition_image_layout_custom
+        (
+            depthImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eDepthAttachmentOptimal,
+            {},
+            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eEarlyFragmentTests,
+            vk::ImageAspectFlagBits::eDepth
+        );
+
+        // 3) Bootstrap or re-transition resolve target (sceneImage) for FIRST pass
+        transition_image_layout_custom
+        (
+            sceneImage,
+            sceneImageInitialized ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            sceneImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead) : vk::AccessFlags2{},
+            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+            sceneImageInitialized ? vk::PipelineStageFlagBits2::eFragmentShader : vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor
+        );
+    
+        // First pass: render scene into MSAA color with resolve to single-sample sceneImage
+        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
+        vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+
+        // Color attachment (multisampled) with resolve attachment
+        vk::RenderingAttachmentInfo colorAttachment =
         {
-            // Before starting rendering, transition the images to the appropriate layouts
-            // Transition the multisampled color image to COLOR_ATTACHMENT_OPTIMAL
-            transition_image_layout_custom
-            (
-                colorImage,
-                vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eColorAttachmentOptimal,
-                {},
-                vk::AccessFlagBits2::eColorAttachmentWrite,
-                vk::PipelineStageFlagBits2::eTopOfPipe,
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                vk::ImageAspectFlagBits::eColor
-            );
+            .imageView = colorImageView,
+            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .resolveMode = vk::ResolveModeFlagBits::eAverage,
+            .resolveImageView = sceneImageView,
+            .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = clearColor
+        };
 
-            // Transition the depth image to DEPTH_ATTACHMENT_OPTIMAL
-            transition_image_layout_custom
-            (
-                depthImage,
-                vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eDepthAttachmentOptimal,
-                {},
-                vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-                vk::PipelineStageFlagBits2::eTopOfPipe,
-                vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-                vk::ImageAspectFlagBits::eDepth
-            );
-
-            // 3) Bootstrap or re-transition resolve target (sceneImage) for FIRST pass
-            transition_image_layout_custom
-            (
-                sceneImage,
-                sceneImageInitialized ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eColorAttachmentOptimal,
-                sceneImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead) : vk::AccessFlags2{},
-                vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-                sceneImageInitialized ? vk::PipelineStageFlagBits2::eFragmentShader : vk::PipelineStageFlagBits2::eTopOfPipe,
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                vk::ImageAspectFlagBits::eColor
-            );
-        
-            // First pass: render scene into MSAA color with resolve to single-sample sceneImage
-            vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-            vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
-
-            // Color attachment (multisampled) with resolve attachment
-            vk::RenderingAttachmentInfo colorAttachment =
-            {
-                .imageView = colorImageView,
-                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-                .resolveMode = vk::ResolveModeFlagBits::eAverage,
-                .resolveImageView = sceneImageView,
-                .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-                .loadOp = vk::AttachmentLoadOp::eClear,
-                .storeOp = vk::AttachmentStoreOp::eStore,
-                .clearValue = clearColor
-            };
-
-            // Depth attachment
-            vk::RenderingAttachmentInfo depthAttachment =
-            {
-                .imageView = depthImageView,
-                .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-                .loadOp = vk::AttachmentLoadOp::eClear,
-                .storeOp = vk::AttachmentStoreOp::eDontCare,
-                .clearValue = clearDepth
-            };
-
-            vk::RenderingInfo renderingInfo =
-            {
-                .renderArea = {.offset = {0, 0}, .extent = viewport},
-                .layerCount = 1,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &colorAttachment,
-                .pDepthAttachment = &depthAttachment
-            };
-        
-            Unwrap(cmd).beginRendering(renderingInfo);
-        }
-        
-        if (render_option == VanK_Render_ImGui || render_option == VanK_Render_Swapchain)
+        // Depth attachment
+        vk::RenderingAttachmentInfo depthAttachment =
         {
-            // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
-            transition_image_layout
-            (
-                currentImageIndex,
-                vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eColorAttachmentOptimal,
-                {}, // srcAccessMask (no need to wait for previous operations)
-                vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
-                vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput // dstStage
-            );
-        
-            // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
-            transition_image_layout_custom(
-                sceneImage,
-                vk::ImageLayout::eColorAttachmentOptimal,
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-                vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                vk::PipelineStageFlagBits2::eFragmentShader,
-                vk::ImageAspectFlagBits::eColor
-                );
-            sceneImageInitialized = true;
+            .imageView = depthImageView,
+            .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eDontCare,
+            .clearValue = clearDepth
+        };
 
-            // Second pass: draw ImGui to swapchain image
-            vk::RenderingAttachmentInfo swapColorAttachment =
-            {
-                .imageView = swapChainImageViews[currentImageIndex],
-                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-                .loadOp = vk::AttachmentLoadOp::eClear,
-                .storeOp = vk::AttachmentStoreOp::eStore
-            };
-        
-            vk::RenderingInfo renderingInfo2 =
-            {
-                .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
-                .layerCount = 1,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &swapColorAttachment
-            };
-
-            Unwrap(cmd).beginRendering(renderingInfo2);
-        }
+        vk::RenderingInfo renderingInfo =
+        {
+            .renderArea = {.offset = {0, 0}, .extent = viewport},
+            .layerCount = 1,
+            .colorAttachmentCount = 1,
+            .pColorAttachments = &colorAttachment,
+            .pDepthAttachment = &depthAttachment
+        };
+    
+        Unwrap(cmd).beginRendering(renderingInfo);
     }
 
     void VulkanRendererAPI::SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport)
@@ -1307,15 +1288,62 @@ namespace  VanK
 
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
     {
-        if (m_renderOption == VanK_Render_None)
+        Unwrap(cmd).endRendering();
+    }
+
+    void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd)
+    {
+        if (m_renderOption == VanK_Render_ImGui || m_renderOption == VanK_Render_Swapchain)
         {
-            Unwrap(cmd).endRendering();
-            
-            return;
+            // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
+            transition_image_layout
+            (
+                currentImageIndex,
+                vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                {}, // srcAccessMask (no need to wait for previous operations)
+                vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
+                vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput // dstStage
+            );
+        
+            // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
+            transition_image_layout_custom(
+                sceneImage,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                vk::ImageLayout::eShaderReadOnlyOptimal,
+                vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+                vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                vk::PipelineStageFlagBits2::eFragmentShader,
+                vk::ImageAspectFlagBits::eColor
+                );
+            sceneImageInitialized = true;
+
+            // Second pass: draw ImGui to swapchain image
+            vk::RenderingAttachmentInfo swapColorAttachment =
+            {
+                .imageView = swapChainImageViews[currentImageIndex],
+                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+                .loadOp = vk::AttachmentLoadOp::eClear,
+                .storeOp = vk::AttachmentStoreOp::eStore
+            };
+        
+            vk::RenderingInfo renderingInfo2 =
+            {
+                .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
+                .layerCount = 1,
+                .colorAttachmentCount = 1,
+                .pColorAttachments = &swapColorAttachment
+            };
+
+            Unwrap(cmd).beginRendering(renderingInfo2);
         }
         
         if (m_renderOption == VanK_Render_ImGui)
         {
+            ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
+            
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
 
             Unwrap(cmd).endRendering();
@@ -1958,8 +1986,16 @@ namespace  VanK
 
     void VulkanRendererAPI::updateGraphicsDescriptorSet()
     {
+        std::cout << "descriptor " << descriptorSets.size() << std::endl;
+        // Don't update descriptor set if there are no textures
+        if (images.empty())
+        {
+            LOGW("updateGraphicsDescriptorSet: No textures to update, skipping descriptor set update");
+            return;
+        }
+        
         // The sampler used for the texture
-        vk::raii::Sampler sampler = m_samplerPool.acquireSampler({
+        const vk::raii::Sampler sampler = m_samplerPool.acquireSampler({
             .magFilter = vk::Filter::eLinear,
             .minFilter = vk::Filter::eLinear,
             .mipmapMode = vk::SamplerMipmapMode::eLinear,
@@ -1972,22 +2008,22 @@ namespace  VanK
     
         // Prepare imageInfos vector automatically sized to m_image's size
         std::vector<vk::DescriptorImageInfo> imageInfos;
-        imageInfos.reserve(1); // reserve for efficiency
+        imageInfos.reserve(images.size()); // reserve for efficiency
 
         // The image info
-        for (size_t i = 0; i < 1; ++i)
+        for (size_t i = 0; i < images.size(); ++i)
         {
             imageInfos.push_back({
-                .sampler = sampler,
-                .imageView = textureImageView,
-                .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal,
+                .sampler = sampler, // currently the same sampler maybe add them indivual in the future
+                .imageView = images[i].view,
+                .imageLayout = images[i].layout,
             });
         }
 
         std::vector<VkDescriptorSet> descHandles;
         for (auto& ds : descriptorSets)
             descHandles.push_back(*ds);
-
+        
         std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
         writeDescriptorSets[0] = vk::WriteDescriptorSet{};
         writeDescriptorSets[0].dstSet = descriptorSets[0]; // single handle

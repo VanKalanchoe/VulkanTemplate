@@ -1,4 +1,5 @@
 #pragma once
+
 #include "VanK/Core/Layer.h"
 
 namespace VanK
@@ -9,7 +10,13 @@ namespace VanK
         ImGuiLayer();
         ~ImGuiLayer() override;
         
-        void OnUpdate(float ts) override;
+        void ShutDown();
+        void OnUpdate(Timestep ts) override;
         void OnRender() override;
+        void OnImGuiRender() override;
+        
+        void SetDarkThemeColors();
+        
+        uint32_t GetActiveWidgetID() const;
     };
 }

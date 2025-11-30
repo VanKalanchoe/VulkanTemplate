@@ -819,11 +819,13 @@ namespace VanK
             // Acquiring the sampler which will be used for displaying the GBuffer
             const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
             linearSampler = m_samplerPool.acquireSampler(info);
-            initImGui(); // todo remove from here because if you dont need it dont init
+            /*initImGui(); */// todo remove from here because if you dont need it dont init
         }
-    private:
+        
         uint32_t AddTextureToPool(utils::ImageResource&& imageResource);
         void RemoveTextureFromPool(uint32_t index);
+        
+    private:
         VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) override;
         VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) override;
         void DestroyAllPipelines() override;
@@ -865,11 +867,12 @@ namespace VanK
         vk::PipelineLayout m_currentGraphicPipelineLayout;
         vk::PipelineLayout m_currentComputePipelineLayout;
 
-        void RebuildSwapchain(bool vSyncVal) { vSync = vSyncVal; recreateSwapChain(); };
+        void RebuildSwapchain(bool vSyncVal) override { vSync = vSyncVal; recreateSwapChain(); }
         void setFramebufferResized(bool resized) { framebufferResized = resized; }
-        uint32_t getAPIVersion() const { return apiVersion; };
+        uint32_t getAPIVersion() const { return apiVersion; }
         vk::raii::Device& GetDevice() { return device; }
         utils::ResourceAllocator& GetAllocator() { return allocator; }
+        void InitImGui() override { initImGui(); }
         ImTextureID getImTextureID(uint32_t index = 0) const override { return reinterpret_cast<ImTextureID>(uiDescriptorSet[index]); }
         void setViewportSize(Extent2D viewportSize) override
         { viewport = vk::Extent2D{viewportSize.width, viewportSize.height}; recreateImages(); }
@@ -895,8 +898,9 @@ namespace VanK
 
         vk::raii::PipelineLayout* pipelineLayout = nullptr;
         vk::raii::Pipeline* graphicsPipeline = nullptr;
-
+        
         std::vector<utils::ImageResource> images;
+        
         vk::Extent2D viewport;
         vk::raii::Image sceneImage = nullptr;
         vk::raii::DeviceMemory sceneImageMemory = nullptr;
@@ -1003,34 +1007,35 @@ namespace VanK
         static bool hasStencilComponent(vk::Format format);
 
         void createTexture();
-
+    public: //temp public
         void generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
                              uint32_t mipLevels);
-
+    private: 
         vk::SampleCountFlagBits getMaxUsableSampleCount();
 
         void createTextureSampler();
-
+    public: //temp public
         vk::raii::ImageView createImageView(vk::raii::Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags,
                                             uint32_t mipLevels);
-
+    private: 
+    public: //temp public
         void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples,
                          vk::Format format, vk::ImageTiling tiling,
                          vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
                          vk::raii::DeviceMemory& imageMemory);
-
+    
         void transitionImageLayout(const vk::raii::Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels);
-        
+    private: 
         void createDescriptorPool();
 
         void createDescriptorSets();
         
         void updateGraphicsDescriptorSet();
-
+    public: //temp public
         std::unique_ptr<vk::raii::CommandBuffer> beginSingleTimeCommands();
-
+    
         void endSingleTimeCommands(const vk::raii::CommandBuffer& commandBuffer) const;
-        
+    private: 
         uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
         void createCommandBuffers();

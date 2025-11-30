@@ -35,6 +35,7 @@ namespace VanK
             } while(0)
         
     public:
+        inline static SDL_Window* m_window = nullptr; //remove from here
         static void loadModel();
         static void Init(Window& window);
         static void Shutdown();
@@ -42,6 +43,9 @@ namespace VanK
         static void EndSubmit();
         static void DrawFrame();
         static void Flush();
+        static bool GetVSync() { return vSync; };
+        static void SetVSync(bool vSyncTemp) { vSync = vSyncTemp; RenderCommand::RebuildSwapchain(vSync); };
+        static bool GetIsEditor() { return isEditor; }
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
@@ -57,11 +61,12 @@ namespace VanK
         inline static Ref<TransferBuffer> m_TransferRingBuffer;
         inline static Ref<StorageBuffer> m_InstancedStorageBuffer;
     private:
+        inline static bool isEditor = true; //remove from here
         inline static std::vector<shaderio::InstancedVertexData> vertices;
         inline static std::vector<uint32_t> indices;
         inline static bool vSync = false;
         inline static bool windowMinimized = false;
-        inline static Extent2D m_ViewportSize;
+        inline static Extent2D m_ViewportSize  = {640, 480}; // selber gemacht muss mit editorlayer verknüpft werden
         inline static Extent2D lastViewportExtent = {0, 0};
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;

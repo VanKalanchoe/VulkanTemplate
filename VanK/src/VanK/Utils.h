@@ -2,6 +2,8 @@
 
 #include "Core/core.h"
 #include "xxhash.h"
+#include <string>
+#include <vector>
 
 namespace VanK
 {

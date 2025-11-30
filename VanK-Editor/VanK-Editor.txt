@@ -1,0 +1,1 @@
+updateGraphicsDescriptorSet: No textures to update, skipping descriptor set update

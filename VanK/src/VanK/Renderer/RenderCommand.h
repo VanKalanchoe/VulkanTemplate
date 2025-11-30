@@ -18,6 +18,11 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->RebuildSwapchain(vSyncVal);
         }
+        
+        static void InitImGui()
+        {
+            if (s_RendererAPI) s_RendererAPI->InitImGui();
+        }
 
         static ImTextureID getImTextureID(uint32_t index = 0)
         {
@@ -59,9 +64,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->EndCommandBuffer(cmd);
         }
 
-        static void BeginFrame()
+        static void BeginFrame(VanKRenderOption renderOption)
         {
-            if (s_RendererAPI) s_RendererAPI->BeginFrame();
+            if (s_RendererAPI) s_RendererAPI->BeginFrame(renderOption);
         }
 
         static void EndFrame()
@@ -79,9 +84,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->BindUniformBuffer(cmd, bindPoint, buffer, set, binding, arrayElement);
         }
 
-        static void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info, VanKRenderOption render_option)
+        static void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info)
         {
-            if (s_RendererAPI) s_RendererAPI->BeginRendering(cmd, color_target_info, num_color_targets, depth_stencil_target_info, render_option);
+            if (s_RendererAPI) s_RendererAPI->BeginRendering(cmd, color_target_info, num_color_targets, depth_stencil_target_info);
         }
 
         static void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
@@ -127,6 +132,11 @@ namespace VanK
         static void EndRendering(VanKCommandBuffer cmd)
         {
             if (s_RendererAPI) s_RendererAPI->EndRendering(cmd);
+        }
+
+        static void SubmitRendering(VanKCommandBuffer cmd)
+        {
+            if (s_RendererAPI) s_RendererAPI->SubmitRendering(cmd);
         }
 
         /**

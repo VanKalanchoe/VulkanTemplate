@@ -362,7 +362,6 @@ namespace VanK
 
     enum VanKRenderOption
     {
-        VanK_Render_None,
         VanK_Render_Swapchain,
         VanK_Render_ImGui
     };
@@ -404,7 +403,8 @@ namespace VanK
         virtual ~RendererAPI() = default;
 
         // exposing
-        virtual void RebuildSwapchain(bool vSyncVal) = 0; 
+        virtual void RebuildSwapchain(bool vSyncVal) = 0;
+        virtual void InitImGui() = 0;
         virtual ImTextureID getImTextureID(uint32_t index = 0) const = 0;
         virtual void setViewportSize(Extent2D viewportSize) = 0;
         virtual VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) = 0;
@@ -413,11 +413,11 @@ namespace VanK
         virtual void DestroyPipeline(VanKPipeLine pipeline) = 0;
         virtual VanKCommandBuffer BeginCommandBuffer() { return nullptr; }
         virtual void EndCommandBuffer(VanKCommandBuffer cmd) = 0;
-        virtual void BeginFrame() = 0;
+        virtual void BeginFrame(VanKRenderOption renderOption) = 0;
         virtual void EndFrame() = 0;
         virtual void BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline) = 0;
         virtual void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) = 0;
-        virtual void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info, VanKRenderOption render_option) = 0;
+        virtual void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info) = 0;
         virtual void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) = 0;
         virtual void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport) = 0;
         virtual void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) = 0;
@@ -427,6 +427,7 @@ namespace VanK
         virtual void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
         virtual void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;
+        virtual void SubmitRendering(VanKCommandBuffer cmd) = 0;
         virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer = nullptr) = 0;
         virtual void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
         virtual void EndComputePass(VanKComputePass* computePass) = 0;

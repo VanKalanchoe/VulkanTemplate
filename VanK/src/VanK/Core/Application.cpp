@@ -12,7 +12,7 @@
 #include <glm/common.hpp>
 #include <backends/imgui_impl_SDL3.h>
 
-#include "Log.h"
+#include "VanK/Core/Log.h"
 #include "VanK/Events/InputEvents.h"
 #include "VanK/Events/WindowEvents.h"
 #include "VanK/ImGui/ImGuiLayer.h"
@@ -35,15 +35,18 @@ namespace VanK
 
         Renderer::Init(*m_Window);
 
-        /*// ImGui
-        PushLayer<ImGuiLayer>();*/
+        // ImGui
+        PushLayer<ImGuiLayer>();
     }
 
     Application::~Application()
     {
+        GetLayer<ImGuiLayer>()->ShutDown();
+        
         Renderer::Shutdown();
         
-        m_Window->Destroy();
+        if (m_Window)
+            m_Window->Destroy();
 
         s_Application = nullptr;
     }
@@ -53,14 +56,25 @@ namespace VanK
         float currentTime = applicationState.app->GetTime();
         float timestep = glm::clamp(currentTime - applicationState.lastTime, 0.001f, 0.1f);
         applicationState.lastTime = currentTime;
-
+        
+        Renderer::BeginSubmit(); // idk if onupdate has to be under it 
+        
         // Main layer update here
         for (const std::unique_ptr<Layer>& layer : m_LayerStack)
             layer->OnUpdate(timestep);
-
+        
         // NOTE: rendering can be done elsewhere (eg. render thread)
         for (const std::unique_ptr<Layer>& layer : m_LayerStack)
             layer->OnRender();
+        
+        //add check if iseditor
+        if (Renderer::GetIsEditor())
+        {
+            for (const std::unique_ptr<Layer>& layer : m_LayerStack)
+                layer->OnImGuiRender();
+        }
+        
+        Renderer::EndSubmit();
     }
 
     void Application::RaiseEvent(Event& event)
@@ -180,6 +194,16 @@ namespace VanK
                     
                     return SDL_APP_CONTINUE;
                 }
+            case SDL_EVENT_MOUSE_WHEEL:
+                {
+                    if (applicationState->app->m_BlockEvents)
+                    {
+                        MouseScrolledEvent events(sdlEvent->wheel.x, sdlEvent->wheel.y);
+                        applicationState->app->RaiseEvent(events);
+                        
+                        return SDL_APP_CONTINUE;
+                    }
+                }
             case SDL_EVENT_MOUSE_BUTTON_DOWN:
                 {
                     Uint8 sdlButton = sdlEvent->button.button;
@@ -194,6 +218,17 @@ namespace VanK
                     if (sdlEvent->key.scancode == SDL_SCANCODE_ESCAPE)
                     {
                         return SDL_APP_SUCCESS;
+                    }
+                    
+                    if (!applicationState->app->m_BlockEvents)
+                    {
+                        SDL_Scancode scan = sdlEvent->key.scancode; // maybe keycode better ?
+                        bool repeat = (sdlEvent->key.repeat != 0);
+                    
+                        KeyPressedEvent event(scan, repeat);
+                        applicationState->app->RaiseEvent(event);
+                        
+                        return SDL_APP_CONTINUE;
                     }
                 }
             default:
@@ -217,5 +252,13 @@ namespace VanK
     std::string Application::GetExecutableRootPath()
     {
         return SDL_GetBasePath();
+    }
+
+    void Application::Shutdown()
+    {
+        SDL_Event quitEvent;
+        SDL_zero(quitEvent); // Zero-initialize
+        quitEvent.type = SDL_EVENT_QUIT; // Set event type
+        SDL_PushEvent(&quitEvent);
     }
 }
