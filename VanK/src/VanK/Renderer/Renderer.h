@@ -5,6 +5,7 @@
 #include "VanK/Core/core.h"
 
 #include "Geometry.h"
+#include "VanK/Asset/TextureImporter.h"
 
 namespace VanK
 {
@@ -81,5 +82,7 @@ namespace VanK
         
         inline static Ref<IndirectBuffer> indirectBuffer;
         inline static Ref<IndirectBuffer> countBuffer;
+        
+        inline static Ref<Texture2D> texture;
     };
 }

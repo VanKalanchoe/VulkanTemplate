@@ -151,6 +151,9 @@ namespace  VanK
 
     void VulkanRendererAPI::cleanup()
     {
+        // Clear the pool on the renderer side so it doesn't hold dangling references
+        images.clear();
+        
         m_samplerPool.deinit();
         allocator.destroyBuffer(queryBuffer); // statistics
         allocator.deinit();
@@ -1997,7 +2000,7 @@ namespace  VanK
             commonDescriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
             DBG_VK_NAME(*commonDescriptorSetLayout);
         }
-        updateGraphicsDescriptorSet();
+        /*updateGraphicsDescriptorSet();*/
     }
 
     void VulkanRendererAPI::updateGraphicsDescriptorSet()
@@ -2009,7 +2012,7 @@ namespace  VanK
             return;
         }
         
-        // The sampler used for the texture
+        /*// The sampler used for the texture
         const vk::raii::Sampler sampler = m_samplerPool.acquireSampler({
             .magFilter = vk::Filter::eLinear,
             .minFilter = vk::Filter::eLinear,
@@ -2023,7 +2026,7 @@ namespace  VanK
         if (!*sampler) 
         {
             throw std::runtime_error("Sampler not valid, cannot update descriptor set");
-        }
+        }*/
     
         // Prepare imageInfos vector automatically sized to m_image's size
         std::vector<vk::DescriptorImageInfo> imageInfos;
@@ -2033,15 +2036,17 @@ namespace  VanK
         for (size_t i = 0; i < images.size(); ++i)
         {
             imageInfos.push_back({
-                .sampler = sampler, // currently the same sampler maybe add them indivual in the future
-                .imageView = images[i].view,
+                .sampler = textureSampler, // currently the same sampler maybe add them indivual in the future
+                .imageView = textureImageView,
                 .imageLayout = images[i].layout,
             });
         }
 
+        /*
         std::vector<VkDescriptorSet> descHandles;
         for (auto& ds : descriptorSets)
             descHandles.push_back(*ds);
+            */
         
         std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
         writeDescriptorSets[0] = vk::WriteDescriptorSet{};

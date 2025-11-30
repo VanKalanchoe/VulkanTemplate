@@ -122,8 +122,12 @@ namespace VanK
             {
                 Log::Init();
                 
+                ApplicationCommandLineArgs args;
+                args.Count = argc;
+                args.Args = argv;
+                
                 auto applicationState = new AppState();
-                applicationState->app = CreateApplication();
+                applicationState->app = CreateApplication(args);
                 applicationState->lastTime = Application::GetTime();
                 *appstate = applicationState;
             }

@@ -920,7 +920,9 @@ namespace VanK
         vk::raii::ImageView textureImageView = nullptr;
         SamplerPool m_samplerPool;
         vk::raii::Sampler linearSampler = nullptr;
+    public: //change this to priavte later ebcause of vulkantexture class getimtextureid
         vk::raii::Sampler textureSampler = nullptr;
+    private:
         vk::Format textureImageFormat = vk::Format::eUndefined;
         
         vk::raii::DescriptorPool descriptorPool = nullptr;

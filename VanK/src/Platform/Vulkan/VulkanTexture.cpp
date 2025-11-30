@@ -6,6 +6,8 @@
 
 namespace VanK
 {
+    static std::unordered_map<VulkanTexture2D*, VkDescriptorSet> s_ImGuiDescriptorSets;
+    
     vk::Format ConvertImageFormat(ImageFormat format)
     {
         switch (format)
@@ -119,11 +121,26 @@ namespace VanK
         {
             // For KTX2 files, we can get the format directly
             auto* ktx2 = reinterpret_cast<ktxTexture2*>(kTexture);
-            textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
-            if (textureFormat == vk::Format::eUndefined)
+            if (ktxTexture2_NeedsTranscoding(ktx2))
             {
-                // If the format is undefined, fall back to a reasonable default
+                std::cout << "This KTX2 is BASIS compressed and needs transcoding!" << std::endl;
+                // Choose your GPU format
                 textureFormat = vk::Format::eR8G8B8A8Unorm;
+
+                KTX_error_code ec = ktxTexture2_TranscodeBasis(
+                    ktx2,
+                    KTX_TTF_RGBA32,      // matches eR8G8B8A8
+                    0
+                );
+            }
+            else
+            {
+                textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
+                if (textureFormat == vk::Format::eUndefined)
+                {
+                    // If the format is undefined, fall back to a reasonable default
+                    textureFormat = vk::Format::eR8G8B8A8Unorm;
+                }
             }
         }
         else
@@ -214,10 +231,34 @@ namespace VanK
             VulkanRendererAPI::Get().RemoveTextureFromPool(m_TextureIndex);
             m_TextureIndex = UINT32_MAX;
         }
+        
+        // Remove ImGui descriptor set if it exists
+        if (s_ImGuiDescriptorSets.contains(this))
+        {
+            ImGui_ImplVulkan_RemoveTexture(s_ImGuiDescriptorSets[this]);
+            s_ImGuiDescriptorSets.erase(this);
+        }
     }
 
     ImTextureID VulkanTexture2D::getImTextureID()
     {
-        return 0;
+        // Return cached descriptor set if available
+        if (s_ImGuiDescriptorSets.contains(this))
+        {
+            return (ImTextureID)s_ImGuiDescriptorSets[this];
+        }
+
+        // Create a new descriptor set for ImGui
+        // We use the shared texture sampler from the RendererAPI
+        vk::Sampler sampler = *VulkanRendererAPI::Get().textureSampler;
+        
+        VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(
+            sampler, 
+            *textureImageView, 
+            static_cast<VkImageLayout>(vk::ImageLayout::eShaderReadOnlyOptimal)
+        );
+
+        s_ImGuiDescriptorSets[this] = ds;
+        return (ImTextureID)ds;
     }
 }

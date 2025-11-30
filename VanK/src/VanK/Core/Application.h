@@ -93,5 +93,5 @@ namespace VanK
         std::vector<std::unique_ptr<Layer>> m_LayerStack;
     };
     
-    extern Application* CreateApplication();
+    extern Application* CreateApplication(ApplicationCommandLineArgs args);
 }

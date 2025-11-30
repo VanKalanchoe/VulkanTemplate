@@ -14,7 +14,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
-
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -325,6 +324,7 @@ namespace VanK
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
         //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
 
+        texture = TextureImporter::LoadTexture2D("");
     }
     
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
