@@ -1461,7 +1461,7 @@ namespace  VanK
          * but only the texture is a set, the scene information is a push descriptor.
         -*/
         vk::DescriptorSet rawDescriptorSet = *descriptorSets[0];
-        if (rawDescriptorSet == VK_NULL_HANDLE)
+        if (!*descriptorSets[0] || rawDescriptorSet == VK_NULL_HANDLE)
         {
             std::cout << "Descriptor set raw handle is invalid!" << std::endl;
             return;
