@@ -1446,6 +1446,13 @@ namespace  VanK
 
     void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
     {
+        // Ensure the descriptor set exists and the first handle is valid
+        if (descriptorSets.empty())
+        {
+            std::cout << "Descriptor set array is empty!" << std::endl;
+            return;
+        }
+        
         //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
         // TextureSamplerBinding is empty check rendererapi strcut
         /*-- 
@@ -1454,6 +1461,11 @@ namespace  VanK
          * but only the texture is a set, the scene information is a push descriptor.
         -*/
         vk::DescriptorSet rawDescriptorSet = *descriptorSets[0];
+        if (rawDescriptorSet == VK_NULL_HANDLE)
+        {
+            std::cout << "Descriptor set raw handle is invalid!" << std::endl;
+            return;
+        }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
         {
             .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
@@ -1958,6 +1970,10 @@ namespace  VanK
             };
             descriptorSets = device.allocateDescriptorSets(allocInfo);
             DBG_VK_NAME(*descriptorSets.back());
+            if (!*descriptorSets[0])
+            {
+                std::cerr << "Descriptor set allocation failed! Handle is VK_NULL_HANDLE.\n";
+            }
         }
 
         // Second this is another set which will be pushed
@@ -1986,7 +2002,6 @@ namespace  VanK
 
     void VulkanRendererAPI::updateGraphicsDescriptorSet()
     {
-        std::cout << "descriptor " << descriptorSets.size() << std::endl;
         // Don't update descriptor set if there are no textures
         if (images.empty())
         {
@@ -2005,6 +2020,10 @@ namespace  VanK
             .maxLod = vk::LodClampNone,
         });
         DBG_VK_NAME(*sampler);
+        if (!*sampler) 
+        {
+            throw std::runtime_error("Sampler not valid, cannot update descriptor set");
+        }
     
         // Prepare imageInfos vector automatically sized to m_image's size
         std::vector<vk::DescriptorImageInfo> imageInfos;
