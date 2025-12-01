@@ -83,7 +83,7 @@ namespace  VanK
         createColorResources();
         createDepthResources();
         m_samplerPool.init(device);
-        createTexture();
+        /*createTexture();*/
         createTextureSampler();
         createDescriptorPool();
         createDescriptorSets();
@@ -1610,13 +1610,13 @@ namespace  VanK
             if (textureFormat == vk::Format::eUndefined)
             {
                 // If the format is undefined, fall back to a reasonable default
-                textureFormat = vk::Format::eR8G8B8A8Unorm;
+                textureFormat = vk::Format::eB8G8R8A8Srgb;
             }
         }
         else
         {
             // For KTX1 files or if we can't determine the format, use a reasonable default
-            textureFormat = vk::Format::eR8G8B8A8Unorm;
+            textureFormat = vk::Format::eB8G8R8A8Srgb;
         }
 
         textureImageFormat = textureFormat;
@@ -2037,7 +2037,7 @@ namespace  VanK
         {
             imageInfos.push_back({
                 .sampler = textureSampler, // currently the same sampler maybe add them indivual in the future
-                .imageView = textureImageView,
+                .imageView = images[i].view,
                 .imageLayout = images[i].layout,
             });
         }

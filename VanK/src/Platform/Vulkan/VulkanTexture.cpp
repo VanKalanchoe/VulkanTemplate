@@ -12,8 +12,8 @@ namespace VanK
     {
         switch (format)
         {
-            case ImageFormat::RGB8: return vk::Format::eR8G8B8Unorm;
-            case ImageFormat::RGBA8: return vk::Format::eR8G8B8A8Unorm;
+            case ImageFormat::RGB8: return vk::Format::eB8G8R8Srgb;
+            case ImageFormat::RGBA8: return vk::Format::eB8G8R8A8Srgb; //eR8G8B8A8Unorm
             default: return vk::Format::eUndefined;
         }
     }
@@ -29,13 +29,12 @@ namespace VanK
         
         // Determine the Vulkan format from KTX format
         vk::Format textureFormat;
-    
-        ktxTexture* kTexture = m_Specification.ktTexture;
+        ktxTexture2* ktx_texture = m_Specification.ktTexture;
     
         uint32_t texWidth = m_Specification.Width;
         uint32_t texHeight = m_Specification.Height;
     
-        if (!kTexture)
+        if (!ktx_texture)
         {
             // WHITE / fallback texture or something in a buffer like font rendering
             VK_CORE_WARN("ktTexture is null, creating default white texture");
@@ -117,33 +116,26 @@ namespace VanK
         utils::Buffer stagingBuffer = VulkanRendererAPI::Get().GetAllocator().createStagingBuffer(std::span(data.Data, data.Size));
     
         // Check if the KTX texture has a format
-        if (kTexture->classId == ktxTexture2_c)
+        if (ktx_texture->classId == ktxTexture2_c)
         {
-            // For KTX2 files, we can get the format directly
-            auto* ktx2 = reinterpret_cast<ktxTexture2*>(kTexture);
-            if (ktxTexture2_NeedsTranscoding(ktx2))
-            {
-                std::cout << "This KTX2 is BASIS compressed and needs transcoding!" << std::endl;
-            }
-                
-            textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
+            textureFormat = static_cast<vk::Format>(specification.ktTexture->vkFormat);
             if (textureFormat == vk::Format::eUndefined)
             {
                 // If the format is undefined, fall back to a reasonable default
-                textureFormat = vk::Format::eR8G8B8A8Unorm; // srgb ?
+                textureFormat = vk::Format::eB8G8R8A8Srgb; // srgb ?
             }
         }
         else
         {
             // For KTX1 files or if we can't determine the format, use a reasonable default
-            textureFormat = vk::Format::eR8G8B8A8Unorm;
+            textureFormat = vk::Format::eB8G8R8A8Srgb;
         }
     
         textureImageFormat = textureFormat;
     
-        if (kTexture->numLevels > 1)
+        if (ktx_texture->numLevels > 1)
         {
-            mipLevels = kTexture->numLevels;
+            mipLevels = ktx_texture->numLevels;
             // Create the texture image
             VulkanRendererAPI::Get().createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
                         vk::ImageTiling::eOptimal,
@@ -161,7 +153,7 @@ namespace VanK
             for (uint32_t i = 0; i < mipLevels; i++)
             {
                 ktx_size_t offset;
-                KTX_error_code result = ktxTexture_GetImageOffset(kTexture, i, 0, 0, &offset);
+                KTX_error_code result = ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, i, 0, 0, &offset);
                 uint32_t mipWidth = std::max(1u, texWidth >> i);
                 uint32_t mipHeight = std::max(1u, texHeight >> i);
             
@@ -193,7 +185,7 @@ namespace VanK
             VulkanRendererAPI::Get().generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
         }
 
-        textureImageView = VulkanRendererAPI::Get().createImageView(textureImage, textureImageFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
+        textureImageView = VulkanRendererAPI::Get().createImageView(textureImage, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
         DBG_VK_NAME(*textureImageView);
         
         utils::ImageResource resource{};
@@ -210,7 +202,7 @@ namespace VanK
         VulkanRendererAPI::Get().GetAllocator().freeStagingBuffers();
     
         // Cleanup KTX resources
-        ktxTexture_Destroy(kTexture);
+        ktxTexture_Destroy((ktxTexture*)ktx_texture);
     }
 
     VulkanTexture2D::~VulkanTexture2D()

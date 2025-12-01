@@ -22,7 +22,7 @@ namespace VanK
         uint32_t Width = 1;
         uint32_t Height = 1;
         ImageFormat Format = ImageFormat::None;
-        ktxTexture* ktTexture = nullptr;
+        ktxTexture2* ktTexture = nullptr;
         bool GenerateMips = true;
     };
     

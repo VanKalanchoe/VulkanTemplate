@@ -31,48 +31,42 @@ namespace VanK
         
         if (!path[0].string().empty())
         {
-            ktxTexture* kTexture = nullptr;
+            ktxTexture2* ktx_texture = nullptr;
             
-            KTX_error_code result = ktxTexture_CreateFromNamedFile
+            KTX_error_code result = ktxTexture2_CreateFromNamedFile
             (
               path[0].string().c_str(),
               KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
-              &kTexture
+              &ktx_texture
             );
             
             if (result != KTX_SUCCESS) 
-                throw std::runtime_error("failed to load ktx texture image!");
+                throw std::runtime_error("Could not load the requested image file.");
+            
+            if (ktxTexture2_NeedsTranscoding(ktx_texture))
+            {
+                // target format currently uncompressed check here what actual fmt format to use with that function https://docs.vulkan.org/samples/latest/samples/performance/texture_compression_basisu/README.html
+                result = ktxTexture2_TranscodeBasis(ktx_texture, KTX_TTF_RGBA32, 0);
+                if (result != KTX_SUCCESS)
+                {
+                    throw std::runtime_error("Could not transcode the input texture to the selected target format.");
+                }
+            }
             
             // --- Dimensions ---
-            uint32_t texWidth = kTexture->baseWidth;
-            uint32_t texHeight = kTexture->baseHeight;
+            uint32_t texWidth = ktx_texture->baseWidth;
+            uint32_t texHeight = ktx_texture->baseHeight;
             
             // --- Full data ---
-            ktx_size_t imageSize = ktxTexture_GetDataSize(kTexture); // total size of all mip levels
-            ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
-            
-            // --- Determine pixel format ---
-            ImageFormat fmt = ImageFormat::RGBA8; // fallback
+            ktx_size_t imageSize = ktx_texture->dataSize; // total size of all mip levels
+            ktx_uint8_t* ktxTextureData = ktx_texture->pData;
             
             // Always set ktTexture regardless of KTX version
-            spec.ktTexture = kTexture;
-            
-            // Check if the KTX texture has a format
-            if (kTexture->classId == ktxTexture2_c)
-            {
-                // KTX2 specific handling if needed
-            }
-            else
-            {
-                // For KTX1 files or if we can't determine the format, use a reasonable default
-                // For KTX1 files, use a reasonable default
-                fmt = ImageFormat::RGBA8;
-            }
+            spec.ktTexture = ktx_texture;
             
             // Set spec fields
             spec.Width = texWidth;
             spec.Height = texHeight;
-            spec.Format = fmt;
             
             // Allocate buffer of exact size
             Buffer data(imageSize);

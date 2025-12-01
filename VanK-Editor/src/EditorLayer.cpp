@@ -269,8 +269,8 @@ namespace VanK
             ImGui::EndMenuBar();
         }
 
-        /*m_SceneHierarchyPanel.OnImGuiRender();
-        m_ContentBrowserPanel->OnImGuiRender();*/
+        m_SceneHierarchyPanel.OnImGuiRender();
+        m_ContentBrowserPanel->OnImGuiRender();
         
         // "Right" Window
         ImGui::Begin("Stats");
