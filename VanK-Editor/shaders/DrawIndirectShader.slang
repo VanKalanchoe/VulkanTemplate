@@ -15,16 +15,16 @@ void compMain(uint3 GlobalInvocationID : SV_DispatchThreadID)
     // only one thread (index 0) fills the indirect command
     if (index == 0)
     {
-        DrawIndexedIndirectCommand* indirect = (DrawIndexedIndirectCommand*)ubo.indirectBuffer;
+        DrawIndexedIndirectCommand* indirect = (DrawIndexedIndirectCommand*)ubo.indirectAddress;
 
-        indirect[0].indexCount    = ubo.numindic;   // total number of indices
+        indirect[0].indexCount    = ubo.numIndicies;   // total number of indices
         indirect[0].instanceCount = 1;              // number of instances
         indirect[0].firstIndex    = 0;              // start of index buffer
         indirect[0].vertexOffset  = 0;              // offset added to vertex indices
         indirect[0].firstInstance = 0;              // first instance ID
 
         // optionally, write draw count
-        uint* count = (uint*)ubo.countBuffer;
+        uint* count = (uint*)ubo.countAddress;
         count[0] = 1; // one draw command
     }
 }

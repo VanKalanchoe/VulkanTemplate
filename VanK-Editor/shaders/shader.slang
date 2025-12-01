@@ -10,6 +10,7 @@ struct VertexOutput
 {
     float4 pos : SV_Position;
     float2 fragTexCoord : TEXCOORD1;
+    uint32_t textureIndex : TEXCOORD2;
 };
 
 // Define the final output of the fragment shader
@@ -40,7 +41,8 @@ const bool useTexture = false; // Controls whether texture sampling is enabled
 
 // Note: [shader("vertex")] is Slang's way of marking the vertex shader entry point
 [shader("vertex")]
-VertexOutput vertexMain(uint vertexID : SV_VertexID) {
+VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) 
+{
     VertexOutput output;
 
      float4x4 model = float4x4(
@@ -50,11 +52,15 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID) {
         0,0,0,1
     );
  
-    InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertbuffer;
+    InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertexAddress;
     InstancedVertexData vertexData = vertex[vertexID];
 
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(model, float4(vertexData.position, 1.0))));
+    InstancedStorageData* storage = (InstancedStorageData*)ubo.storageAddress;
+    InstancedStorageData storageData = storage[instanceID];
+
+    output.pos = mul(ubo.proj, mul(ubo.view, mul(storageData.Model, float4(vertexData.position, 1.0))));
     output.fragTexCoord = vertexData.texcoords.xy;
+    output.textureIndex = storageData.albedoMap;
 
     return output;
 }
@@ -69,7 +75,7 @@ PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0
 {
     PixelOutput output;
 
-    output.Color = texture[0].Sample(input.fragTexCoord);
+    output.Color = texture[input.textureIndex].Sample(input.fragTexCoord);
 
    return output;
 }

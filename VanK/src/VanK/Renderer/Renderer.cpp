@@ -29,11 +29,11 @@ namespace VanK
             alignas(16) glm::mat4 view;
             alignas(16) glm::mat4 proj;
             uint64_t vertexAddress;
-            uint64_t indexAddress;
             uint64_t indirectAddress;
             uint64_t countAddress;
+            uint64_t storageAddress;
             uint32_t numVertices;
-            uint32_t numindicies;
+            uint32_t numIndicies;
         };
         CameraData camData;
     };
@@ -317,14 +317,20 @@ namespace VanK
 
         size_t countBufferSize = sizeof(uint32_t);
         countBuffer.reset(IndirectBuffer::Create(countBufferSize));
+        
+        //needs to be dynamic because it can change per mesh even if they are the same 
+        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData);
+        m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
 
-        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + countBufferSize;
+        //maybe for storagebuffer it has to be seprate idk how resizing works will see
+        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + countBufferSize + storageBufferSize;
         m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         // 4            4        156         152                   152
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
         //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
 
         texture = TextureImporter::LoadTexture2D("");
+        vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
     }
     
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
@@ -381,8 +387,15 @@ namespace VanK
         if (windowMinimized)
             return;
         
+        std::vector<shaderio::InstancedStorageData> storageData;
+        shaderio::InstancedStorageData data;
+        data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+        data.albedoMap = vikingRoom->GetTextureIndex();
+        storageData.push_back(data);
+        
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, vertices, shaderio::InstancedVertexData, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, indices, uint32_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, storageData, shaderio::InstancedStorageData, 0);
 
         /*std::vector<VanKDrawIndexedIndirectCommand> drawCommands(1);
 
@@ -408,7 +421,7 @@ namespace VanK
             fps = frameCount / elapsed;
             frameCount = 0;
             lastTime = now;
-            std::cout << "FPS: " << fps << std::endl;
+            /*std::cout << "FPS: " << fps << std::endl;*/
         }
         if (s_IsPipelineReloadFinished.exchange(false))
         {
@@ -532,7 +545,7 @@ namespace VanK
         lastFrameTime = currentTime;
 
         // Camera and projection matrices (shared by all objects)
-        glm::mat4 view = glm::lookAt(glm::vec3(2.0f, 2.0f, 6.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 1.0f, -3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         glm::mat4 proj = glm::perspective(glm::radians(45.0f),
                                           static_cast<float>(m_ViewportSize.width) / static_cast<float>(m_ViewportSize.
                                               height), 0.1f, 20.0f);
@@ -541,11 +554,11 @@ namespace VanK
         s_Data.camData.view = view;
         s_Data.camData.proj = proj;
         s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
-        s_Data.camData.indexAddress = m_InstancedIndexBuffer->GetBufferAddress();
         s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
         s_Data.camData.countAddress = countBuffer->GetBufferAddress();
+        s_Data.camData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
         s_Data.camData.numVertices = static_cast<uint32_t>(vertices.size());
-        s_Data.camData.numindicies = static_cast<uint32_t>(indices.size());
+        s_Data.camData.numIndicies = static_cast<uint32_t>(indices.size());
         uniformScene->Update(cmd, &s_Data.camData, sizeof(s_Data.camData));
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);

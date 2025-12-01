@@ -94,8 +94,8 @@ namespace VanK
             
             lastViewportExtent.x = m_ViewportSize.x;
             lastViewportExtent.y = m_ViewportSize.y;
-
-            RenderCommand::setViewportSize({m_ViewportSize.x, m_ViewportSize.y});
+            
+            Renderer::SetViewportSize({m_ViewportSize.x, m_ViewportSize.y});
             m_CameraController.OnResize(m_ViewportSize.x, m_ViewportSize.y);
             m_EditorCamera.SetViewportSize(m_ViewportSize.x, m_ViewportSize.y);
         }

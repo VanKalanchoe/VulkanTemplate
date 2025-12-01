@@ -25,12 +25,12 @@ struct UniformBuffer
 {
     mat4 view;
     mat4 proj;
-    uint64_t vertbuffer;
-    uint64_t indebuffer;
-    uint64_t indirectBuffer;
-    uint64_t countBuffer;
-    uint32_t numvert;
-    uint32_t numindic;
+    uint64_t vertexAddress;
+    uint64_t indirectAddress;
+    uint64_t countAddress;
+    uint64_t storageAddress;
+    uint32_t numVertices;
+    uint32_t numIndicies;
 };
 
 struct InstancedIndexData

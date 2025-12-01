@@ -24,6 +24,7 @@ namespace VanK
         ImageFormat Format = ImageFormat::None;
         ktxTexture2* ktTexture = nullptr;
         bool GenerateMips = true;
+        bool FlipTexture = false;
     };
     
     class Texture : public Asset

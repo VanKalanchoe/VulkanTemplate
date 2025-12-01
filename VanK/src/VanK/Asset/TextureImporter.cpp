@@ -6,6 +6,36 @@
 
 namespace VanK
 {
+    void flipKtxTexture2(ktxTexture2* tex)
+    {
+        const uint32_t mipCount = tex->numLevels;
+        const uint32_t channels = 4; // because we transcode to RGBA32
+
+        for (uint32_t level = 0; level < mipCount; level++)
+        {
+            ktx_size_t offset;
+            ktxTexture_GetImageOffset(ktxTexture(tex), level, 0, 0, &offset);
+
+            uint32_t w = std::max(1u, tex->baseWidth  >> level);
+            uint32_t h = std::max(1u, tex->baseHeight >> level);
+
+            uint8_t* mipData = tex->pData + offset;
+
+            uint32_t rowSize = w * channels;
+            std::vector<uint8_t> row(rowSize);
+
+            for (uint32_t y = 0; y < h / 2; y++)
+            {
+                uint8_t* top = mipData + y * rowSize;
+                uint8_t* bottom = mipData + (h - 1 - y) * rowSize;
+
+                memcpy(row.data(), top, rowSize);
+                memcpy(top, bottom, rowSize);
+                memcpy(bottom, row.data(), rowSize);
+            }
+        }
+    }
+    
     Ref<Texture2D> TextureImporter::ImportTexture2D(AssetHandle handle, const AssetMetadata& metadata)
     {
         return LoadTexture2D(Project::GetActiveAssetDirectory() / metadata.FilePath);
@@ -18,6 +48,7 @@ namespace VanK
         spec.Height = 1;
         spec.Format = ImageFormat::RGBA8;
         spec.GenerateMips = true;
+        spec.FlipTexture = false;
         
         std::vector<std::filesystem::path> paths;
         paths.push_back(path);
@@ -53,6 +84,10 @@ namespace VanK
                 }
             }
             
+            // ---- FLIP VERTICALLY HERE ---- only works with uncompressed not all need it
+            if (spec.FlipTexture)
+                flipKtxTexture2(ktx_texture);
+            
             // --- Dimensions ---
             uint32_t texWidth = ktx_texture->baseWidth;
             uint32_t texHeight = ktx_texture->baseHeight;
@@ -61,10 +96,8 @@ namespace VanK
             ktx_size_t imageSize = ktx_texture->dataSize; // total size of all mip levels
             ktx_uint8_t* ktxTextureData = ktx_texture->pData;
             
-            // Always set ktTexture regardless of KTX version
-            spec.ktTexture = ktx_texture;
-            
             // Set spec fields
+            spec.ktTexture = ktx_texture;
             spec.Width = texWidth;
             spec.Height = texHeight;
             
