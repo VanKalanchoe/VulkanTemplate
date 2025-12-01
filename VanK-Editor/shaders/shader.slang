@@ -45,13 +45,6 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 {
     VertexOutput output;
 
-     float4x4 model = float4x4(
-        1,0,0,0,
-        0,1,0,0,
-        0,0,1,0,
-        0,0,0,1
-    );
- 
     InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertexAddress;
     InstancedVertexData vertexData = vertex[vertexID];
 
