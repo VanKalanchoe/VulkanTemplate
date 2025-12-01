@@ -124,23 +124,13 @@ namespace VanK
             if (ktxTexture2_NeedsTranscoding(ktx2))
             {
                 std::cout << "This KTX2 is BASIS compressed and needs transcoding!" << std::endl;
-                // Choose your GPU format
-                textureFormat = vk::Format::eR8G8B8A8Unorm;
-
-                KTX_error_code ec = ktxTexture2_TranscodeBasis(
-                    ktx2,
-                    KTX_TTF_RGBA32,      // matches eR8G8B8A8
-                    0
-                );
             }
-            else
+                
+            textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
+            if (textureFormat == vk::Format::eUndefined)
             {
-                textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
-                if (textureFormat == vk::Format::eUndefined)
-                {
-                    // If the format is undefined, fall back to a reasonable default
-                    textureFormat = vk::Format::eR8G8B8A8Unorm;
-                }
+                // If the format is undefined, fall back to a reasonable default
+                textureFormat = vk::Format::eR8G8B8A8Unorm; // srgb ?
             }
         }
         else
