@@ -19,7 +19,6 @@ find_package (Vulkan REQUIRED)
 find_package (tinyobjloader REQUIRED)
 find_package (tinygltf REQUIRED)
 find_package (KTX REQUIRED)
-find_package (VulkanMemoryAllocator CONFIG REQUIRED)
 find_package (xxhash REQUIRED)
 find_package (spdlog CONFIG REQUIRED)
 find_package (yaml-cpp CONFIG REQUIRED)
@@ -127,9 +126,10 @@ function(add_chapter CHAPTER_NAME)
     "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/src/*.h"
     "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/src/*.hpp"
     "${CMAKE_SOURCE_DIR}/VanK-Editor/shaders/shaderIO.h"
-)
+    )
 
-    target_include_directories(${CHAPTER_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/VanK/src ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/FileWatch ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/Entt/include "${CMAKE_SOURCE_DIR}/VanK-Editor/shaders")
+    target_include_directories(${CHAPTER_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/VanK/src ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/FileWatch ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/Entt/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/VulkanMemoryAllocator/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/include "${CMAKE_SOURCE_DIR}/VanK-Editor/shaders")
+message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAllocator-Hpp/include")
 
     set_target_properties(${CHAPTER_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}
@@ -188,5 +188,5 @@ add_chapter(
     SHADER shaderIO.h shader.slang DrawIndirectShader.slang
     MODELS viking_room.obj viking_room.glb
     TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg ../textures/viking_room2.ktx2 
-    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui GPUOpen::VulkanMemoryAllocator spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d
+    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d
 )

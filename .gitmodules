@@ -5,3 +5,6 @@
 [submodule "VanK/vendor/msdf-atlas-gen"]
 	path = VanK/vendor/msdf-atlas-gen
 	url = https://github.com/Chlumsky/msdf-atlas-gen.git
+[submodule "VanK/vendor/VulkanMemoryAllocator-Hpp"]
+	path = VanK/vendor/VulkanMemoryAllocator-Hpp
+	url = https://github.com/YaaZ/VulkanMemoryAllocator-Hpp.git

@@ -6,6 +6,7 @@
 -*/
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.hpp"
 #define VMA_LEAK_LOG_FORMAT(format, ...)                                                                               \
 {                                                                                                                    \
 printf((format), __VA_ARGS__);                                                                                     \
@@ -1789,7 +1790,7 @@ namespace  VanK
             .addressModeU = vk::SamplerAddressMode::eRepeat,
             .addressModeV = vk::SamplerAddressMode::eRepeat,
             .addressModeW = vk::SamplerAddressMode::eRepeat,
-            .mipLodBias = 0.0f,
+            .mipLodBias = 0.0f, // only works if it has enoug miplevels is miplevel is max 1 then making this 10 crashes
             .anisotropyEnable = vk::True,
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
             .compareEnable = vk::False,
