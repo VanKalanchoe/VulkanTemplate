@@ -25,11 +25,11 @@ namespace VanK
         // ui toolbar disabled beider panels.onimguirender disabled renderer drawframe submit rendering zu endsubmit gezogen
         // pngs zu ktx konvertien mit meinem python program // enable all pngs back fix texture class something still messed
         //create texture still running inside vulanrendererapi
-        m_IconPlay = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/PlayButton.ktx2");
-        m_IconStop = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StopButton.ktx2");
-        m_IconPause = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/PauseButton.ktx2");
-        m_IconSimulate = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/SimulateButton.ktx2");
-        m_IconStep = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StepButton.ktx2");
+        m_IconPlay = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/PlayButton.ktx2", {.GenerateMips = false});
+        m_IconStop = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StopButton.ktx2", { .GenerateMips = false });
+        m_IconPause = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/PauseButton.ktx2", { .GenerateMips = false });
+        m_IconSimulate = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/SimulateButton.ktx2", { .GenerateMips = false });
+        m_IconStep = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StepButton.ktx2", { .GenerateMips = false });
         
         m_EditorScene = CreateRef<Scene>();
         m_ActiveScene = m_EditorScene;

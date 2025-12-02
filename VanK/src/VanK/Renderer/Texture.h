@@ -21,10 +21,11 @@ namespace VanK
     {
         uint32_t Width = 1;
         uint32_t Height = 1;
-        ImageFormat Format = ImageFormat::None;
-        ktxTexture2* ktTexture = nullptr;
+        ImageFormat Format = ImageFormat::RGBA8;
         bool GenerateMips = true;
         bool FlipTexture = false;
+        
+        ktxTexture2* ktTexture = nullptr;
     };
     
     class Texture : public Asset

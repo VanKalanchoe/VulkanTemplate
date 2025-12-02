@@ -135,7 +135,11 @@ namespace VanK
     
         if (ktx_texture->numLevels > 1)
         {
-            mipLevels = ktx_texture->numLevels;
+            if (m_Specification.GenerateMips)
+                mipLevels = ktx_texture->numLevels;
+            else
+                mipLevels = 1;
+            
             // Create the texture image
             VulkanRendererAPI::Get().createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
                         vk::ImageTiling::eOptimal,
@@ -149,6 +153,7 @@ namespace VanK
             VulkanRendererAPI::Get().transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
 
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = VulkanRendererAPI::Get().beginSingleTimeCommands();
+            
             // Copy each mip level
             for (uint32_t i = 0; i < mipLevels; i++)
             {
@@ -159,6 +164,7 @@ namespace VanK
             
                 VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer,textureImage, static_cast<uint32_t>(mipWidth), static_cast<uint32_t>(mipHeight), offset, i);
             }
+            
             VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
     
             VulkanRendererAPI::Get().transitionImageLayout(textureImage, vk::ImageLayout::eTransferDstOptimal,
@@ -167,7 +173,11 @@ namespace VanK
         else
         {
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = VulkanRendererAPI::Get().beginSingleTimeCommands();
-            mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+            if (m_Specification.GenerateMips)
+                mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+            else
+                mipLevels = 1;
+            
             // Create the texture image
             VulkanRendererAPI::Get().createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
                         vk::ImageTiling::eOptimal,
@@ -181,8 +191,11 @@ namespace VanK
             VulkanRendererAPI::Get().transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
         
             VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+            
             VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
-            VulkanRendererAPI::Get().generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
+            
+            if (mipLevels > 1 && m_Specification.GenerateMips)
+                VulkanRendererAPI::Get().generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
         }
 
         textureImageView = VulkanRendererAPI::Get().createImageView(textureImage, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);

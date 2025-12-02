@@ -36,7 +36,7 @@ namespace VanK {
         if (assetPath.extension() != ".png" && assetPath.extension() != ".jpg" && assetPath.extension() != ".jpeg")
             return nullptr;
 
-        Ref<Texture2D> texture = TextureImporter::LoadTexture2D(absolutePath);
+        Ref<Texture2D> texture = TextureImporter::LoadTexture2D(absolutePath, { .GenerateMips = false });
         if (!texture)
             return nullptr;
 

@@ -12,8 +12,8 @@ namespace VanK
 	{
 		m_TreeNodes.push_back(TreeNode(".", 0));
  	
-		m_DirectoryIcon = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/DirectoryIcon.ktx2");
-		m_FileIcon = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/FileIcon.ktx2");
+		m_DirectoryIcon = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/DirectoryIcon.ktx2", { .GenerateMips = false });
+		m_FileIcon = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/FileIcon.ktx2", { .GenerateMips = false });
 
  		RefreshAssetTree();
 

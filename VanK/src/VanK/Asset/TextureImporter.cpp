@@ -41,17 +41,9 @@ namespace VanK
         return LoadTexture2D(Project::GetActiveAssetDirectory() / metadata.FilePath);
     }
 
-    Ref<Texture2D> TextureImporter::LoadTexture2D(const std::filesystem::path& path)
+    Ref<Texture2D> TextureImporter::LoadTexture2D(const std::filesystem::path& path, const TextureSpecification& spec)
     {
-        TextureSpecification spec;
-        spec.Width = 1;
-        spec.Height = 1;
-        spec.Format = ImageFormat::RGBA8;
-        spec.GenerateMips = true;
-        spec.FlipTexture = false;
-        
-        std::vector<std::filesystem::path> paths;
-        paths.push_back(path);
+        std::vector<std::filesystem::path> paths{ path };
         
         return LoadTexture2D(paths, spec);
     }
