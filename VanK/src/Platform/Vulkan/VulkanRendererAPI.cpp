@@ -1140,8 +1140,24 @@ namespace  VanK
         );
     
         // First pass: render scene into MSAA color with resolve to single-sample sceneImage
-        vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);
-        vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);
+        // Use the caller-provided clear color
+        vk::ClearColorValue clearColor = vk::ClearColorValue
+        (
+            color_target_info[0].clearColor.f[0],
+            color_target_info[0].clearColor.f[1],
+            color_target_info[0].clearColor.f[2],
+            color_target_info[0].clearColor.f[3]
+        );
+        /*vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);*/
+        // Use the caller-provided clear color
+        vk::ClearColorValue clearDepth = vk::ClearColorValue
+        (
+            depth_stencil_target_info.clearColor.f[0],
+            depth_stencil_target_info.clearColor.f[1],
+            depth_stencil_target_info.clearColor.f[2],
+            depth_stencil_target_info.clearColor.f[3]
+        );
+        /*vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);*/
 
         // Color attachment (multisampled) with resolve attachment
         vk::RenderingAttachmentInfo colorAttachment =
