@@ -452,8 +452,8 @@ namespace VanK
 
     void Scene::RenderScene(EditorCamera& camera)
     {
-        /*Renderer::BeginScene(camera);
-
+        Renderer::BeginScene(camera);
+        /*
         // Draw Sprites
         {
             auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);

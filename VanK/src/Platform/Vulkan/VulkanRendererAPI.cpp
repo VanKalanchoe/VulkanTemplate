@@ -200,6 +200,7 @@ namespace  VanK
         createEntityColorResources();
         sceneImageInitialized = false;
         entityImageInitialized = false;
+        entityColorImageInitialized = false;
 
         // Recreate the ImGui texture to point to the new sceneImageView
         if (!uiDescriptorSet.empty() && uiDescriptorSet[0] != nullptr)
@@ -396,7 +397,7 @@ namespace  VanK
         >
         featureChain =
         {
-            {.features = {.sampleRateShading = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true, .shaderInt64 = true}}, // vk::PhysicalDeviceFeatures2
+            {.features = {.independentBlend = true, .sampleRateShading = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true, .shaderInt64 = true}}, // vk::PhysicalDeviceFeatures2
             {.shaderDrawParameters = true},
             {
                 .drawIndirectCount = true,
@@ -1060,7 +1061,7 @@ namespace  VanK
     (
         *cmd,
         *entityImage,
-        vk::ImageLayout::eColorAttachmentOptimal,
+        entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
         vk::ImageLayout::eTransferSrcOptimal,
         vk::AccessFlagBits2::eColorAttachmentWrite,
         vk::AccessFlagBits2::eTransferRead,
@@ -1242,31 +1243,31 @@ namespace  VanK
         );
         
         utils::transition_image_layout
-        (
-            Unwrap(cmd),
-            *entityImage,
-            entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            entityImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
-            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-            entityImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
+    (
+        Unwrap(cmd),
+        *entityImage,
+        entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        entityImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
+        vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+        entityImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::ImageAspectFlagBits::eColor
+    );
         
         // Transition the MSAA entity color image to COLOR_ATTACHMENT_OPTIMAL
         utils::transition_image_layout
-        (
-            Unwrap(cmd),
-            *entityColorImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            {},
-            vk::AccessFlagBits2::eColorAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
+    (
+        Unwrap(cmd),
+        *entityColorImage,
+        entityColorImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        entityColorImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
+        vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+        entityColorImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::ImageAspectFlagBits::eColor
+    );
     
         // First pass: render scene into MSAA color with resolve to single-sample sceneImage
         // Use the caller-provided clear color
@@ -1490,6 +1491,8 @@ namespace  VanK
             sceneImageInitialized = true;
             
             entityImageInitialized = true;
+            
+            entityColorImageInitialized = true;
 
             // Second pass: draw ImGui to swapchain image
             vk::RenderingAttachmentInfo swapColorAttachment =

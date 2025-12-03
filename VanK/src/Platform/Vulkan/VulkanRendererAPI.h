@@ -1052,6 +1052,7 @@ namespace VanK
         bool vSync = false;
         bool sceneImageInitialized = false;
         bool entityImageInitialized = false;
+        bool entityColorImageInitialized = false; 
         utils::Buffer entityReadbackBuffer;
         bool imguiVulkanInitialized = false;
         VanKRenderOption m_renderOption = {};
