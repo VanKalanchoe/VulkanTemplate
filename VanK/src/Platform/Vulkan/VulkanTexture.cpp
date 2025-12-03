@@ -87,18 +87,16 @@ namespace VanK
             
             local.image = instance.GetAllocator().createImage(imageInfo).image;
             DBG_VK_NAME(*local.image);
-            //maybe move transitionimagelayout and singletimecommands into utils class ?
-            VulkanRendererAPI::Get().transitionImageLayout(local.image,
-            vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
-        
-            auto commandBuffer = VulkanRendererAPI::Get().beginSingleTimeCommands();
+            
+            auto commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
+            
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
         
             VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, texWidth, texHeight);
         
-            VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
-        
-            VulkanRendererAPI::Get().transitionImageLayout(local.image,
-            vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
+            
+            utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
             
             // Create the texture view maybe make info here like createimage ?
             local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
@@ -159,11 +157,12 @@ namespace VanK
             
             local.image = instance.GetAllocator().createImage(imageInfo).image;
             DBG_VK_NAME(*local.image);
-
+            
             // Copy data from staging buffer to texture image
-            VulkanRendererAPI::Get().transitionImageLayout(local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
-
-            std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = VulkanRendererAPI::Get().beginSingleTimeCommands();
+            
+            std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
+            
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
             
             // Copy each mip level
             for (uint32_t i = 0; i < mipLevels; i++)
@@ -176,14 +175,12 @@ namespace VanK
                 VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer,local.image, mipWidth, mipHeight, offset, i);
             }
             
-            VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
-    
-            VulkanRendererAPI::Get().transitionImageLayout(local.image, vk::ImageLayout::eTransferDstOptimal,
-                                  vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
+            
+            utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
         }
         else
         {
-            std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = VulkanRendererAPI::Get().beginSingleTimeCommands();
             if (m_Specification.GenerateMips)
                 mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
             else
@@ -202,16 +199,19 @@ namespace VanK
             local.image = instance.GetAllocator().createImage(imageInfo).image;
             DBG_VK_NAME(*local.image);
             
+            std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
+            
             // Copy data from staging buffer to texture image
-            VulkanRendererAPI::Get().transitionImageLayout(local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
         
             VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
             
-            VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
+            utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
             
             if (mipLevels > 1 && m_Specification.GenerateMips)
                 VulkanRendererAPI::Get().generateMipmaps(local.image, textureFormat, texWidth, texHeight, mipLevels);
         }
+        
         // Create the texture view maybe make info here like createimage ?
         local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
         if (local.view == VK_NULL_HANDLE)

@@ -70,7 +70,7 @@ const std::string TEXTURE_PATH = "../build/VanK/textures/viking_room.ktx2";
 // Define the number of objects to render
 constexpr int MAX_OBJECTS = 3;
 
-const std::vector validationLayers =
+const std::vector<char const*> validationLayers =
 {
     "VK_LAYER_KHRONOS_validation"
 };
@@ -204,6 +204,33 @@ namespace VanK
                 }
             }
         };
+        
+        static std::unique_ptr<vk::raii::CommandBuffer> beginSingleTimeCommands(const vk::raii::Device& device, const vk::CommandPool& commandPool)
+        {
+            vk::CommandBufferAllocateInfo allocInfo{
+                .commandPool = commandPool,
+                .level = vk::CommandBufferLevel::ePrimary,
+                .commandBufferCount = 1
+            };
+            std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = std::make_unique<vk::raii::CommandBuffer>(
+                std::move(vk::raii::CommandBuffers(device, allocInfo).front()));
+
+            vk::CommandBufferBeginInfo beginInfo{
+                .flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit
+            };
+            commandBuffer->begin(beginInfo);
+
+            return commandBuffer;
+        }
+
+        static void endSingleTimeCommands(const vk::raii::CommandBuffer& commandBuffer, const vk::raii::Queue& queue)
+        {
+            commandBuffer.end();
+
+            vk::SubmitInfo submitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandBuffer};
+            queue.submit(submitInfo, nullptr);
+            queue.waitIdle();
+        }
 
         /*-- 
          * Return the barrier with the most common pair of stage and access flags for a given layout 
@@ -239,25 +266,79 @@ namespace VanK
          * A helper function to transition an image from one layout to another.
          * In the pipeline, the image must be in the correct layout to be used, and this function is used to transition the image to the correct layout.
         -*/
-        static void cmdTransitionImageLayout
+        
+        static void transitionImageLayout(const vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image &image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels)
+        {
+            vk::ImageMemoryBarrier barrier{
+                .oldLayout = oldLayout, .newLayout = newLayout,
+                .image = image,
+                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, 1}
+            };
+
+            vk::PipelineStageFlags sourceStage;
+            vk::PipelineStageFlags destinationStage;
+
+            if (oldLayout == vk::ImageLayout::eUndefined && newLayout == vk::ImageLayout::eTransferDstOptimal)
+            {
+                barrier.srcAccessMask = {};
+                barrier.dstAccessMask = vk::AccessFlagBits::eTransferWrite;
+
+                sourceStage = vk::PipelineStageFlagBits::eTopOfPipe;
+                destinationStage = vk::PipelineStageFlagBits::eTransfer;
+            }
+            else if (oldLayout == vk::ImageLayout::eTransferDstOptimal && newLayout ==
+                vk::ImageLayout::eShaderReadOnlyOptimal)
+            {
+                barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
+                barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
+                sourceStage = vk::PipelineStageFlagBits::eTransfer;
+                destinationStage = vk::PipelineStageFlagBits::eFragmentShader;
+            }
+            else
+            {
+                throw std::invalid_argument("unsupported layout transition!");
+            }
+            commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, nullptr, barrier);
+        }
+        
+        static void transition_image_layout
         (
-            vk::raii::CommandBuffer& cmd,
+            const vk::raii::CommandBuffer& commandBuffer,
             vk::Image image,
-            vk::ImageLayout oldLayout,
-            vk::ImageLayout newLayout,
-            vk::ImageAspectFlags aspectMask = vk::ImageAspectFlagBits::eColor,
-            uint32_t baseArrayLayer = 0,
-            uint32_t layercount = 1
+            vk::ImageLayout old_layout,
+            vk::ImageLayout new_layout,
+            vk::AccessFlags2 src_access_mask,
+            vk::AccessFlags2 dst_access_mask,
+            vk::PipelineStageFlags2 src_stage_mask,
+            vk::PipelineStageFlags2 dst_stage_mask,
+            vk::ImageAspectFlags aspect_mask
         )
         {
-            const vk::ImageMemoryBarrier2 barrier = createImageMemoryBarrier(image, oldLayout, newLayout,
-                                                                           {aspectMask, 0, 1, baseArrayLayer, layercount});
-            const vk::DependencyInfo depInfo
-            {
+            vk::ImageMemoryBarrier2 barrier = {
+                .srcStageMask = src_stage_mask,
+                .srcAccessMask = src_access_mask,
+                .dstStageMask = dst_stage_mask,
+                .dstAccessMask = dst_access_mask,
+                .oldLayout = old_layout,
+                .newLayout = new_layout,
+                .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+                .image = image,
+                .subresourceRange = {
+                    .aspectMask = aspect_mask,
+                    .baseMipLevel = 0,
+                    .levelCount = 1,
+                    .baseArrayLayer = 0,
+                    .layerCount = 1
+                }
+            };
+            vk::DependencyInfo dependency_info = {
+                .dependencyFlags = {},
                 .imageMemoryBarrierCount = 1,
                 .pImageMemoryBarriers = &barrier
             };
-            cmd.pipelineBarrier2(depInfo);
+            commandBuffer.pipelineBarrier2(dependency_info);
         }
 
         /*-- 
@@ -827,6 +908,8 @@ namespace VanK
         void setFramebufferResized(bool resized) { framebufferResized = resized; }
         uint32_t getAPIVersion() const { return apiVersion; }
         vk::raii::Device& GetDevice() { return device; }
+        vk::raii::CommandPool& GetCommandPool() { return commandPool; }
+        vk::raii::Queue GetQueue() { return queue; }
         utils::ResourceAllocator& GetAllocator() { return m_allocator; }
         utils::ImageResource& GetImageSource(uint32_t index) { return m_images[index]; }
         void InitImGui() override { initImGui(); }
@@ -836,7 +919,7 @@ namespace VanK
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
-        vk::raii::Context context;
+        vk::raii::Context m_context;
         vk::raii::Instance instance = nullptr;
         uint32_t apiVersion = 0;
         vk::raii::DebugUtilsMessengerEXT debugMessenger = nullptr;
@@ -958,8 +1041,7 @@ namespace VanK
         [[nodiscard]] vk::Format findDepthFormat() const;
 
         static bool hasStencilComponent(vk::Format format);
-
-        void createTexture();
+    
     public: //temp public
         void generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
                              uint32_t mipLevels);
@@ -978,7 +1060,6 @@ namespace VanK
                          vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
                          vk::raii::DeviceMemory& imageMemory);
     
-        void transitionImageLayout(const vk::raii::Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels);
     private: 
         void createDescriptorPool();
 
@@ -986,36 +1067,11 @@ namespace VanK
         
         void updateGraphicsDescriptorSet();
     public: //temp public
-        std::unique_ptr<vk::raii::CommandBuffer> beginSingleTimeCommands();
-    
-        void endSingleTimeCommands(const vk::raii::CommandBuffer& commandBuffer) const;
+       
     private: 
         uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
         void createCommandBuffers();
-        
-        void transition_image_layout
-        (
-            uint32_t imageIndex,
-            vk::ImageLayout old_layout,
-            vk::ImageLayout new_layout,
-            vk::AccessFlags2 src_access_mask,
-            vk::AccessFlags2 dst_access_mask,
-            vk::PipelineStageFlags2 src_stage_mask,
-            vk::PipelineStageFlags2 dst_stage_mask
-        );
-
-        void transition_image_layout_custom
-        (
-            vk::raii::Image& image,
-            vk::ImageLayout old_layout,
-            vk::ImageLayout new_layout,
-            vk::AccessFlags2 src_access_mask,
-            vk::AccessFlags2 dst_access_mask,
-            vk::PipelineStageFlags2 src_stage_mask,
-            vk::PipelineStageFlags2 dst_stage_mask,
-            vk::ImageAspectFlags aspect_mask
-        );
 
         void createSyncObjects();
 
