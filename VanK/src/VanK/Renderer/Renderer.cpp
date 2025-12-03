@@ -234,7 +234,17 @@ namespace VanK
                 .dstAlphaBlendFactor = VanK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 .alphaBlendOp = VanK_BLEND_OP_ADD,
                 .colorWriteMask = VanK_COLOR_COMPONENT_R_BIT | VanK_COLOR_COMPONENT_G_BIT | VanK_COLOR_COMPONENT_B_BIT | VanK_COLOR_COMPONENT_A_BIT,
-            },  
+            },
+            {
+                .blendEnable = false,
+                .srcColorBlendFactor = VanK_BLEND_FACTOR_ONE,
+                .dstColorBlendFactor = VanK_BLEND_FACTOR_ZERO,
+                .colorBlendOp = VanK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VanK_BLEND_FACTOR_ONE,
+                .dstAlphaBlendFactor = VanK_BLEND_FACTOR_ZERO,
+                .alphaBlendOp = VanK_BLEND_OP_ADD,
+                .colorWriteMask = VanK_COLOR_COMPONENT_R_BIT,
+            }, 
         };
 
         VanKPipelineColorBlendStateCreateInfo ColorBlendStateCreateInfo
@@ -260,7 +270,7 @@ namespace VanK
 
         VanKPipelineRenderingCreateInfo RenderingCreateInfo
         {
-            .VanKColorAttachmentFormats = {VanK_Format_B8G8R8A8Srgb}
+            .VanKColorAttachmentFormats = {VanK_Format_B8G8R8A8Srgb, VanK_FORMAT_R32_SINT}
         };
 
         VanKGraphicsPipelineSpecification GraphicsPipelineSpecification
@@ -469,6 +479,7 @@ namespace VanK
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
+            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = -1});
 
             VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
             

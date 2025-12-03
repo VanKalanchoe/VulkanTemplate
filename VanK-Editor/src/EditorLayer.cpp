@@ -130,7 +130,6 @@ namespace VanK
             }
         }
         
-        /*
         // Mouse Selection
         auto [mx, my] = ImGui::GetMousePos();
         mx -= m_ViewportBounds[0].x;
@@ -142,13 +141,11 @@ namespace VanK
 
         if (mouseX >= 0 && mouseY >= 0 && mouseX < (int)viewportSize.x && mouseY < (int)viewportSize.y)
         {
-            int index = mouseY * viewportSize.x + mouseX;
-        
             // Retrieve the pixel data (ID) from the calculated index
-            int pixelData = RenderCommand::downloadColorAttachmentEntityID()[index]; // chnage this
+            int pixelData = RenderCommand::ReadEntityIDAtPixel(mouseX, mouseY); // chnage this
+            
             m_HoveredEntity = pixelData == -1 ? Entity() : Entity((entt::entity)pixelData, m_ActiveScene.get());
         }
-        */
         
         OnOverlayRender();
     }

@@ -433,6 +433,7 @@ namespace VanK
         virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer = nullptr) = 0;
         virtual void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
         virtual void EndComputePass(VanKComputePass* computePass) = 0;
+        virtual int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;
         //---------
         

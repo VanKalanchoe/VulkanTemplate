@@ -719,6 +719,66 @@ namespace VanK
             }
             return "";
         }
+        /*--
+         * GBuffer creation info
+        -*/
+        struct GbufferCreateInfo
+        {
+        };
+        
+        /*-
+         * GBuffer - Multiple render targets with depth management
+        -*/
+        class GBuffer
+        {
+            GBuffer() = default;
+            ~GBuffer() { /*assert(m_createInfo.device == VK_NULL_HANDLE && "Missing deinit()");*/ }
+            
+            /*--
+             * Initialize the GBuffer with the specified configuration.
+            -*/
+            void init(const vk::raii::CommandBuffer& cmd, const GbufferCreateInfo& createInfo)
+            {
+                /*ASSERT(m_createInfo.color.empty(), "Missing deinit()");*/
+                // The buffer must be cleared before creating a new one
+                m_createInfo = createInfo; // Copy the creation info
+                create(cmd);
+            }
+            
+            // Destroy internal resources and reset its initial state
+            void deinit()
+            {
+                destroy();
+                /**this = {};*/
+            }
+            
+        private:
+            void create(const vk::raii::CommandBuffer& cmd)
+            {
+            }
+            
+            void destroy()
+            {
+            }
+            
+            /*--
+             * Resources holds all Vulkan objects for the GBuffer
+             * This separation makes it easier to cleanup and recreate resources
+            -*/
+            struct Resources
+            {
+                /*std::vector<utils::Image> gBufferColor{}; // Color attachments
+                utils::Image gBufferDepth{}; // Optional depth attachment
+                VkImageView depthView{}; // View for the depth attachment
+                std::vector<VkDescriptorImageInfo> descriptor{}; // Descriptor info for each color attachment
+                std::vector<VkImageView> uiImageViews{}; // Special views for ImGui (alpha=1)*/
+            };
+
+            Resources m_res; // All Vulkan resources
+
+            GbufferCreateInfo m_createInfo{}; // Configuration
+            std::vector<VkDescriptorSet> m_descriptorSet{}; // ImGui descriptor sets
+        };
     }
     /*--
      * Samplers are limited in Vulkan.
@@ -920,6 +980,7 @@ namespace VanK
         void SetImGuiInit(bool init) override { imguiVulkanInitialized = init; } 
         bool isImGuiInit() const { return imguiVulkanInitialized; }
         static bool IsInitialized() { return s_instance != nullptr; }
+        int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) override;
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -946,17 +1007,20 @@ namespace VanK
         std::vector<utils::ImageResource> m_images;
         
         vk::Extent2D viewport;
-        vk::raii::Image sceneImage = nullptr;
-        vk::raii::DeviceMemory sceneImageMemory = nullptr;
+        vma::raii::Image sceneImage = nullptr;
         vk::raii::ImageView sceneImageView = nullptr;
 
-        vk::raii::Image colorImage = nullptr;
-        vk::raii::DeviceMemory colorImageMemory = nullptr;
+        vma::raii::Image colorImage = nullptr;
         vk::raii::ImageView colorImageView = nullptr;
 
-        vk::raii::Image depthImage = nullptr;
-        vk::raii::DeviceMemory depthImageMemory = nullptr;
+        vma::raii::Image depthImage = nullptr;
         vk::raii::ImageView depthImageView = nullptr;
+        
+        vma::raii::Image entityImage = nullptr;
+        vk::raii::ImageView  entityImageView = nullptr;
+        
+        vma::raii::Image entityColorImage = nullptr;  // MSAA entity color image (like colorImage)
+        vk::raii::ImageView entityColorImageView = nullptr;  // View for MSAA entity color
         
         SamplerPool m_samplerPool;
         vk::raii::Sampler linearSampler = nullptr;
@@ -987,6 +1051,8 @@ namespace VanK
         bool framebufferResized = false;
         bool vSync = false;
         bool sceneImageInitialized = false;
+        bool entityImageInitialized = false;
+        utils::Buffer entityReadbackBuffer;
         bool imguiVulkanInitialized = false;
         VanKRenderOption m_renderOption = {};
 
@@ -1039,6 +1105,8 @@ namespace VanK
         void createColorResources();
 
         void createDepthResources();
+        void createEntityResources();
+        void createEntityColorResources();
 
         vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
                                        vk::FormatFeatureFlags features) const;

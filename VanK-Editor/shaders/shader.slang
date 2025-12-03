@@ -11,6 +11,7 @@ struct VertexOutput
     float4 pos : SV_Position;
     float2 fragTexCoord : TEXCOORD1;
     uint32_t textureIndex : TEXCOORD2;
+    uint32_t entityID : TEXCOORD3;  // Add entity ID to pass to fragment shader
 };
 
 // Define the final output of the fragment shader
@@ -18,6 +19,7 @@ struct VertexOutput
 struct PixelOutput
 {
     float4 Color : SV_TARGET0; // Final color output (RGBA)
+    int EntityID : SV_TARGET1;
 };
 
 //------------------------------------------------------------------------------
@@ -55,6 +57,10 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     output.fragTexCoord = vertexData.texcoords.xy;
     output.textureIndex = storageData.albedoMap;
 
+    // Pass entity ID to fragment shader
+    // Option 1: Use instanceID directly (if instanceID == entity ID)
+    output.entityID = 10;
+
     return output;
 }
 
@@ -69,6 +75,9 @@ PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0
     PixelOutput output;
 
     output.Color = texture[input.textureIndex].Sample(input.fragTexCoord);
+
+    // Output entity ID to second render target (R32_SINT format)
+    output.EntityID = (int)input.entityID;
 
    return output;
 }

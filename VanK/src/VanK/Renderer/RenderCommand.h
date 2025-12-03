@@ -178,6 +178,11 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->EndComputePass(computePass);
         }
+        
+        static int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y)
+        {
+            return s_RendererAPI ? s_RendererAPI->ReadEntityIDAtPixel(x, y) : -1;
+        }
 
         static void waitForGraphicsQueueIdle()
         {

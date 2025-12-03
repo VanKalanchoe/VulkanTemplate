@@ -83,6 +83,8 @@ namespace  VanK
         createSceneResources();
         createColorResources();
         createDepthResources();
+        createEntityResources();
+        createEntityColorResources();
         m_samplerPool.init(device);
         createTextureSampler(); // maybe integrate into texture class ? so every texture has a reference to it ? or maybe every texture has its own sampler idk
         createDescriptorPool();
@@ -176,7 +178,10 @@ namespace  VanK
         createSceneResources();//scene evertyhing drawn into this
         createColorResources();//msaa
         createDepthResources();//depth
+        createEntityResources();//entity
+        createEntityColorResources();
         sceneImageInitialized = false;
+        entityImageInitialized = false;
 
         // Recreate the ImGui texture to point to the new sceneImageView
         if (!uiDescriptorSet.empty() && uiDescriptorSet[0] != nullptr)
@@ -1011,6 +1016,85 @@ namespace  VanK
         delete computePass;
     }
 
+    int32_t VulkanRendererAPI::ReadEntityIDAtPixel(uint32_t x, uint32_t y)
+    {
+        // Clamp coordinates to viewport
+    x = std::min(x, viewport.width - 1);
+    y = std::min(y, viewport.height - 1);
+    
+    // Create readback buffer if needed (only once)
+    if (!*entityReadbackBuffer.buffer)
+    {
+        entityReadbackBuffer = m_allocator.createBuffer(
+            sizeof(int32_t) * viewport.width * viewport.height,
+            vk::BufferUsageFlagBits2::eTransferDst,
+            vma::MemoryUsage::eGpuToCpu
+        );
+    }
+    
+    // Wait for GPU to finish rendering
+    queue.waitIdle();
+    
+    // Transition entity image to transfer source
+    auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+    
+    utils::transition_image_layout
+    (
+        *cmd,
+        *entityImage,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        vk::AccessFlagBits2::eTransferRead,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::PipelineStageFlagBits2::eTransfer,
+        vk::ImageAspectFlagBits::eColor
+    );
+    
+    // Copy image to buffer
+    vk::BufferImageCopy copyRegion{
+        .bufferOffset = 0,
+        .bufferRowLength = 0,
+        .bufferImageHeight = 0,
+        .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+        .imageOffset = {0, 0, 0},
+        .imageExtent = {viewport.width, viewport.height, 1}
+    };
+    
+    cmd->copyImageToBuffer(
+        *entityImage,
+        vk::ImageLayout::eTransferSrcOptimal,
+        entityReadbackBuffer.buffer,
+        {copyRegion}
+    );
+    
+    // Transition back
+    utils::transition_image_layout
+    (
+        *cmd,
+        *entityImage,
+        vk::ImageLayout::eTransferSrcOptimal,
+        vk::ImageLayout::eColorAttachmentOptimal,
+        vk::AccessFlagBits2::eTransferRead,
+        vk::AccessFlagBits2::eColorAttachmentWrite,
+        vk::PipelineStageFlagBits2::eTransfer,
+        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+        vk::ImageAspectFlagBits::eColor
+    );
+    
+    utils::endSingleTimeCommands(*cmd, queue);
+    
+    // Map and read the pixel
+    void* mappedData = entityReadbackBuffer.buffer.getAllocation().map();
+    int32_t* entityIDs = static_cast<int32_t*>(mappedData);
+    
+    int32_t entityID = entityIDs[y * viewport.width + x];
+    
+    entityReadbackBuffer.buffer.getAllocation().unmap();
+    
+    return entityID;
+    }
+
     void VulkanRendererAPI::BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline)
     {
         auto it = m_PipelineResources.find(Unwrap(pipeline));
@@ -1138,6 +1222,33 @@ namespace  VanK
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::ImageAspectFlagBits::eColor
         );
+        
+        utils::transition_image_layout
+        (
+            Unwrap(cmd),
+            *entityImage,
+            entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            entityImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
+            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+            entityImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor
+        );
+        
+        // Transition the MSAA entity color image to COLOR_ATTACHMENT_OPTIMAL
+        utils::transition_image_layout
+        (
+            Unwrap(cmd),
+            *entityColorImage,
+            vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            {},
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor
+        );
     
         // First pass: render scene into MSAA color with resolve to single-sample sceneImage
         // Use the caller-provided clear color
@@ -1158,6 +1269,15 @@ namespace  VanK
             depth_stencil_target_info.clearColor.f[3]
         );
         /*vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);*/
+        
+        // Use the caller-provided clear color
+        vk::ClearColorValue clearEntity = vk::ClearColorValue
+        (
+            color_target_info[1].clearColor.i[0],
+            color_target_info[1].clearColor.i[1],
+            color_target_info[1].clearColor.i[2],
+            color_target_info[1].clearColor.i[3]
+        );
 
         // Color attachment (multisampled) with resolve attachment
         vk::RenderingAttachmentInfo colorAttachment =
@@ -1178,16 +1298,35 @@ namespace  VanK
             .imageView = depthImageView,
             .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
             .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eDontCare,
+            .storeOp = vk::AttachmentStoreOp::eStore,
             .clearValue = clearDepth
         };
-
+        
+        // Entity attachment
+        // Entity attachment (multisampled) with resolve to single-sampled entityImage
+        vk::RenderingAttachmentInfo entityAttachment =
+        {
+            .imageView = entityColorImageView,  // Use MSAA image view
+            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .resolveMode = vk::ResolveModeFlagBits::eSampleZero,  // Add resolve mode
+            .resolveImageView = entityImageView,  // Resolve to single-sampled entityImage
+            .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
+            .loadOp = vk::AttachmentLoadOp::eClear,
+            .storeOp = vk::AttachmentStoreOp::eStore,
+            .clearValue = clearEntity
+        };
+        
+        std::array<vk::RenderingAttachmentInfo, 2> colorAttachments = {
+            colorAttachment,  // MSAA with resolve to sceneImage
+            entityAttachment  // Single-sample offscreen
+        };
+        
         vk::RenderingInfo renderingInfo =
         {
             .renderArea = {.offset = {0, 0}, .extent = viewport},
             .layerCount = 1,
-            .colorAttachmentCount = 1,
-            .pColorAttachments = &colorAttachment,
+            .colorAttachmentCount = colorAttachments.size(),
+            .pColorAttachments = colorAttachments.data(),
             .pDepthAttachment = &depthAttachment
         };
     
@@ -1331,6 +1470,8 @@ namespace  VanK
                 vk::ImageAspectFlagBits::eColor
             );
             sceneImageInitialized = true;
+            
+            entityImageInitialized = true;
 
             // Second pass: draw ImGui to swapchain image
             vk::RenderingAttachmentInfo swapColorAttachment =
@@ -1517,13 +1658,17 @@ namespace  VanK
     {
         vk::Format colorFormat = swapChainSurfaceFormat.format;
         // single-sampled and SAMPLED
-        createImage(
-            viewport.width, viewport.height,
-            1, vk::SampleCountFlagBits::e1, colorFormat,
-            vk::ImageTiling::eOptimal,
-            vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
-            vk::MemoryPropertyFlagBits::eDeviceLocal,
-            sceneImage, sceneImageMemory);
+        
+        vk::ImageCreateInfo imageInfo
+        {
+            .imageType = vk::ImageType::e2D, .format = colorFormat,
+            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+        
+        sceneImage = m_allocator.createImage(imageInfo).image;
 
         DBG_VK_NAME(*sceneImage);
         
@@ -1534,11 +1679,18 @@ namespace  VanK
     void VulkanRendererAPI::createColorResources()
     {
         vk::Format colorFormat = swapChainSurfaceFormat.format;
-
-        createImage(viewport.width, viewport.height, 1, msaaSamples, colorFormat,
-                    vk::ImageTiling::eOptimal,
-                    vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
-                    vk::MemoryPropertyFlagBits::eDeviceLocal, colorImage, colorImageMemory);
+        
+        vk::ImageCreateInfo imageInfo
+        {
+            .imageType = vk::ImageType::e2D, .format = colorFormat,
+            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = msaaSamples, .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+        
+        colorImage = m_allocator.createImage(imageInfo).image;
+        
         DBG_VK_NAME(*colorImage);
         
         colorImageView = createImageView(colorImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
@@ -1548,15 +1700,65 @@ namespace  VanK
     void VulkanRendererAPI::createDepthResources()
     {
         vk::Format depthFormat = findDepthFormat();
-
-        createImage(viewport.width, viewport.height, 1, msaaSamples, depthFormat,
-                    vk::ImageTiling::eOptimal,
-                    vk::ImageUsageFlagBits::eDepthStencilAttachment, vk::MemoryPropertyFlagBits::eDeviceLocal,
-                    depthImage, depthImageMemory);
+        
+        vk::ImageCreateInfo imageInfo
+        {
+            .imageType = vk::ImageType::e2D, .format = depthFormat,
+            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = msaaSamples, .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+        
+        depthImage = m_allocator.createImage(imageInfo).image;
+        
         DBG_VK_NAME(*depthImage);
         
         depthImageView = createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
         DBG_VK_NAME(*depthImageView);
+    }
+    
+    void VulkanRendererAPI::createEntityResources()
+    {
+        vk::Format colorFormat = vk::Format::eR32Sint;
+        // single-sampled and SAMPLED
+        
+        vk::ImageCreateInfo imageInfo
+        {
+            .imageType = vk::ImageType::e2D, .format = colorFormat,
+            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+        
+        entityImage = m_allocator.createImage(imageInfo).image;
+
+        DBG_VK_NAME(*entityImage);
+        
+        entityImageView = createImageView(entityImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
+        DBG_VK_NAME(*entityImageView);
+    }
+    
+    void VulkanRendererAPI::createEntityColorResources()
+    {
+        vk::Format colorFormat = vk::Format::eR32Sint;
+    
+        vk::ImageCreateInfo imageInfo
+        {
+            .imageType = vk::ImageType::e2D, .format = colorFormat,
+            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = msaaSamples, .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+    
+        entityColorImage = m_allocator.createImage(imageInfo).image;
+    
+        DBG_VK_NAME(*entityColorImage);
+    
+        entityColorImageView = createImageView(entityColorImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
+        DBG_VK_NAME(*entityColorImageView);
     }
 
     vk::Format VulkanRendererAPI::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
