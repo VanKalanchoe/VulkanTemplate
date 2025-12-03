@@ -6,6 +6,7 @@
 -*/
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
 #include "vk_mem_alloc_raii.hpp"
 #define VMA_LEAK_LOG_FORMAT(format, ...)                                                                               \
 {                                                                                                                    \
@@ -14,8 +15,7 @@ printf("\n");                                                                   
 }
 #include <iostream>
 
-/*
-#include "vk_mem_alloc.h"*/
+
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_vulkan.h>
@@ -68,13 +68,7 @@ namespace  VanK
         pickPhysicalDevice();
         createLogicalDevice();
         createDynamicDispatcher();
-        allocator.init(VmaAllocatorCreateInfo
-        {
-            .physicalDevice = *physicalDevice,
-            .device = *device,
-            .instance = *instance,
-            .vulkanApiVersion = apiVersion
-        });
+        allocator.init(instance, physicalDevice, device);
     
         msaaSamples = getMaxUsableSampleCount();
         createSwapChain();
@@ -157,7 +151,7 @@ namespace  VanK
         images.clear();
         
         m_samplerPool.deinit();
-        allocator.destroyBuffer(queryBuffer); // statistics
+        queryBuffer.buffer.clear(); // statistics
         allocator.deinit();
 
         /*ImGui_ImplVulkan_Shutdown();
@@ -2259,7 +2253,7 @@ namespace  VanK
     void VulkanRendererAPI::createQueryBuffer()
     {
         // 7 pipelineStatistics, 1 querycount
-        queryBuffer = allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, VMA_MEMORY_USAGE_GPU_TO_CPU);
+        queryBuffer = allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
     }
 
     void VulkanRendererAPI::downloadQueryBuffer()
@@ -2269,22 +2263,31 @@ namespace  VanK
         cmd->copyQueryPoolResults(queryPool, 0, 1, queryBuffer.buffer, 0, 0, vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
 
         endSingleTimeCommands(*cmd);
+        
+        // Map and copy data to the staging buffer
+        try
+        {
+            void* mappedData = queryBuffer.buffer.getAllocation().map();
+            // No need to explicitly unmap; vma::raii::Allocation unmaps on destruction
+            
+            uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
 
-        void* mappedData = nullptr;
-        vmaMapMemory(allocator, queryBuffer.allocation, &mappedData);
+            std::cout << std::dec;
+            std::cout << "Input assembly vertices: "        << stats[0] << "\n";
+            std::cout << "Input assembly primitives: "      << stats[1] << "\n";
+            std::cout << "Vertex shader invocations: "      << stats[2] << "\n";
+            std::cout << "Clipping invocations: "           << stats[3] << "\n";
+            std::cout << "Clipping primitives: "            << stats[4] << "\n";
+            std::cout << "Fragment shader invocations: "    << stats[5] << "\n";
+            std::cout << "Compute shader invocations: "     << stats[6] << "\n";
 
-        uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
-
-        std::cout << std::dec;
-        std::cout << "Input assembly vertices: "        << stats[0] << "\n";
-        std::cout << "Input assembly primitives: "      << stats[1] << "\n";
-        std::cout << "Vertex shader invocations: "      << stats[2] << "\n";
-        std::cout << "Clipping invocations: "           << stats[3] << "\n";
-        std::cout << "Clipping primitives: "            << stats[4] << "\n";
-        std::cout << "Fragment shader invocations: "    << stats[5] << "\n";
-        std::cout << "Compute shader invocations: "     << stats[6] << "\n";
-
-        vmaUnmapMemory(allocator, queryBuffer.allocation);
+            queryBuffer.buffer.getAllocation().unmap();
+        }
+        catch ([[maybe_unused]] const vk::SystemError& err)
+        {
+            VK_CORE_ERROR("Failed to map staging buffer memory!");
+            // You could throw or handle the error here
+        }
     }
     
     uint32_t VulkanRendererAPI::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities)

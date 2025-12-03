@@ -19,7 +19,7 @@ VanK::VulkanVertexBuffer::VulkanVertexBuffer(uint64_t size)
     (
         size,
         vk::BufferUsageFlagBits2::eVertexBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-        VMA_MEMORY_USAGE_GPU_ONLY
+        vma::MemoryUsage::eGpuOnly
     );
     DBG_VK_NAME(m_vertexBuffer.buffer);
 }
@@ -27,9 +27,9 @@ VanK::VulkanVertexBuffer::VulkanVertexBuffer(uint64_t size)
 VanK::VulkanVertexBuffer::~VulkanVertexBuffer()
 {
     VK_CORE_INFO("Destroyed VertexBuffer");
-    auto& instance = VulkanRendererAPI::Get();
+    /*auto& instance = VulkanRendererAPI::Get();
     
-    instance.GetAllocator().destroyBuffer(m_vertexBuffer);
+    instance.GetAllocator().destroyBuffer(m_vertexBuffer); // not needed raii*/
 }
 
 void VanK::VulkanVertexBuffer::Bind() const
@@ -44,7 +44,7 @@ void VanK::VulkanVertexBuffer::Upload(const void* data, size_t size)
 {
 }
 
-VanK::VulkanIndexBuffer::VulkanIndexBuffer(uint64_t size) : m_Count(size / sizeof(uint32_t))  // Calculate count from size
+VanK::VulkanIndexBuffer::VulkanIndexBuffer(uint64_t size) : m_Count(static_cast<uint32_t>(size / sizeof(uint32_t)))  // Calculate count from size
 {
     VK_CORE_INFO("Created IndexBuffer");
     auto& instance = VulkanRendererAPI::Get();
@@ -53,7 +53,7 @@ VanK::VulkanIndexBuffer::VulkanIndexBuffer(uint64_t size) : m_Count(size / sizeo
     (
         size,
         vk::BufferUsageFlagBits2::eIndexBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-        VMA_MEMORY_USAGE_GPU_ONLY
+        vma::MemoryUsage::eGpuOnly
     );
     DBG_VK_NAME(m_indexBuffer.buffer);
 }
@@ -61,9 +61,9 @@ VanK::VulkanIndexBuffer::VulkanIndexBuffer(uint64_t size) : m_Count(size / sizeo
 VanK::VulkanIndexBuffer::~VulkanIndexBuffer()
 {
     VK_CORE_INFO("Destroyed IndexBuffer");
-    auto& instance = VulkanRendererAPI::Get();
+    /*auto& instance = VulkanRendererAPI::Get();
     
-    instance.GetAllocator().destroyBuffer(m_indexBuffer);
+    instance.GetAllocator().destroyBuffer(m_indexBuffer); // not needed raii*/
 }
 
 void VanK::VulkanIndexBuffer::Bind() const
@@ -83,12 +83,12 @@ VanK::VulkanTransferBuffer::VulkanTransferBuffer(uint64_t size, VanKTransferBuff
     VK_CORE_INFO("Created TransferBuffer");
     auto& instance = VulkanRendererAPI::Get();
 
-    VmaMemoryUsage memoryUsage = {};
+    vma::MemoryUsage memoryUsage = {};
         
     switch (usage)
     {
-    case VanKTransferBufferUsageUpload: memoryUsage = VMA_MEMORY_USAGE_CPU_TO_GPU; break;
-    case VanKTransferBufferUsageDownload: memoryUsage = VMA_MEMORY_USAGE_GPU_TO_CPU; break;
+    case VanKTransferBufferUsageUpload: memoryUsage = vma::MemoryUsage::eCpuToGpu; break;
+    case VanKTransferBufferUsageDownload: memoryUsage = vma::MemoryUsage::eGpuToCpu; break;
     }
 
     m_transferBuffer = instance.GetAllocator().createBuffer
@@ -96,7 +96,7 @@ VanK::VulkanTransferBuffer::VulkanTransferBuffer(uint64_t size, VanKTransferBuff
         size,
         vk::BufferUsageFlagBits2::eTransferSrc,
         memoryUsage,
-        VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT
+        vma::AllocationCreateFlagBits::eHostAccessSequentialWrite
     );
     DBG_VK_NAME(m_transferBuffer.buffer);
 }
@@ -104,9 +104,9 @@ VanK::VulkanTransferBuffer::VulkanTransferBuffer(uint64_t size, VanKTransferBuff
 VanK::VulkanTransferBuffer::~VulkanTransferBuffer()
 {
     VK_CORE_INFO("Destroyed TransferBuffer");
-    auto& instance = VulkanRendererAPI::Get();
+    /*auto& instance = VulkanRendererAPI::Get();
     
-    instance.GetAllocator().destroyBuffer(m_transferBuffer);
+    instance.GetAllocator().destroyBuffer(m_transferBuffer); // not needed raii*/
 }
 
 void VanK::VulkanTransferBuffer::Bind() const
@@ -132,8 +132,6 @@ void VanK::VulkanTransferBuffer::Unbind() const
 
 void* VanK::VulkanTransferBuffer::MapTransferBuffer(uint64_t size, uint64_t alignment, uint64_t& outOffset)
 {
-    auto& instance = VulkanRendererAPI::Get();
-    
     //ring buffer offset
 
     // --- check if request itself is too large ---
@@ -143,7 +141,7 @@ void* VanK::VulkanTransferBuffer::MapTransferBuffer(uint64_t size, uint64_t alig
     }
 
     // Calculate aligned offset without committing
-    VkDeviceSize alignedOffset = (m_currentOffset + alignment - 1) & ~(alignment - 1);
+    vk::DeviceSize alignedOffset = (m_currentOffset + alignment - 1) & ~(alignment - 1);
 
     // Check if space from current offset to end is enough
     if (alignedOffset + size > m_size)
@@ -160,24 +158,26 @@ void* VanK::VulkanTransferBuffer::MapTransferBuffer(uint64_t size, uint64_t alig
     }
 
     // Only map memory now that we know there is enough space
-    // Map and copy data to the staging buffer 
-    void* mappedPtr = nullptr;
-    if (static_cast<vk::Result>(vmaMapMemory(instance.GetAllocator(), m_transferBuffer.allocation, &mappedPtr)) != vk::Result::eSuccess)
+    // Map and copy data to the staging buffer
+    try
+    {
+        void* mappedPtr = m_transferBuffer.buffer.getAllocation().map();
+        
+        outOffset = alignedOffset;
+        m_currentOffset = alignedOffset + size; // now commit
+
+        return static_cast<uint8_t*>(mappedPtr) + alignedOffset;
+    }
+    catch ([[maybe_unused]] const vk::SystemError& err)
     {
         VK_CORE_ERROR("Failed to map transfer buffer memory!");
         return nullptr;
     }
-    
-    outOffset = alignedOffset;
-    m_currentOffset = alignedOffset + size; // now commit
-
-    return static_cast<uint8_t*>(mappedPtr) + alignedOffset;
 }
 
 void VanK::VulkanTransferBuffer::UnMapTransferBuffer()
 {
-    auto& instance = VulkanRendererAPI::Get();
-    vmaUnmapMemory(instance.GetAllocator(), m_transferBuffer.allocation);
+    m_transferBuffer.buffer.getAllocation().unmap();
 }
 
 void VanK::VulkanTransferBuffer::UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion)
@@ -186,16 +186,10 @@ void VanK::VulkanTransferBuffer::UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTr
         return; // or skip the copy safely
 
     if (bufferRegion.buffer == VK_NULL_HANDLE) {
-        std::cerr << "Error: bufferRegion.buffer is null!" << std::endl;
+        std::cerr << "Error: bufferRegion.buffer is null!" << '\n';
         return;
     }
-        
-    VkBufferCopy copyRegion;
-    copyRegion.srcOffset = location.offset;
-    copyRegion.dstOffset = bufferRegion.offset;
-    copyRegion.size = bufferRegion.size;
-    //maybe copyregion array idk
-
+    
     // Add a barrier to make sure nothing was writing to it, before updating its content
     utils::cmdBufferMemoryBarrier
     (
@@ -204,8 +198,22 @@ void VanK::VulkanTransferBuffer::UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTr
         vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
         vk::PipelineStageFlagBits2::eTransfer
     );
-        
-    vkCmdCopyBuffer(*Unwrap(cmd), m_transferBuffer.buffer, static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()), 1, &copyRegion);
+    
+    vk::BufferCopy2 copyRegion;
+    copyRegion.srcOffset = location.offset;
+    copyRegion.dstOffset = bufferRegion.offset;
+    copyRegion.size = bufferRegion.size;
+    //maybe copyregion array idk
+
+    const vk::CopyBufferInfo2 copyBufferInfo
+    {
+        .srcBuffer = m_transferBuffer.buffer,
+        .dstBuffer = static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
+        .regionCount = 1,
+        .pRegions = &copyRegion
+    };
+    
+    Unwrap(cmd).copyBuffer2(copyBufferInfo);
         
     // Add barrier to make sure the buffer is updated before the fragment shader uses it
     utils::cmdBufferMemoryBarrier
@@ -226,7 +234,7 @@ VanK::VulkanUniformBuffer::VulkanUniformBuffer(uint64_t size)
     (
         size,
         vk::BufferUsageFlagBits2::eUniformBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-        VMA_MEMORY_USAGE_GPU_ONLY
+        vma::MemoryUsage::eGpuOnly
     );
     DBG_VK_NAME(m_uniformBuffer.buffer);
 }
@@ -234,9 +242,9 @@ VanK::VulkanUniformBuffer::VulkanUniformBuffer(uint64_t size)
 VanK::VulkanUniformBuffer::~VulkanUniformBuffer()
 {
     VK_CORE_INFO("Destroyed UniformBuffer");
-    auto& instance = VulkanRendererAPI::Get();
+    /*auto& instance = VulkanRendererAPI::Get();
     
-    instance.GetAllocator().destroyBuffer(m_uniformBuffer);
+    instance.GetAllocator().destroyBuffer(m_uniformBuffer); // not needed raii*/
 }
 
 void VanK::VulkanUniformBuffer::Bind() const
@@ -259,7 +267,7 @@ void VanK::VulkanUniformBuffer::Update(VanKCommandBuffer cmd, const void* data, 
     );
 
     // Update the buffer
-    vkCmdUpdateBuffer(*Unwrap(cmd), m_uniformBuffer.buffer, 0, size, data);
+    Unwrap(cmd).updateBuffer(m_uniformBuffer.buffer, 0, vk::ArrayProxy<const uint8_t>(static_cast<uint32_t>(size), static_cast<const uint8_t*>(data)));
 
     // Add a memory barrier after updating
     utils::cmdBufferMemoryBarrier
@@ -280,7 +288,7 @@ VanK::VulkanStorageBuffer::VulkanStorageBuffer(uint64_t size)
     (
         size,
         vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-        VMA_MEMORY_USAGE_GPU_ONLY
+        vma::MemoryUsage::eGpuOnly
     );
     DBG_VK_NAME(m_storageBuffer.buffer);
 }
@@ -288,9 +296,9 @@ VanK::VulkanStorageBuffer::VulkanStorageBuffer(uint64_t size)
 VanK::VulkanStorageBuffer::~VulkanStorageBuffer()
 {
     VK_CORE_INFO("Destroyed StorageBuffer");
-    auto& instance = VulkanRendererAPI::Get();
+    /*auto& instance = VulkanRendererAPI::Get();
     
-    instance.GetAllocator().destroyBuffer(m_storageBuffer);
+    instance.GetAllocator().destroyBuffer(m_storageBuffer); // not needed raii*/
 }
 
 void VanK::VulkanStorageBuffer::Bind() const
@@ -314,7 +322,7 @@ VanK::VulkanIndirectBuffer::VulkanIndirectBuffer(uint64_t size)
     (
         size,
         vk::BufferUsageFlagBits2::eIndirectBuffer | vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
-        VMA_MEMORY_USAGE_CPU_TO_GPU
+        vma::MemoryUsage::eCpuToGpu
     );
     DBG_VK_NAME(m_indirectBuffer.buffer);
 }
@@ -322,9 +330,9 @@ VanK::VulkanIndirectBuffer::VulkanIndirectBuffer(uint64_t size)
 VanK::VulkanIndirectBuffer::~VulkanIndirectBuffer()
 {
     VK_CORE_INFO("Destroyed IndirectBuffer");
-    auto& instance = VulkanRendererAPI::Get();
+    /*auto& instance = VulkanRendererAPI::Get();
     
-    instance.GetAllocator().destroyBuffer(m_indirectBuffer);
+    instance.GetAllocator().destroyBuffer(m_indirectBuffer); // not needed raii*/
 }
 
 void VanK::VulkanIndirectBuffer::Bind() const

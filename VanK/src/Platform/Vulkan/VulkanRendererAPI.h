@@ -342,8 +342,7 @@ namespace VanK
         -*/
         struct Buffer
         {
-            vk::Buffer buffer{}; // Vulkan Buffer
-            VmaAllocation allocation{}; // Memory associated with the buffer
+            vma::raii::Buffer buffer{ nullptr }; // Vulkan Buffer + Memory Allocation
             vk::DeviceAddress address{}; // Address of the buffer in the shader
             vk::DeviceSize size{}; // Size of the buffer
         };
@@ -388,35 +387,30 @@ namespace VanK
         {
         public:
             ResourceAllocator() = default;
-            ~ResourceAllocator() { assert(m_allocator == nullptr && "Missing deinit()"); }
-            operator VmaAllocator() const { return m_allocator; }
+            ~ResourceAllocator() = default;
 
             // Initialization of VMA allocator.
-            void init(VmaAllocatorCreateInfo allocatorInfo)
+            void init(const vk::raii::Instance& instance, const vk::raii::PhysicalDevice& physicalDevice,  const vk::raii::Device& device)
             {
                 // #TODO : VK_EXT_memory_priority ? VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT
-
-                allocatorInfo.flags |= VMA_ALLOCATOR_CREATE_BUFFER_DEVICE_ADDRESS_BIT;
+                
+                vma::AllocatorCreateInfo info{};
+                info.flags |= vma::AllocatorCreateFlagBits::eBufferDeviceAddress;
                 // allow querying for the GPU address of a buffer
-                allocatorInfo.flags |= VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE4_BIT;
-                allocatorInfo.flags |= VMA_ALLOCATOR_CREATE_KHR_MAINTENANCE5_BIT;
+                info.flags |= vma::AllocatorCreateFlagBits::eKhrMaintenance4;
+                info.flags |= vma::AllocatorCreateFlagBits::eKhrMaintenance5;
                 // allow using VkBufferUsageFlags2CreateInfoKHR
-
-                m_device = allocatorInfo.device;
-                // Because we use VMA_DYNAMIC_VULKAN_FUNCTIONS
-                const VmaVulkanFunctions functions = {
-                    .vkGetInstanceProcAddr = vkGetInstanceProcAddr,
-                    .vkGetDeviceProcAddr = vkGetDeviceProcAddr,
-                };
-                allocatorInfo.pVulkanFunctions = &functions;
-                vmaCreateAllocator(&allocatorInfo, &m_allocator);
+                info.physicalDevice = physicalDevice;
+                
+                m_allocator = vma::raii::Allocator { instance, device, info };
+                
+                m_device = &device;
             }
 
             // De-initialization of VMA allocator.
             void deinit()
             {
-                vmaDestroyAllocator(m_allocator);
-                *this = {};
+                if (m_allocator) m_allocator->clear();
             }
 
             /*-- Create a buffer -*/
@@ -432,51 +426,50 @@ namespace VanK
              *        + VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT // If the CPU will sequentially write to the buffer's memory,
              */
 
-            Buffer createBuffer(vk::DeviceSize size,
-                                vk::BufferUsageFlags2KHR usage,
-                                VmaMemoryUsage memoryUsage = VMA_MEMORY_USAGE_AUTO,
-                                VmaAllocationCreateFlags flags = {}) const
+            Buffer createBuffer
+            (
+                vk::DeviceSize size,
+                vk::BufferUsageFlags2KHR usage,
+                vma::MemoryUsage memoryUsage = vma::MemoryUsage::eAuto,
+                vma::AllocationCreateFlags flags = {}) const
             {
                 // This can be used only with maintenance5
-                const vk::BufferUsageFlags2CreateInfoKHR bufferUsageFlags2CreateInfo{
+                const vk::BufferUsageFlags2CreateInfoKHR bufferUsageFlags2CreateInfo
+                {
                     .usage = usage | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
                 };
 
-                const vk::BufferCreateInfo bufferInfo{
+                const vk::BufferCreateInfo bufferInfo
+                {
                     .pNext = &bufferUsageFlags2CreateInfo,
                     .size = size,
                     .usage = {},
                     .sharingMode = vk::SharingMode::eExclusive, // Only one queue family will access i
                 };
 
-                VmaAllocationCreateInfo allocInfo = {.flags = flags, .usage = memoryUsage};
+                vma::AllocationCreateInfo allocInfo = { .flags = flags, .usage = memoryUsage };
                 const vk::DeviceSize dedicatedMemoryMinSize = 64ULL * 1024; // 64 KB
                 if (size > dedicatedMemoryMinSize)
                 {
-                    allocInfo.flags |= VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT;
+                    allocInfo.flags |= vma::AllocationCreateFlagBits::eDedicatedMemory;
                     // Use dedicated memory for large buffers
                 }
 
                 // Create the buffer
+                vma::AllocationInfo allocInfoOut{}; // for extra info if needed
+                vma::raii::Buffer vmaBuffer = m_allocator->createBuffer(bufferInfo, allocInfo, allocInfoOut);
+                
                 Buffer resultBuffer;
-                VmaAllocationInfo allocInfoOut{};
-                VkBufferCreateInfo cbufferInfo = static_cast<VkBufferCreateInfo>(bufferInfo);
-                VkBuffer cbuffer = static_cast<VkBuffer>(resultBuffer.buffer);
-                VK_CHECK(
-                    vmaCreateBuffer(m_allocator, &cbufferInfo, &allocInfo, &cbuffer, &resultBuffer.allocation
-                        , &
-                        allocInfoOut));
-
-                resultBuffer.buffer = cbuffer;
-        
+                
                 // Get the GPU address of the buffer
                 const vk::BufferDeviceAddressInfo info =
                 {
-                    .buffer = cbuffer
+                    .buffer = vmaBuffer
                 };
-                /*vk::DispatchLoaderDynamic dld(instance, m_device);
-                resultBuffer.address = m_device.getBufferAddress(info);*/
-                resultBuffer.address = vkGetBufferDeviceAddress(m_device, info);
+                resultBuffer.address = m_device->getBufferAddress(info);
+                
+                resultBuffer.buffer = std::move(vmaBuffer);
+                
                 {
                     // Find leaks
                     static uint32_t counter = 0U;
@@ -487,7 +480,7 @@ namespace VanK
 #endif
                     }
                     std::string allocID = std::string("allocID: ") + std::to_string(counter++);
-                    vmaSetAllocationName(m_allocator, resultBuffer.allocation, allocID.c_str());
+                    resultBuffer.buffer.getAllocation().setName( allocID.c_str());
                 }
 
                 resultBuffer.size = size;
@@ -496,7 +489,7 @@ namespace VanK
             }
 
             //*-- Destroy a buffer -*/
-            void destroyBuffer(Buffer buffer) const { vmaDestroyBuffer(m_allocator, buffer.buffer, buffer.allocation); }
+            void destroyBuffer(Buffer buffer) const {  } // raii auto delete
 
             void copyBuffer(std::unique_ptr<vk::raii::CommandBuffer>& commandBuffer, Buffer& srcBuffer, Buffer& dstBuffer, vk::DeviceSize size)
             {
@@ -528,26 +521,37 @@ namespace VanK
                 const VkDeviceSize bufferSize = sizeof(T) * vectorData.size();
 
                 // Create a staging buffer
-                Buffer stagingBuffer = createBuffer(bufferSize, vk::BufferUsageFlagBits2::eTransferSrc,
-                                                    VMA_MEMORY_USAGE_CPU_TO_GPU,
-                                                    VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT);
-
-                // Track the staging buffer for later cleanup
-                m_stagingBuffers.push_back(stagingBuffer);
-
+                Buffer stagingBuffer = createBuffer
+                (
+                    bufferSize,
+                    vk::BufferUsageFlagBits2::eTransferSrc,
+                    vma::MemoryUsage::eCpuToGpu,
+                    vma::AllocationCreateFlagBits::eHostAccessSequentialWrite
+                );
+                
                 // Map and copy data to the staging buffer
-                void* data;
-                vmaMapMemory(m_allocator, stagingBuffer.allocation, &data);
-                memcpy(data, vectorData.data(), (size_t)bufferSize);
-                vmaUnmapMemory(m_allocator, stagingBuffer.allocation);
-                return stagingBuffer;
+                try
+                {
+                    void* mappedPtr = stagingBuffer.buffer.getAllocation().map();
+                    std::memcpy(mappedPtr, vectorData.data(), static_cast<size_t>(bufferSize));
+                    stagingBuffer.buffer.getAllocation().unmap();
+                    // Track the staging buffer for later cleanup
+                    m_stagingBuffers.push_back(std::move(stagingBuffer));
+                    return std::move(m_stagingBuffers.back());
+                }
+                catch ([[maybe_unused]] const vk::SystemError& err)
+                {
+                    VK_CORE_ERROR("Failed to map staging buffer memory!");
+                    // You could throw or handle the error here
+                }
             }
 
+            /*
             /*--
              * Create an image in GPU memory. This does not adding data to the image.
              * This is only creating the image in GPU memory.
              * See createImageAndUploadData for creating an image and uploading data.
-            -*/
+            -#1#
             Image createImage(const VkImageCreateInfo& imageInfo) const
             {
                 const VmaAllocationCreateInfo createInfo{.usage = VMA_MEMORY_USAGE_GPU_ONLY};
@@ -558,7 +562,7 @@ namespace VanK
                 return image;
             }
             
-            /*-- Destroy image --*/ // has to change once vma hpp
+            /*-- Destroy image --#1# // has to change once vma hpp
             void destroyImage(Image& image) const { vmaDestroyImage(m_allocator, image.image, image.allocation); }
 
             void destroyImageResource(ImageResource& imageRessource) const
@@ -567,7 +571,7 @@ namespace VanK
                 vkDestroyImageView(m_device, imageRessource.view, nullptr);
             }
 
-            /*-- Create an image and upload data using a staging buffer --*/
+            /*-- Create an image and upload data using a staging buffer --#1#
             template <typename T>
             ImageResource createImageAndUploadData
             (
@@ -622,6 +626,7 @@ namespace VanK
                 resultImage.layout = finalLayout;
                 return resultImage;
             }
+            */
 
             /*--
              * The staging buffers are buffers that are used to transfer data from the CPU to the GPU.
@@ -629,10 +634,7 @@ namespace VanK
             -*/
             void freeStagingBuffers()
             {
-                for (const auto& buffer : m_stagingBuffers)
-                {
-                    destroyBuffer(buffer);
-                }
+                // With RAII, explicit destroy is not needed
                 m_stagingBuffers.clear();
             }
 
@@ -640,8 +642,8 @@ namespace VanK
             void setLeakID(uint32_t id) { m_leakID = id; }
 
         private:
-            VmaAllocator m_allocator{};
-            vk::Device m_device{};
+             std::optional<vma::raii::Allocator> m_allocator;
+            const vk::raii::Device* m_device;
             std::vector<Buffer> m_stagingBuffers{};
             uint32_t m_leakID = ~0U;
         };

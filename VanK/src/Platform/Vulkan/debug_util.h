@@ -38,7 +38,7 @@ namespace utilsDebug
         bool isInitialized() const { return m_device != VK_NULL_HANDLE; }
 
         template <typename T>
-        void setObjectName(T object, const std::string& name) const;
+        void setObjectName(const T& object, const std::string& name) const;
 
         class ScopedCmdLabel
         {
@@ -75,22 +75,32 @@ namespace utilsDebug
     };
 
     template <typename T>
-    void DebugUtil::setObjectName(T object, const std::string& name) const
+    void DebugUtil::setObjectName(const T& object, const std::string& name) const
     {
-        constexpr vk::ObjectType objectType = getObjectType<T>();
+        if (!m_device || getObjectType<T>() == vk::ObjectType::eUnknown) return;
 
-        if (objectType != vk::ObjectType::eUnknown && m_device != VK_NULL_HANDLE)
+        vk::DebugUtilsObjectNameInfoEXT info{};
+        info.objectType = getObjectType<T>();
+
+        if constexpr (std::is_base_of_v<vk::raii::Buffer, T> || std::is_base_of_v<vma::raii::Buffer, T>)
         {
-            vk::DebugUtilsObjectNameInfoEXT info
-            {
-                vk::StructureType::eDebugUtilsObjectNameInfoEXT,
-                nullptr,
-                objectType,
-                reinterpret_cast<uint64_t>(static_cast<typename T::CType>(object)),
-                name.c_str()
-            };
-            /*m_device->setDebugUtilsObjectNameEXT(info);*/ // doesnt work right now 
+            // RAII wrapper, get raw VkBuffer handle via operator*()
+            info.objectHandle = reinterpret_cast<uint64_t>(static_cast<VkBuffer>(*object));
         }
+        else if constexpr (std::is_base_of_v<vk::raii::Image, T> || std::is_base_of_v<vma::raii::Image, T>)
+        {
+            // RAII wrapper, get raw VkImage handle via operator*()
+            info.objectHandle = reinterpret_cast<uint64_t>(static_cast<VkImage>(*object));
+        }
+        else
+        {
+            // Fallback for types that expose CType
+            info.objectHandle = reinterpret_cast<uint64_t>(static_cast<typename T::CType>(object));
+        }
+
+        info.pObjectName = name.c_str();
+        
+        /*m_device->setDebugUtilsObjectNameEXT(info);*/ // doesnt work right now 
     }
 
     template <typename T>
@@ -154,7 +164,7 @@ namespace utilsDebug
 #define DBG_VK_NAME(obj)                                                                                                       \
   if(utilsDebug::DebugUtil::getInstance().isInitialized())                                                                          \
   utilsDebug::DebugUtil::getInstance().setObjectName(                                                                               \
-      obj, std::string(std::max(std::max(typeid(*this).name(), strrchr(typeid(*this).name(), ' ') + 1), typeid(*this).name())) \
+      (obj), std::string(std::max(std::max(typeid(*this).name(), strrchr(typeid(*this).name(), ' ') + 1), typeid(*this).name())) \
                + "::" + #obj + " (" + std::string(" in ")                                                                      \
                + std::max({__FILE__, strrchr(__FILE__, '\\') ? strrchr(__FILE__, '\\') + 1 : __FILE__,                         \
                            strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__})                                    \
