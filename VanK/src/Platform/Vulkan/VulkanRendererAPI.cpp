@@ -156,6 +156,24 @@ namespace  VanK
         // Clear the pool on the renderer side so it doesn't hold dangling references
         m_images.clear();
         
+        sceneImage.clear();
+        sceneImageView.clear();
+        
+        colorImage.clear();
+        colorImageView.clear();
+        
+        depthImage.clear();
+        depthImageView.clear();
+        
+        entityColorImage.clear();
+        entityColorImageView.clear();
+        
+        entityImage.clear();
+        entityImageView.clear();
+
+        // Clean up entity readback buffer
+        entityReadbackBuffer.buffer.clear();  // Add this line
+        
         m_samplerPool.deinit();
         queryBuffer.buffer.clear(); // statistics
         m_allocator.deinit();

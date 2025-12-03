@@ -169,6 +169,20 @@ namespace VanK
         }
     }
     
+    void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
+    {
+        /*glm::mat4 viewProj = camera.GetProjection() * glm::inverse(transform);*/
+    }
+    
+    void Renderer::BeginScene(const EditorCamera& camera)
+    {
+        glm::mat4 View = camera.GetViewMatrix();
+        glm::mat4 Proj = camera.GetProjection();
+        
+        s_Data.camData.view = View;
+        s_Data.camData.proj = Proj;
+    }
+    
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -450,14 +464,15 @@ namespace VanK
         lastFrameTime = currentTime;
 
         // Camera and projection matrices (shared by all objects)
-        glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 1.0f, -3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        /*glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 1.0f, -3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         glm::mat4 proj = glm::perspective(glm::radians(45.0f),
                                           static_cast<float>(m_ViewportSize.width) / static_cast<float>(m_ViewportSize.
                                               height), 0.1f, 20.0f);
         proj[1][1] *= -1;
+        */
         
-        s_Data.camData.view = view;
-        s_Data.camData.proj = proj;
+        /*s_Data.camData.view = view;
+        s_Data.camData.proj = proj;*/
         s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
         s_Data.camData.countAddress = countBuffer->GetBufferAddress();

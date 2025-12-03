@@ -1,4 +1,5 @@
 #pragma once
+#include "EditorCamera.h"
 #include "RenderCommand.h"
 #include "VanK/Core/Window.h"
 #include "FileWatch.h"
@@ -38,6 +39,8 @@ namespace VanK
     public:
         inline static SDL_Window* m_window = nullptr; //remove from here
         static void loadModel();
+        static void BeginScene(const EditorCamera& camera);
+        static void BeginScene(const Camera& camera, const glm::mat4& transform);
         static void Init(Window& window);
         static void Shutdown();
         static void BeginSubmit();

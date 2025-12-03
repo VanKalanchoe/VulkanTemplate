@@ -68,6 +68,11 @@ namespace VanK
     {
         //std::println("{}", event.ToString());
         
+        m_CameraController.OnEvent(event);
+        
+        if (m_SceneState == SceneState::Edit)
+            m_EditorCamera.OnEvent(event);
+        
         VanK::EventDispatcher dispatcher(event);
         dispatcher.Dispatch<VanK::KeyPressedEvent>([this](VanK::KeyPressedEvent& e) { return OnKeyPressed(e); });
         dispatcher.Dispatch<VanK::MouseButtonPressedEvent>([this](VanK::MouseButtonPressedEvent& e) { return OnMouseButtonPressed(e); });
@@ -165,7 +170,7 @@ namespace VanK
         static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
         static bool dockspaceOpen = true;
 
-        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+        ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse;;
 
         if (opt_fullscreen)
         {
@@ -644,7 +649,7 @@ namespace VanK
     
     void EditorLayer::OnOverlayRender()
     {
-        /*if (m_SceneState == SceneState::Play)
+       if (m_SceneState == SceneState::Play)
         {
             Entity camera = m_ActiveScene->GetPrimaryCameraEntity();
             if (!camera)
@@ -656,7 +661,7 @@ namespace VanK
         {
             Renderer::BeginScene(m_EditorCamera);
         }
-
+        /*
         if (m_ShowPhysicsColliders)
         {
             // Box Colliders

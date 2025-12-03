@@ -207,7 +207,7 @@ namespace VanK
                 }
             case SDL_EVENT_MOUSE_WHEEL:
                 {
-                    if (applicationState->app->m_BlockEvents)
+                    if (!applicationState->app->m_BlockEvents)
                     {
                         MouseScrolledEvent events(sdlEvent->wheel.x, sdlEvent->wheel.y);
                         applicationState->app->RaiseEvent(events);
