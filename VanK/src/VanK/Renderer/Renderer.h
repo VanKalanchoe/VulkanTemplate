@@ -48,6 +48,8 @@ namespace VanK
         static void SetVSync(bool vSyncTemp) { vSync = vSyncTemp; RenderCommand::RebuildSwapchain(vSync); };
         static bool GetIsEditor() { return isEditor; }
         static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); }
+        static void SetWindowMinimized(bool minimized) { windowMinimized = minimized; }
+        static bool isWindowMinimized() { return windowMinimized; }
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,

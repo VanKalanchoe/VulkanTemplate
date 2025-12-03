@@ -53,6 +53,9 @@ namespace VanK
 
     void Application::Run(AppState& applicationState)
     {
+        if (Renderer::isWindowMinimized())
+            return;
+        
         float currentTime = applicationState.app->GetTime();
         float timestep = glm::clamp(currentTime - applicationState.lastTime, 0.001f, 0.1f);
         applicationState.lastTime = currentTime;
@@ -175,13 +178,13 @@ namespace VanK
                 }
             case SDL_EVENT_WINDOW_MINIMIZED:
                 {
-                    /*app->setWindowMinimized(true);*/
+                    Renderer::SetWindowMinimized(true);
                     return SDL_APP_CONTINUE;
                 }
             case SDL_EVENT_WINDOW_RESTORED:
                 {
-                    /*app->setWindowMinimized(false);
-                    app->setFramebufferResized(true); // force swapchain recreation*/
+                    Renderer::SetWindowMinimized(false);
+                    /*app->setFramebufferResized(true); // force swapchain recreation*/
                     return SDL_APP_CONTINUE;
                 }
             case SDL_EVENT_MOUSE_MOTION:

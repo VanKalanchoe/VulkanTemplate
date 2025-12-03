@@ -384,9 +384,6 @@ namespace VanK
     static float fps = 0.0f;
     void Renderer::DrawFrame()
     {
-        if (windowMinimized)
-            return;
-        
         std::vector<shaderio::InstancedStorageData> storageData;
         shaderio::InstancedStorageData data;
         data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
