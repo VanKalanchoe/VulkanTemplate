@@ -25,11 +25,7 @@ namespace VanK
         uint32_t m_Width, m_Height;
         uint32_t m_TextureIndex = 0;
         
-        vk::Format textureImageFormat = vk::Format::eUndefined;
-        uint32_t mipLevels = 0;
-        
-        vk::raii::Image textureImage = nullptr;
-        vk::raii::DeviceMemory textureImageMemory = nullptr;
-        vk::raii::ImageView textureImageView = nullptr;
+        vk::Format textureImageFormat = vk::Format::eUndefined; // do i need this here ? 
+        uint32_t mipLevels = 0; // do i need this here ? 
     };
 }

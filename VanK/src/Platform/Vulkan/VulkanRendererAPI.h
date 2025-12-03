@@ -353,8 +353,7 @@ namespace VanK
         -*/
         struct Image
         {
-            VkImage image{}; // Vulkan Image
-            VmaAllocation allocation{}; // Memory associated with the image
+            vma::raii::Image image{ nullptr }; // Vulkan Image + Memory Allocation
         };
 
         /*-- 
@@ -363,7 +362,7 @@ namespace VanK
         -*/
         struct ImageResource : Image
         {
-            VkImageView view{}; // Image view
+            vk::raii::ImageView view{ nullptr }; // Image view
             vk::Extent2D extent{}; // Size of the image
             vk::ImageLayout layout{}; // Layout of the image (color attachment, shader read, ...)
         };
@@ -546,87 +545,43 @@ namespace VanK
                 }
             }
 
-            /*
             /*--
              * Create an image in GPU memory. This does not adding data to the image.
              * This is only creating the image in GPU memory.
              * See createImageAndUploadData for creating an image and uploading data.
-            -#1#
-            Image createImage(const VkImageCreateInfo& imageInfo) const
+            -*/
+            Image createImage(const vk::ImageCreateInfo& imageInfo) const
             {
-                const VmaAllocationCreateInfo createInfo{.usage = VMA_MEMORY_USAGE_GPU_ONLY};
-
-                Image image;
-                VmaAllocationInfo allocInfo{};
-                VK_CHECK(vmaCreateImage(m_allocator, &imageInfo, &createInfo, &image.image, &image.allocation, &allocInfo))
-                return image;
+                try
+                {
+                    vma::AllocationCreateInfo allocInfo{};
+                    allocInfo.usage = vma::MemoryUsage::eGpuOnly;
+                
+                    vma::AllocationInfo allocInfoOut{};  // for extra info if needed
+                    vma::raii::Image vmaImage = m_allocator->createImage(imageInfo, allocInfo, allocInfoOut);
+                    // should i DBG_VK_NAME or not good ? always where its used ???
+                    Image resultImage;
+                    resultImage.image = std::move(vmaImage); 
+                    
+                    return resultImage;
+                }
+                catch (vk::SystemError& err)
+                {
+                    VK_CORE_ERROR("Failed to createImage!");
+                    return {};
+                }
             }
-            
-            /*-- Destroy image --#1# // has to change once vma hpp
-            void destroyImage(Image& image) const { vmaDestroyImage(m_allocator, image.image, image.allocation); }
+
+            /*-- Destroy image --*/ // has to change once vma hpp
+            void destroyImage(Image& image) const { image.image.clear(); }
 
             void destroyImageResource(ImageResource& imageRessource) const
             {
                 destroyImage(imageRessource);
-                vkDestroyImageView(m_device, imageRessource.view, nullptr);
+                imageRessource.view.clear();
             }
 
-            /*-- Create an image and upload data using a staging buffer --#1#
-            template <typename T>
-            ImageResource createImageAndUploadData
-            (
-                vk::raii::CommandBuffer& cmd,
-                const std::span<T>& vectorData,
-                const vk::ImageCreateInfo& _imageInfo,
-                vk::ImageLayout finalLayout,
-                uint32_t layerCount = 1,
-                vk::ImageAspectFlags aspectFlags = vk::ImageAspectFlagBits::eColor)
-            {
-                // Create staging buffer and upload data
-                Buffer stagingBuffer = createStagingBuffer(vectorData);
-
-                // Create image in GPU memory
-                vk::ImageCreateInfo imageInfo = _imageInfo;
-                imageInfo.usage |= vk::ImageUsageFlagBits::eTransferDst; // We will copy data to this image
-                Image image = createImage(imageInfo);
-
-                // Transition image layout for copying data
-                cmdTransitionImageLayout(cmd, image.image, vk::ImageLayout::eUndefined,
-                                         vk::ImageLayout::eTransferDstOptimal, aspectFlags, 0, layerCount);
-                
-                // Copy buffer data to the image
-                std::vector<vk::BufferImageCopy> copyRegions(layerCount);
-                
-                VkDeviceSize faceSize = imageInfo.extent.width *
-                                        imageInfo.extent.height *
-                                        4; // assuming RGBA8 (4 bytes per pixel)
-
-                for (uint32_t layer = 0; layer < layerCount; layer++)
-                {
-                    copyRegions[layer] = {
-                        .bufferOffset = faceSize * layer,
-                        .bufferRowLength = 0, // tightly packed
-                        .bufferImageHeight = 0,
-                        .imageSubresource = {
-                            .aspectMask = aspectFlags,
-                            .mipLevel = 0,
-                            .baseArrayLayer = layer,
-                            .layerCount = 1,
-                        },
-                        .imageOffset = {0, 0, 0},
-                        .imageExtent = imageInfo.extent
-                    };
-                }
-                cmd.copyBufferToImage(stagingBuffer.buffer, image.image, vk::ImageLayout::eTransferDstOptimal, copyRegions);
-                
-                // Transition image layout to final layout
-                cmdTransitionImageLayout(cmd, image.image, vk::ImageLayout::eTransferDstOptimal, finalLayout, aspectFlags, 0, layerCount);
-
-                ImageResource resultImage(image);
-                resultImage.layout = finalLayout;
-                return resultImage;
-            }
-            */
+           // maybe add createimageandupload template from nvidia vk_minimal_latest creates image and copybuffer all in one from above
 
             /*--
              * The staging buffers are buffers that are used to transfer data from the CPU to the GPU.
@@ -872,7 +827,8 @@ namespace VanK
         void setFramebufferResized(bool resized) { framebufferResized = resized; }
         uint32_t getAPIVersion() const { return apiVersion; }
         vk::raii::Device& GetDevice() { return device; }
-        utils::ResourceAllocator& GetAllocator() { return allocator; }
+        utils::ResourceAllocator& GetAllocator() { return m_allocator; }
+        utils::ImageResource& GetImageSource(uint32_t index) { return m_images[index]; }
         void InitImGui() override { initImGui(); }
         ImTextureID getImTextureID(uint32_t index = 0) const override { return reinterpret_cast<ImTextureID>(uiDescriptorSet[index]); }
         void setViewportSize(Extent2D viewportSize) override
@@ -890,7 +846,7 @@ namespace VanK
         vk::raii::Device device = nullptr;
         uint32_t queueIndex = ~0;
         vk::raii::Queue queue = nullptr;
-        utils::ResourceAllocator allocator;
+        utils::ResourceAllocator m_allocator;
         vk::raii::SwapchainKHR swapChain = nullptr;
         std::vector<vk::Image> swapChainImages;
         vk::SurfaceFormatKHR swapChainSurfaceFormat;
@@ -900,7 +856,7 @@ namespace VanK
         vk::raii::PipelineLayout* pipelineLayout = nullptr;
         vk::raii::Pipeline* graphicsPipeline = nullptr;
         
-        std::vector<utils::ImageResource> images;
+        std::vector<utils::ImageResource> m_images;
         
         vk::Extent2D viewport;
         vk::raii::Image sceneImage = nullptr;
@@ -914,18 +870,12 @@ namespace VanK
         vk::raii::Image depthImage = nullptr;
         vk::raii::DeviceMemory depthImageMemory = nullptr;
         vk::raii::ImageView depthImageView = nullptr;
-
-        uint32_t mipLevels = 0;
-        vk::raii::Image textureImage = nullptr;
-        vk::raii::DeviceMemory textureImageMemory = nullptr;
-        vk::raii::ImageView textureImageView = nullptr;
+        
         SamplerPool m_samplerPool;
         vk::raii::Sampler linearSampler = nullptr;
     public: //change this to priavte later ebcause of vulkantexture class getimtextureid
         vk::raii::Sampler textureSampler = nullptr;
     private:
-        vk::Format textureImageFormat = vk::Format::eUndefined;
-        
         vk::raii::DescriptorPool descriptorPool = nullptr;
         vk::raii::DescriptorPool uiDescriptorPool = nullptr; // imgui 
         std::vector<vk::raii::DescriptorSet> descriptorSets;
@@ -1017,6 +967,7 @@ namespace VanK
         vk::SampleCountFlagBits getMaxUsableSampleCount();
 
         void createTextureSampler();
+
     public: //temp public
         vk::raii::ImageView createImageView(vk::raii::Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags,
                                             uint32_t mipLevels);

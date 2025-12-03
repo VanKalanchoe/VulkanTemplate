@@ -22,10 +22,14 @@ namespace VanK
     {
         RenderCommand::waitForGraphicsQueueIdle();
         
+        auto& instance = VulkanRendererAPI::Get();
+        
         /*if (instance.GetTextureCount() >= instance.GetMaxTexture())
         {
             instance.ResizeDescriptor(); //change this wont work i have multiple pipelines now
         }*/
+        
+        utils::ImageResource local{};
         
         // Determine the Vulkan format from KTX format
         vk::Format textureFormat;
@@ -71,39 +75,42 @@ namespace VanK
             
             textureFormat = ConvertImageFormat(m_Specification.Format);
             mipLevels = 1;
-        
-            VulkanRendererAPI::Get().createImage(
-                texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
-                vk::ImageTiling::eOptimal,
-                vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
-                vk::MemoryPropertyFlagBits::eDeviceLocal,
-                textureImage, textureImageMemory
-            );
-        
-            VulkanRendererAPI::Get().transitionImageLayout(textureImage,
+           
+            // Create the texture image
+            vk::ImageCreateInfo imageInfo
+            {
+                .imageType = vk::ImageType::e2D, .format = textureFormat,
+                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = 1,
+                .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
+                .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, .sharingMode = vk::SharingMode::eExclusive
+            };
+            
+            local.image = instance.GetAllocator().createImage(imageInfo).image;
+            DBG_VK_NAME(*local.image);
+            //maybe move transitionimagelayout and singletimecommands into utils class ?
+            VulkanRendererAPI::Get().transitionImageLayout(local.image,
             vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
         
             auto commandBuffer = VulkanRendererAPI::Get().beginSingleTimeCommands();
         
-            VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, textureImage, texWidth, texHeight);
+            VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, texWidth, texHeight);
         
             VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
         
-            VulkanRendererAPI::Get().transitionImageLayout(textureImage,
+            VulkanRendererAPI::Get().transitionImageLayout(local.image,
             vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
-
-        
-            textureImageView = VulkanRendererAPI::Get().createImageView(textureImage, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
-            DBG_VK_NAME(*textureImageView);
             
-            utils::ImageResource resource{};
-            resource.image = *textureImage;
-            resource.view = *textureImageView;
-            resource.extent.width = texWidth;
-            resource.extent.height = texHeight;
-            resource.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+            // Create the texture view maybe make info here like createimage ?
+            local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
+            if (local.view == VK_NULL_HANDLE)
+                std::cout << "VulkanTexture2D: Failed to create texture view!" << std::endl;
+            DBG_VK_NAME(*local.view);
+            
+            local.extent.width = texWidth;
+            local.extent.height = texHeight;
+            local.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
         
-            m_TextureIndex = VulkanRendererAPI::Get().AddTextureToPool(std::move(resource));
+            m_TextureIndex = VulkanRendererAPI::Get().AddTextureToPool(std::move(local));
         
             LOGI("VulkanTexture2D: Created texture with index: %u", m_TextureIndex);
 
@@ -141,16 +148,20 @@ namespace VanK
                 mipLevels = 1;
             
             // Create the texture image
-            VulkanRendererAPI::Get().createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
-                        vk::ImageTiling::eOptimal,
-                        vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-                        vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
-                        textureImageMemory);
-
-            DBG_VK_NAME(*textureImage);
+            vk::ImageCreateInfo imageInfo
+            {
+                .imageType = vk::ImageType::e2D, .format = textureFormat,
+                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = 1,
+                .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
+                .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                .sharingMode = vk::SharingMode::eExclusive
+            };
+            
+            local.image = instance.GetAllocator().createImage(imageInfo).image;
+            DBG_VK_NAME(*local.image);
 
             // Copy data from staging buffer to texture image
-            VulkanRendererAPI::Get().transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+            VulkanRendererAPI::Get().transitionImageLayout(local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
 
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = VulkanRendererAPI::Get().beginSingleTimeCommands();
             
@@ -162,12 +173,12 @@ namespace VanK
                 uint32_t mipWidth = std::max(1u, texWidth >> i);
                 uint32_t mipHeight = std::max(1u, texHeight >> i);
             
-                VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer,textureImage, static_cast<uint32_t>(mipWidth), static_cast<uint32_t>(mipHeight), offset, i);
+                VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer,local.image, mipWidth, mipHeight, offset, i);
             }
             
             VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
     
-            VulkanRendererAPI::Get().transitionImageLayout(textureImage, vk::ImageLayout::eTransferDstOptimal,
+            VulkanRendererAPI::Get().transitionImageLayout(local.image, vk::ImageLayout::eTransferDstOptimal,
                                   vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
         }
         else
@@ -179,36 +190,40 @@ namespace VanK
                 mipLevels = 1;
             
             // Create the texture image
-            VulkanRendererAPI::Get().createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
-                        vk::ImageTiling::eOptimal,
-                        vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-                        vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
-                        textureImageMemory);
-
-            DBG_VK_NAME(*textureImage);
-
+            vk::ImageCreateInfo imageInfo
+            {
+                .imageType = vk::ImageType::e2D, .format = textureFormat,
+                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = 1,
+                .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
+                .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                .sharingMode = vk::SharingMode::eExclusive
+            };
+            
+            local.image = instance.GetAllocator().createImage(imageInfo).image;
+            DBG_VK_NAME(*local.image);
+            
             // Copy data from staging buffer to texture image
-            VulkanRendererAPI::Get().transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+            VulkanRendererAPI::Get().transitionImageLayout(local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
         
-            VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+            VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
             
             VulkanRendererAPI::Get().endSingleTimeCommands(*commandBuffer);
             
             if (mipLevels > 1 && m_Specification.GenerateMips)
-                VulkanRendererAPI::Get().generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
+                VulkanRendererAPI::Get().generateMipmaps(local.image, textureFormat, texWidth, texHeight, mipLevels);
         }
-
-        textureImageView = VulkanRendererAPI::Get().createImageView(textureImage, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
-        DBG_VK_NAME(*textureImageView);
+        // Create the texture view maybe make info here like createimage ?
+        local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
+        if (local.view == VK_NULL_HANDLE)
+            std::cout << "VulkanTexture2D: Failed to create texture view!" << '\n';
         
-        utils::ImageResource resource{};
-        resource.image = *textureImage;
-        resource.view = *textureImageView;
-        resource.extent.width = texWidth;
-        resource.extent.height = texHeight;
-        resource.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+        DBG_VK_NAME(*local.view);
         
-        m_TextureIndex = VulkanRendererAPI::Get().AddTextureToPool(std::move(resource));
+        local.extent.width = texWidth;
+        local.extent.height = texHeight;
+        local.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+       
+        m_TextureIndex = VulkanRendererAPI::Get().AddTextureToPool(std::move(local));
         
         LOGI("VulkanTexture2D: Created texture with index: %u", m_TextureIndex);
     
@@ -249,7 +264,7 @@ namespace VanK
         
         VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(
             sampler, 
-            *textureImageView, 
+            *VulkanRendererAPI::Get().GetImageSource(m_TextureIndex).view, 
             static_cast<VkImageLayout>(vk::ImageLayout::eShaderReadOnlyOptimal)
         );
 

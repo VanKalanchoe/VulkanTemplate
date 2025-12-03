@@ -68,8 +68,7 @@ namespace  VanK
         pickPhysicalDevice();
         createLogicalDevice();
         createDynamicDispatcher();
-        allocator.init(instance, physicalDevice, device);
-    
+        m_allocator.init(instance, physicalDevice, device);
         msaaSamples = getMaxUsableSampleCount();
         createSwapChain();
         viewport = swapChainExtent;
@@ -79,8 +78,7 @@ namespace  VanK
         createColorResources();
         createDepthResources();
         m_samplerPool.init(device);
-        /*createTexture();*/
-        createTextureSampler();
+        createTextureSampler(); // maybe integrate into texture class ? so every texture has a reference to it ? or maybe every texture has its own sampler idk
         createDescriptorPool();
         createDescriptorSets();
         createCommandBuffers();
@@ -148,11 +146,11 @@ namespace  VanK
     void VulkanRendererAPI::cleanup()
     {
         // Clear the pool on the renderer side so it doesn't hold dangling references
-        images.clear();
+        m_images.clear();
         
         m_samplerPool.deinit();
         queryBuffer.buffer.clear(); // statistics
-        allocator.deinit();
+        m_allocator.deinit();
 
         /*ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL3_Shutdown();
@@ -521,40 +519,40 @@ namespace  VanK
     uint32_t VulkanRendererAPI::AddTextureToPool(utils::ImageResource&& imageResource)
     {
         // Add the texture to the image vector
-        images.emplace_back(std::move(imageResource));
+        m_images.emplace_back(std::move(imageResource));
         
         // Update the descriptor set to include the new texture
         updateGraphicsDescriptorSet();
 
         // Return the index of the new texture
-        return static_cast<uint32_t>(images.size() - 1);
+        return static_cast<uint32_t>(m_images.size() - 1);
     }
 
     void VulkanRendererAPI::RemoveTextureFromPool(uint32_t index)
     {
         // Safety checks
-        if (images.empty())
+        if (m_images.empty())
         {
             VK_CORE_WARN("Attempted to remove texture from empty pool");
             return;
         }
         
-        if (index >= images.size())
+        if (index >= m_images.size())
         {
-            VK_CORE_WARN("Attempted to remove texture at invalid index: %u (max: %zu)", index, images.size());
+            VK_CORE_WARN("Attempted to remove texture at invalid index: %u (max: %zu)", index, m_images.size());
             return;
         }
         
-        /*// Destroy the texture resource
-        m_allocator.destroyImageResource(m_image[index]);*/
+        // Destroy the texture resource
+        m_allocator.destroyImageResource(m_images[index]);
         
         // Remove the texture from the image vector
-        images.erase(images.begin() + index);
+        m_images.erase(m_images.begin() + index);
         
         // Update the descriptor set to include the new texture
         updateGraphicsDescriptorSet(); 
         
-        VK_CORE_INFO("Removed texture at index %u, remaining textures: %zu", index, images.size());
+        VK_CORE_INFO("Removed texture at index %u, remaining textures: %zu", index, m_images.size());
     }
 
     VanKPipeLine VulkanRendererAPI::createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification)
@@ -1571,117 +1569,6 @@ namespace  VanK
         return format == vk::Format::eD32SfloatS8Uint || format == vk::Format::eD24UnormS8Uint;
     }
 
-    void VulkanRendererAPI::createTexture()
-    {
-        ktxTexture* kTexture;
-        KTX_error_code result = ktxTexture_CreateFromNamedFile(
-            TEXTURE_PATH.c_str(),
-            KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT,
-            &kTexture);
-
-        if (result != KTX_SUCCESS)
-        {
-            throw std::runtime_error("failed to load ktx texture image!");
-        }
-
-        // Get texture dimensions and data
-        uint32_t texWidth = kTexture->baseWidth;
-        uint32_t texHeight = kTexture->baseHeight;
-        /*ktx_size_t imageSize = ktxTexture_GetImageSize(kTexture, 0);*/
-        ktx_size_t imageSize = ktxTexture_GetDataSize(kTexture); // total size of all mip levels
-        ktx_uint8_t* ktxTextureData = ktxTexture_GetData(kTexture);
-
-        // Create staging buffer
-        utils::Buffer stagingBuffer = allocator.createStagingBuffer(std::span(ktxTextureData, imageSize));
-
-        // Determine the Vulkan format from KTX format
-        vk::Format textureFormat;
-
-        // Check if the KTX texture has a format
-        if (kTexture->classId == ktxTexture2_c)
-        {
-            // For KTX2 files, we can get the format directly
-            auto* ktx2 = reinterpret_cast<ktxTexture2*>(kTexture);
-            textureFormat = static_cast<vk::Format>(ktx2->vkFormat);
-            if (textureFormat == vk::Format::eUndefined)
-            {
-                // If the format is undefined, fall back to a reasonable default
-                textureFormat = vk::Format::eB8G8R8A8Srgb;
-            }
-        }
-        else
-        {
-            // For KTX1 files or if we can't determine the format, use a reasonable default
-            textureFormat = vk::Format::eB8G8R8A8Srgb;
-        }
-
-        textureImageFormat = textureFormat;
-
-        if (kTexture->numLevels > 1)
-        {
-            mipLevels = kTexture->numLevels;
-            // Create the texture image
-            createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
-                        vk::ImageTiling::eOptimal,
-                        vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-                        vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
-                        textureImageMemory);
-
-            DBG_VK_NAME(*textureImage);
-
-            // Copy data from staging buffer to texture image
-            transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal,
-                                  mipLevels);
-
-            std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = VulkanRendererAPI::beginSingleTimeCommands();
-            // Copy each mip level
-            for (uint32_t i = 0; i < mipLevels; i++)
-            {
-                ktx_size_t offset;
-                KTX_error_code result = ktxTexture_GetImageOffset(kTexture, i, 0, 0, &offset);
-                uint32_t mipWidth = std::max(1u, texWidth >> i);
-                uint32_t mipHeight = std::max(1u, texHeight >> i);
-                
-                allocator.copyBufferToImage(commandBuffer, stagingBuffer,textureImage, static_cast<uint32_t>(mipWidth), static_cast<uint32_t>(mipHeight), offset, i);
-            }
-            endSingleTimeCommands(*commandBuffer);
-        
-            transitionImageLayout(textureImage, vk::ImageLayout::eTransferDstOptimal,
-                                  vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
-        }
-        else
-        {
-            std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = VulkanRendererAPI::beginSingleTimeCommands();
-            mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-            // Create the texture image
-            createImage(texWidth, texHeight, mipLevels, vk::SampleCountFlagBits::e1, textureFormat,
-                        vk::ImageTiling::eOptimal,
-                        vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst |
-                        vk::ImageUsageFlagBits::eSampled, vk::MemoryPropertyFlagBits::eDeviceLocal, textureImage,
-                        textureImageMemory);
-
-            DBG_VK_NAME(*textureImage);
-
-            // Copy data from staging buffer to texture image
-            transitionImageLayout(textureImage, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
-            
-            allocator.copyBufferToImage(commandBuffer, stagingBuffer, textureImage, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-            endSingleTimeCommands(*commandBuffer);
-            generateMipmaps(textureImage, textureFormat, texWidth, texHeight, mipLevels);
-        }
-
-        textureImageView = createImageView(textureImage, textureImageFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
-        DBG_VK_NAME(*textureImageView);
-        /*utils::ImageResource resource{};
-        resource.image = *textureImage;
-
-        images.emplace_back();*/
-        
-        allocator.freeStagingBuffers();
-        // Cleanup KTX resources
-        ktxTexture_Destroy(kTexture);
-    }
-
     void VulkanRendererAPI::generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
                                    uint32_t mipLevels)
     {
@@ -2002,7 +1889,7 @@ namespace  VanK
     void VulkanRendererAPI::updateGraphicsDescriptorSet()
     {
         // Don't update descriptor set if there are no textures
-        if (images.empty())
+        if (m_images.empty())
         {
             LOGW("updateGraphicsDescriptorSet: No textures to update, skipping descriptor set update");
             return;
@@ -2026,15 +1913,15 @@ namespace  VanK
     
         // Prepare imageInfos vector automatically sized to m_image's size
         std::vector<vk::DescriptorImageInfo> imageInfos;
-        imageInfos.reserve(images.size()); // reserve for efficiency
+        imageInfos.reserve(m_images.size()); // reserve for efficiency
 
         // The image info
-        for (size_t i = 0; i < images.size(); ++i)
+        for (size_t i = 0; i < m_images.size(); ++i)
         {
             imageInfos.push_back({
                 .sampler = textureSampler, // currently the same sampler maybe add them indivual in the future
-                .imageView = images[i].view,
-                .imageLayout = images[i].layout,
+                .imageView = m_images[i].view,
+                .imageLayout = m_images[i].layout,
             });
         }
 
@@ -2253,7 +2140,7 @@ namespace  VanK
     void VulkanRendererAPI::createQueryBuffer()
     {
         // 7 pipelineStatistics, 1 querycount
-        queryBuffer = allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
+        queryBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
     }
 
     void VulkanRendererAPI::downloadQueryBuffer()
