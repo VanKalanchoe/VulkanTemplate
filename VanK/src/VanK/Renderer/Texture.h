@@ -19,6 +19,7 @@ namespace VanK
     
     struct TextureSpecification
     {
+        std::string Name;
         uint32_t Width = 1;
         uint32_t Height = 1;
         ImageFormat Format = ImageFormat::RGBA8;
@@ -45,6 +46,7 @@ namespace VanK
     public:
         virtual ImTextureID getImTextureID() = 0;
         static size_t GetNumImGuiTextures() { return s_ImGuiTextureCount; }
+        static void SetNumImGuiTextures(size_t count) { s_ImGuiTextureCount = count; }
         static Ref<Texture2D> Create(const TextureSpecification& specification, Buffer data = Buffer());
         
         static AssetType GetStaticType() { return AssetType::Texture2D; }

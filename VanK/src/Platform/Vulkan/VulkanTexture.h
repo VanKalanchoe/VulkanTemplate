@@ -14,17 +14,15 @@ namespace VanK
         
         virtual const TextureSpecification& GetSpecification() const override { return m_Specification; }
         
-        virtual uint32_t GetWidth() const override { return m_Width; }
-        virtual uint32_t GetHeight() const override { return m_Height; }
+        virtual uint32_t GetWidth() const override { return m_Specification.Width; }
+        virtual uint32_t GetHeight() const override { return m_Specification.Height; }
         virtual uint32_t GetTextureIndex() const override { return m_TextureIndex; }
         virtual ImTextureID getImTextureID() override;
         
     private:
         TextureSpecification m_Specification;
-        
-        uint32_t m_Width, m_Height;
+        VkDescriptorSet m_ImGuiHandle = nullptr;
         uint32_t m_TextureIndex = 0;
-        
         vk::Format textureImageFormat = vk::Format::eUndefined; // do i need this here ? 
         uint32_t mipLevels = 0; // do i need this here ? 
     };

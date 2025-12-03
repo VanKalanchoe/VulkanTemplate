@@ -847,8 +847,11 @@ namespace VanK
         VulkanRendererAPI();
         explicit VulkanRendererAPI(const Config& config);
         ~VulkanRendererAPI() override;
+        
         static VulkanRendererAPI& Get();
-
+        
+        void Shutdown() override;
+        
         void init()
         {
             initVulkan();
@@ -862,6 +865,8 @@ namespace VanK
         uint32_t AddTextureToPool(utils::ImageResource&& imageResource);
         void RemoveTextureFromPool(uint32_t index);
         
+        /*-- Wait until GPU is done using the pipeline to safly destroy --*/
+        void waitForGraphicsQueueIdle() override;
     private:
         VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) override;
         VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) override;
@@ -887,9 +892,6 @@ namespace VanK
         VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer) override;
         void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void EndComputePass(VanKComputePass* computePass) override;
-        
-        /*-- Wait until GPU is done using the pipeline to safly destroy --*/
-        void waitForGraphicsQueueIdle() override;
     public:
         struct PipelineResource
         {
@@ -914,8 +916,10 @@ namespace VanK
         utils::ImageResource& GetImageSource(uint32_t index) { return m_images[index]; }
         void InitImGui() override { initImGui(); }
         ImTextureID getImTextureID(uint32_t index = 0) const override { return reinterpret_cast<ImTextureID>(uiDescriptorSet[index]); }
-        void setViewportSize(Extent2D viewportSize) override
-        { viewport = vk::Extent2D{viewportSize.width, viewportSize.height}; recreateImages(); }
+        void setViewportSize(Extent2D viewportSize) override { viewport = vk::Extent2D{viewportSize.width, viewportSize.height}; recreateImages(); }
+        void SetImGuiInit(bool init) override { imguiVulkanInitialized = init; } 
+        bool isImGuiInit() const { return imguiVulkanInitialized; }
+        static bool IsInitialized() { return s_instance != nullptr; }
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -983,6 +987,7 @@ namespace VanK
         bool framebufferResized = false;
         bool vSync = false;
         bool sceneImageInitialized = false;
+        bool imguiVulkanInitialized = false;
         VanKRenderOption m_renderOption = {};
 
         //statistic
@@ -1066,7 +1071,6 @@ namespace VanK
         void createDescriptorSets();
         
         void updateGraphicsDescriptorSet();
-    public: //temp public
        
     private: 
         uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);

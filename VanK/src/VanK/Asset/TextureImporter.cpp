@@ -54,6 +54,8 @@ namespace VanK
         
         if (!path[0].string().empty())
         {
+            spec.Name = path[0].stem().string();
+            
             ktxTexture2* ktx_texture = nullptr;
             
             KTX_error_code result = ktxTexture2_CreateFromNamedFile
@@ -112,6 +114,8 @@ namespace VanK
         }
         else
         {
+            spec.Name = "Default Texture";
+            
             // Allocate 4 bytes for 1 pixel RGBA
             Buffer data(spec.Width * spec.Height * 4);
             

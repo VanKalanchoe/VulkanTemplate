@@ -6,8 +6,6 @@
 
 namespace VanK
 {
-    static std::unordered_map<VulkanTexture2D*, VkDescriptorSet> s_ImGuiDescriptorSets;
-    
     vk::Format ConvertImageFormat(ImageFormat format)
     {
         switch (format)
@@ -18,7 +16,7 @@ namespace VanK
         }
     }
 
-    VulkanTexture2D::VulkanTexture2D(const TextureSpecification& specification, Buffer data) : m_Specification(specification), m_Width(m_Specification.Width), m_Height(m_Specification.Height)
+    VulkanTexture2D::VulkanTexture2D(const TextureSpecification& specification, Buffer data) : m_Specification(specification)
     {
         RenderCommand::waitForGraphicsQueueIdle();
         
@@ -234,41 +232,76 @@ namespace VanK
     }
 
     VulkanTexture2D::~VulkanTexture2D()
-    {//fix what if instance already destoryed ??? and more
-        // Remove from texture pool (optional, if you stored it there)
+    {
+        std::cout << "Destroying: " << m_Specification.Name << std::endl;
+        
+        auto& instance = VulkanRendererAPI::Get();
+        
+        // Check 2: Is the renderer properly initialized?
+        if (VulkanRendererAPI::IsInitialized())
+            return; // Renderer not initialized
+        
+        /*// Check 3: Is our texture index valid?
+        if (!instance.IsTextureValid(m_TextureIndex))
+        {
+            return; // Texture already removed or invalid index
+        }*/
+
+        /*// Check 4: Is the texture vector not empty?
+        if (instance.GetTextureCount() == 0)
+        {
+            return; // No textures to remove
+        }*/
+        
+        instance.waitForGraphicsQueueIdle();
+            
+        // Only remove handle if ImGui Vulkan is still alive
+        if (m_ImGuiHandle && instance.isImGuiInit())
+        {
+            ImGui_ImplVulkan_RemoveTexture(m_ImGuiHandle);
+            m_ImGuiHandle = nullptr;
+        }
+            
+        SetNumImGuiTextures(GetNumImGuiTextures() - 1);
+            
         if (m_TextureIndex != UINT32_MAX)
         {
-            VulkanRendererAPI::Get().RemoveTextureFromPool(m_TextureIndex);
+            // All checks passed - safe to remove
+            instance.RemoveTextureFromPool(m_TextureIndex);
             m_TextureIndex = UINT32_MAX;
-        }
-        
-        // Remove ImGui descriptor set if it exists
-        if (s_ImGuiDescriptorSets.contains(this))
-        {
-            ImGui_ImplVulkan_RemoveTexture(s_ImGuiDescriptorSets[this]);
-            s_ImGuiDescriptorSets.erase(this);
         }
     }
 
     ImTextureID VulkanTexture2D::getImTextureID()
     {
-        // Return cached descriptor set if available
-        if (s_ImGuiDescriptorSets.contains(this))
+        // If ImGui Vulkan backend is NOT available, return stored handle or nullptr
+        if (!VulkanRendererAPI::Get().isImGuiInit())
+            return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
+
+        // If a handle already exists, return it
+        if (m_ImGuiHandle)
+            return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
+
+        // Validate that the renderer Vulkan objects are still alive
+        if (!*VulkanRendererAPI::Get().textureSampler)
+            return 0;
+
+        auto view = *VulkanRendererAPI::Get().GetImageSource(m_TextureIndex).view;
+        if (!view)
+            return 0;
+
+        // Create descriptor for ImGui
+        m_ImGuiHandle = ImGui_ImplVulkan_AddTexture(
+            *VulkanRendererAPI::Get().textureSampler,
+            view,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        );
+        
+        if (m_ImGuiHandle)
         {
-            return (ImTextureID)s_ImGuiDescriptorSets[this];
+            SetNumImGuiTextures(GetNumImGuiTextures() + 1);
         }
 
-        // Create a new descriptor set for ImGui
-        // We use the shared texture sampler from the RendererAPI
-        vk::Sampler sampler = *VulkanRendererAPI::Get().textureSampler;
-        
-        VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(
-            sampler, 
-            *VulkanRendererAPI::Get().GetImageSource(m_TextureIndex).view, 
-            static_cast<VkImageLayout>(vk::ImageLayout::eShaderReadOnlyOptimal)
-        );
-
-        s_ImGuiDescriptorSets[this] = ds;
-        return (ImTextureID)ds;
+        return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
     }
 }

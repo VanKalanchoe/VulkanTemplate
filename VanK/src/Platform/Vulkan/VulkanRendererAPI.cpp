@@ -14,7 +14,7 @@ printf((format), __VA_ARGS__);                                                  
 printf("\n");                                                                                                      \
 }
 #include <iostream>
-
+#include <slang.h>
 
 
 #include <SDL3/SDL_events.h>
@@ -39,14 +39,8 @@ namespace  VanK
 
     VulkanRendererAPI::~VulkanRendererAPI()
     {
-        // Clear the static instance if it's this instance
-        if (s_instance == this)
-        {
-            s_instance = nullptr;
-        }
-        device.waitIdle();
-        DestroyAllPipelines();// todo idk where to put this will see
-        cleanup();
+        std::cout << "VulkanRendererAPI::~VulkanRendererAPI()" << std::endl;
+        VulkanRendererAPI::Shutdown();
     }
 
     VulkanRendererAPI& VulkanRendererAPI::Get()
@@ -59,7 +53,19 @@ namespace  VanK
         }
         return *s_instance;
     }
-    
+
+    void VulkanRendererAPI::Shutdown()
+    {
+        // Clear the static instance if it's this instance if i call this errors on mass
+        /*if (s_instance == this)
+        {
+            s_instance = nullptr;
+        }*/
+        device.waitIdle();
+        /*DestroyAllPipelines();// todo idk where to put this will see*/
+        cleanup();
+    }
+
     void VulkanRendererAPI::initVulkan()
     {
         createInstance();
@@ -151,10 +157,6 @@ namespace  VanK
         m_samplerPool.deinit();
         queryBuffer.buffer.clear(); // statistics
         m_allocator.deinit();
-
-        /*ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
-        ImGui::DestroyContext();*/
     }
 
     void VulkanRendererAPI::recreateSwapChain()

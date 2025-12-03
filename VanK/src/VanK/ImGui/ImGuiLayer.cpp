@@ -48,6 +48,8 @@ namespace VanK
         
         RenderCommand::InitImGui();
         
+        RenderCommand::SetImGuiInit(true);
+        
         SetDarkThemeColors();
         
         // Load Fonts
@@ -69,6 +71,7 @@ namespace VanK
 
     ImGuiLayer::~ImGuiLayer()
     {
+        ShutDown();
     }
 
     void ImGuiLayer::ShutDown()
@@ -78,6 +81,7 @@ namespace VanK
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL3_Shutdown();
         ImGui::DestroyContext();
+        RenderCommand::SetImGuiInit(false);
     }
 
     void ImGuiLayer::OnUpdate(Timestep ts)

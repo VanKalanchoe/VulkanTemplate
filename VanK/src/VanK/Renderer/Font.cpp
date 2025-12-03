@@ -140,6 +140,7 @@ namespace VanK
 
     Font::~Font()
     {
+        std::cout << "Font Destructor" << std::endl;
         delete m_Data;
     }
 

@@ -11,6 +11,13 @@ namespace VanK
         {
             s_RendererAPI = RendererAPI::Create(s_Config);
         }
+        
+        static void Shutdown()
+        {
+            if (s_RendererAPI) s_RendererAPI->Shutdown();
+            
+            s_RendererAPI.reset();
+        }
 
         // function overloads ??? is tht what teh call it
 
@@ -22,6 +29,11 @@ namespace VanK
         static void InitImGui()
         {
             if (s_RendererAPI) s_RendererAPI->InitImGui();
+        }
+        
+        static void SetImGuiInit(bool init)
+        {
+            if (s_RendererAPI) s_RendererAPI->SetImGuiInit(init);
         }
 
         static ImTextureID getImTextureID(uint32_t index = 0)

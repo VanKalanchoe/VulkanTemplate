@@ -403,8 +403,10 @@ namespace VanK
         virtual ~RendererAPI() = default;
 
         // exposing
+        virtual void Shutdown() = 0; // shutdown renderer
         virtual void RebuildSwapchain(bool vSyncVal) = 0;
         virtual void InitImGui() = 0;
+        virtual void SetImGuiInit(bool init) = 0;
         virtual ImTextureID getImTextureID(uint32_t index = 0) const = 0;
         virtual void setViewportSize(Extent2D viewportSize) = 0;
         virtual VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) = 0;

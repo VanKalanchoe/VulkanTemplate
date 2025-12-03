@@ -12,6 +12,7 @@
 #include <glm/common.hpp>
 #include <backends/imgui_impl_SDL3.h>
 
+#include "../../../../VanK-Editor/src/EditorLayer.h"
 #include "VanK/Core/Log.h"
 #include "VanK/Events/InputEvents.h"
 #include "VanK/Events/WindowEvents.h"
@@ -41,7 +42,10 @@ namespace VanK
 
     Application::~Application()
     {
-        GetLayer<ImGuiLayer>()->ShutDown();
+        PopLayer<ImGuiLayer>();
+        
+        /*
+        GetLayer<ImGuiLayer>()->ShutDown();*/
         
         Renderer::Shutdown();
         

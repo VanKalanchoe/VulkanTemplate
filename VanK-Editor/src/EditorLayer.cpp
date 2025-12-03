@@ -18,10 +18,9 @@
 namespace VanK
 {
     static Ref<Font> s_Font;
-    
     EditorLayer::EditorLayer() : Layer("EditorLayer"), m_CameraController(1280.0f / 720.0f)
     {
-        s_Font = Font::GetDefault();
+        s_Font = Font::GetDefault(); //cant use this ebcause static otherwise it dies last even last to renderer works again ebcasue i remove static in shutdown vulkanrenderapi
         // ui toolbar disabled beider panels.onimguirender disabled renderer drawframe submit rendering zu endsubmit gezogen
         // pngs zu ktx konvertien mit meinem python program // enable all pngs back fix texture class something still messed
         //create texture still running inside vulanrendererapi
@@ -62,6 +61,7 @@ namespace VanK
 
     EditorLayer::~EditorLayer()
     {
+        std::cout << "EditorLayer::~EditorLayer()" << std::endl;
     }
 
     void EditorLayer::OnEvent(VanK::Event& event)

@@ -60,6 +60,18 @@ namespace VanK
         {
             m_LayerStack.push_back(std::make_unique<TLayer>());    
         }
+        
+        template<typename TLayer>
+        requires(std::is_base_of_v<Layer, TLayer>)
+        void PopLayer()
+        {
+            auto it = std::find_if(m_LayerStack.begin(), m_LayerStack.end(), [](const std::unique_ptr<Layer>& layer) {
+                return dynamic_cast<TLayer*>(layer.get()) != nullptr;
+            });
+
+            if (it != m_LayerStack.end())
+                m_LayerStack.erase(it); // layer is destroyed here
+        }
 
         template<typename TLayer>
         requires(std::is_base_of_v<Layer, TLayer>)
