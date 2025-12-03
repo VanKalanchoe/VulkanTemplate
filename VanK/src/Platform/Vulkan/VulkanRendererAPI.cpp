@@ -6,7 +6,7 @@
 -*/
 #define VMA_DYNAMIC_VULKAN_FUNCTIONS 1
 #define VMA_IMPLEMENTATION
-#include "vk_mem_alloc.hpp"
+#include "vk_mem_alloc_raii.hpp"
 #define VMA_LEAK_LOG_FORMAT(format, ...)                                                                               \
 {                                                                                                                    \
 printf((format), __VA_ARGS__);                                                                                     \
@@ -14,7 +14,8 @@ printf("\n");                                                                   
 }
 #include <iostream>
 
-#include "vk_mem_alloc.h"
+/*
+#include "vk_mem_alloc.h"*/
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_vulkan.h>

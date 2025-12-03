@@ -38,7 +38,7 @@ import vulkan_hpp;
 #pragma warning(disable : 4127)  // Conditional expression is constant
 #pragma warning(disable : 4324)  // Structure was padded due to alignment specifier
 #pragma warning(disable : 4505)  // Unreferenced function with internal linkage has been removed
-#include "vk_mem_alloc.hpp"
+#include "vk_mem_alloc_raii.hpp"
 #pragma warning(pop)
 #ifdef __clang__
 #pragma clang diagnostic pop
