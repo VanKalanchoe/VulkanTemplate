@@ -347,6 +347,7 @@ namespace VanK
         meshes.push_back(gltfMesh);
 
         uint32_t baseVertex = vertices.size();
+        std::cout << "baseVertex: " << baseVertex << std::endl;
         vertices.insert(vertices.end(), GeometryData::cubeVertices.begin(), GeometryData::cubeVertices.end());
         
         uint32_t baseIndex = indices.size();
@@ -559,7 +560,9 @@ namespace VanK
         
         RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
         uint32_t numMeshes = static_cast<uint32_t>(meshes.size());
-        RenderCommand::DispatchCompute(computePass, numMeshes , 1, 1);
+        uint32_t threadsPerGroup = 64; // matches [numthreads(64,1,1)]
+        uint32_t dispatchCount = (numMeshes + threadsPerGroup - 1) / threadsPerGroup;
+        RenderCommand::DispatchCompute(computePass, dispatchCount, 1, 1);
 
         RenderCommand::EndComputePass(computePass);
         
