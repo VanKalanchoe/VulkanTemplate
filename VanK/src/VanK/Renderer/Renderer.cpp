@@ -22,6 +22,17 @@ namespace VanK
     std::string changedFile;
     Timer ReloadTimer;
 
+    struct MeshInfo
+    {
+        uint32_t indexCount;    // number of indices for this mesh
+        uint32_t instanceCount; // how many instances of this mesh you want
+        uint32_t firstIndex;    // starting index in the global index buffer
+        uint32_t vertexOffset;  // vertex base offset
+        uint32_t firstInstance; // optional, for indirect draw
+    };
+    
+    std::vector<MeshInfo> meshes;
+    
     struct Renderer3DData
     {
         struct CameraData
@@ -32,8 +43,8 @@ namespace VanK
             uint64_t indirectAddress;
             uint64_t countAddress;
             uint64_t storageAddress;
-            uint32_t numVertices;
-            uint32_t numIndicies;
+            uint32_t numMeshes;
+            MeshInfo meshes[100]; // fixed size array or dynamic with SSBO
         };
         CameraData camData;
     };
@@ -240,7 +251,7 @@ namespace VanK
         const std::vector<VanKPipelineColorBlendAttachmentState> ColorBlendAttachmentStates =
         {
             {
-                .blendEnable = false,
+                .blendEnable = true,
                 .srcColorBlendFactor = VanK_BLEND_FACTOR_SRC_ALPHA,
                 .dstColorBlendFactor = VanK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 .colorBlendOp = VanK_BLEND_OP_ADD,
@@ -325,9 +336,40 @@ namespace VanK
         uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.camData)));
 
         loadModel();
+        
+        // Load GLTF mesh
+        MeshInfo gltfMesh{};
+        gltfMesh.firstIndex = 0; // initial index buffer offset
+        gltfMesh.indexCount = indices.size();
+        gltfMesh.vertexOffset = 0;
+        gltfMesh.instanceCount = 10; // e.g., 1 copies of GLTF mesh
+        gltfMesh.firstInstance = 0;
+        meshes.push_back(gltfMesh);
 
+        uint32_t baseVertex = vertices.size();
+        vertices.insert(vertices.end(), GeometryData::cubeVertices.begin(), GeometryData::cubeVertices.end());
+        
+        uint32_t baseIndex = indices.size();
+        for (uint32_t idx : GeometryData::cubeIndices)
+            indices.push_back(baseVertex + idx);
+        
+        uint32_t firstInstance = 0;
+        if (!meshes.empty()) {
+            const auto& lastMesh = meshes.back();
+            firstInstance = lastMesh.firstInstance + lastMesh.instanceCount;
+        }
+        
+        MeshInfo cubeMesh{};
+        cubeMesh.firstIndex = baseIndex; // after GLTF indices appended
+        cubeMesh.indexCount = static_cast<uint32_t>(GeometryData::cubeIndices.size());;
+        cubeMesh.vertexOffset = baseVertex; // where cube vertices start
+        cubeMesh.instanceCount = 2;         // 5 cubes
+        cubeMesh.firstInstance = firstInstance;
+        meshes.push_back(cubeMesh);
+        
         /*vertices = GeometryData::cubeVertices;
         indices = GeometryData::cubeIndices;*/
+        
         //fix upload in geometry.cpp maybe stagingbuffer will see
         size_t vertexBufferSize = sizeof(vertices[0]) * vertices.size();
         m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
@@ -335,7 +377,7 @@ namespace VanK
         size_t indexBufferSize = sizeof(indices[0]) * indices.size();
         m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
 
-        uint32_t maxDraws = 1;
+        uint32_t maxDraws = static_cast<uint32_t>(meshes.size());
         size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * maxDraws;
         indirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
 
@@ -343,7 +385,10 @@ namespace VanK
         countBuffer.reset(IndirectBuffer::Create(countBufferSize));
         
         //needs to be dynamic because it can change per mesh even if they are the same 
-        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData);
+        uint32_t totalInstances = 0;
+        for (const auto& mesh : meshes)
+            totalInstances += mesh.instanceCount;
+        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * totalInstances;
         m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
 
         //maybe for storagebuffer it has to be seprate idk how resizing works will see
@@ -355,6 +400,8 @@ namespace VanK
 
         texture = TextureImporter::LoadTexture2D("");
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
+        vikingRoom2 = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room2.ktx2");
+        ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
     }
     
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
@@ -409,10 +456,45 @@ namespace VanK
     void Renderer::DrawFrame()
     {
         std::vector<shaderio::InstancedStorageData> storageData;
-        shaderio::InstancedStorageData data;
-        data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
-        data.albedoMap = vikingRoom->GetTextureIndex();
-        storageData.push_back(data);
+        
+        // Example transforms for each mesh
+        std::vector<glm::vec3> translations = {
+            glm::vec3(0.0f, 0.0f, 0.0f),
+            glm::vec3(2.0f, 0.0f, 0.0f),
+            glm::vec3(-2.0f, 0.0f, 0.0f)
+        };
+
+        // Loop over meshes + each instance
+        int gridWidth = 3;      // how many per row
+        float spacing = 2.0f;
+
+        size_t instanceCounter = 0;
+        for (size_t i = 0; i < meshes.size(); i++)
+        {
+            for (uint32_t j = 0; j < meshes[i].instanceCount; j++)
+            {
+                int row = instanceCounter / gridWidth;
+                int col = instanceCounter % gridWidth;
+
+                float x = col * spacing;
+                float y = 0.0f;
+                float z = row * spacing;
+
+                shaderio::InstancedStorageData data{};
+                data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
+
+                // Assign textures
+                if (instanceCounter == 0)
+                    data.albedoMap = vikingRoom->GetTextureIndex();
+                else if (instanceCounter == 1)
+                    data.albedoMap = vikingRoom2->GetTextureIndex();
+                else
+                    data.albedoMap = ChernoLogo->GetTextureIndex();
+
+                storageData.push_back(data);
+                instanceCounter++;
+            }
+        }
         
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, vertices, shaderio::InstancedVertexData, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, indices, uint32_t, 0);
@@ -462,23 +544,13 @@ namespace VanK
         float time = std::chrono::duration<float>(currentTime - startTime).count();
         float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
         lastFrameTime = currentTime;
-
-        // Camera and projection matrices (shared by all objects)
-        /*glm::mat4 view = glm::lookAt(glm::vec3(0.0f, 1.0f, -3.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        glm::mat4 proj = glm::perspective(glm::radians(45.0f),
-                                          static_cast<float>(m_ViewportSize.width) / static_cast<float>(m_ViewportSize.
-                                              height), 0.1f, 20.0f);
-        proj[1][1] *= -1;
-        */
         
-        /*s_Data.camData.view = view;
-        s_Data.camData.proj = proj;*/
         s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
         s_Data.camData.countAddress = countBuffer->GetBufferAddress();
         s_Data.camData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
-        s_Data.camData.numVertices = static_cast<uint32_t>(vertices.size());
-        s_Data.camData.numIndicies = static_cast<uint32_t>(indices.size());
+        s_Data.camData.numMeshes = static_cast<uint32_t>(meshes.size());
+        memcpy(s_Data.camData.meshes, meshes.data(), meshes.size() * sizeof(MeshInfo));
         uniformScene->Update(cmd, &s_Data.camData, sizeof(s_Data.camData));
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
@@ -486,8 +558,8 @@ namespace VanK
         VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get());
         
         RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
-        
-        RenderCommand::DispatchCompute(computePass, 1, 1, 1);
+        uint32_t numMeshes = static_cast<uint32_t>(meshes.size());
+        RenderCommand::DispatchCompute(computePass, numMeshes , 1, 1);
 
         RenderCommand::EndComputePass(computePass);
         
@@ -515,7 +587,7 @@ namespace VanK
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
 
             /*RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);*/
-            RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, 1, sizeof(shaderio::DrawIndexedIndirectCommand));
+            RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, static_cast<uint32_t>(meshes.size()), sizeof(shaderio::DrawIndexedIndirectCommand));
 
             RenderCommand::EndRendering(cmd);
         }

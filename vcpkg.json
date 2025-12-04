@@ -4,7 +4,6 @@
   "dependencies": [
     { "name": "sdl3", "features": [ "vulkan" ] },
     "glm",
-    "tinyobjloader",
     "stb",
     "tinygltf",
     "nlohmann-json",

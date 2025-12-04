@@ -21,6 +21,15 @@ STATIC_CONST int LBindTextures = 0;
 STATIC_CONST int LSetScene      = 1;
 STATIC_CONST int LBindSceneInfo = 0;
 
+struct MeshInfo
+{
+    uint32_t indexCount;    // number of indices for this mesh
+    uint32_t instanceCount; // how many instances of this mesh you want
+    uint32_t firstIndex;    // starting index in the global index buffer
+    uint32_t vertexOffset;  // vertex base offset
+    uint32_t firstInstance; // optional, for indirect draw
+};
+
 struct UniformBuffer 
 {
     mat4 view;
@@ -29,8 +38,8 @@ struct UniformBuffer
     uint64_t indirectAddress;
     uint64_t countAddress;
     uint64_t storageAddress;
-    uint32_t numVertices;
-    uint32_t numIndicies;
+    uint32_t numMeshes;
+    MeshInfo meshes[100];
 };
 
 struct InstancedIndexData

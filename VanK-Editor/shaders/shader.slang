@@ -43,7 +43,7 @@ const bool useTexture = false; // Controls whether texture sampling is enabled
 
 // Note: [shader("vertex")] is Slang's way of marking the vertex shader entry point
 [shader("vertex")]
-VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID) 
+VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID, uint drawIndex : SV_DrawIndex) 
 {
     VertexOutput output;
 
@@ -51,7 +51,7 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     InstancedVertexData vertexData = vertex[vertexID];
 
     InstancedStorageData* storage = (InstancedStorageData*)ubo.storageAddress;
-    InstancedStorageData storageData = storage[instanceID];
+    InstancedStorageData storageData = storage[instanceID + ubo.meshes[drawIndex].firstInstance];
 
     output.pos = mul(ubo.proj, mul(ubo.view, mul(storageData.Model, float4(vertexData.position, 1.0))));
     output.fragTexCoord = vertexData.texcoords.xy;

@@ -11,20 +11,28 @@ ConstantBuffer<UniformBuffer, ScalarDataLayout> ubo;
 [numthreads(1,1,1)]
 void compMain(uint3 GlobalInvocationID : SV_DispatchThreadID)
 {
-    uint index = GlobalInvocationID.x;
-    // only one thread (index 0) fills the indirect command
-    if (index == 0)
+    uint meshIndex = GlobalInvocationID.x;
+
+    // Only process if meshIndex is valid
+    if (meshIndex >= ubo.numMeshes)
+        return;
+
+    // Pointer to indirect draw commands buffer
+    DrawIndexedIndirectCommand* indirect = (DrawIndexedIndirectCommand*)ubo.indirectAddress;
+
+    // Read mesh info from a structured buffer or uniform (e.g., firstIndex, indexCount, vertexOffset, instanceCount, firstInstance)
+    MeshInfo mesh = ubo.meshes[meshIndex];
+
+    indirect[meshIndex].indexCount    = mesh.indexCount;
+    indirect[meshIndex].instanceCount = mesh.instanceCount;
+    indirect[meshIndex].firstIndex    = mesh.firstIndex;
+    indirect[meshIndex].vertexOffset  = mesh.vertexOffset;
+    indirect[meshIndex].firstInstance = mesh.firstInstance;
+
+    // Optionally write draw count (for DrawIndexedIndirectCount)
+    if (meshIndex == 0)
     {
-        DrawIndexedIndirectCommand* indirect = (DrawIndexedIndirectCommand*)ubo.indirectAddress;
-
-        indirect[0].indexCount    = ubo.numIndicies;   // total number of indices
-        indirect[0].instanceCount = 1;              // number of instances
-        indirect[0].firstIndex    = 0;              // start of index buffer
-        indirect[0].vertexOffset  = 0;              // offset added to vertex indices
-        indirect[0].firstInstance = 0;              // first instance ID
-
-        // optionally, write draw count
         uint* count = (uint*)ubo.countAddress;
-        count[0] = 1; // one draw command
+        count[0] = ubo.numMeshes; // total number of draw commands
     }
 }
