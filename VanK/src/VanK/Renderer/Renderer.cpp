@@ -444,16 +444,13 @@ namespace VanK
 
     void Renderer::EndSubmit()
     {
-        {
-            RenderCommand::SubmitRendering(cmd);
-        }
+        RenderCommand::SubmitRendering(cmd);
         
         RenderCommand::EndCommandBuffer(cmd);
+        
         RenderCommand::EndFrame();
     }
-    static auto lastTime = std::chrono::high_resolution_clock::now();
-    static int frameCount = 0;
-    static float fps = 0.0f;
+    
     void Renderer::DrawFrame()
     {
         std::vector<shaderio::InstancedStorageData> storageData;
@@ -500,51 +497,6 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, vertices, shaderio::InstancedVertexData, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, indices, uint32_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, storageData, shaderio::InstancedStorageData, 0);
-
-        /*std::vector<VanKDrawIndexedIndirectCommand> drawCommands(1);
-
-        for (uint32_t i = 0; i < 1; i++)
-        {
-            drawCommands[i].indexCount   = indices.size();
-            drawCommands[i].instanceCount= 1;
-            drawCommands[i].firstIndex   = 0;
-            drawCommands[i].vertexOffset = 0;
-            drawCommands[i].firstInstance = i;
-        }
-        UploadBufferToGpuWithTransferRing(cmd, transferRing, indirectBuffer, drawCommands, VanKDrawIndexedIndirectCommand, 0);
-
-        uint32_t drawCount = 1;
-        std::vector<uint32_t> countVec = { drawCount };
-        UploadBufferToGpuWithTransferRing(cmd, transferRing, countBuffer, countVec, uint32_t, 0);*/
-        
-        frameCount++;
-        auto now = std::chrono::high_resolution_clock::now();
-        float elapsed = std::chrono::duration<float>(now - lastTime).count();
-        if (elapsed >= 1.0f)
-        {
-            fps = frameCount / elapsed;
-            frameCount = 0;
-            lastTime = now;
-            /*std::cout << "FPS: " << fps << std::endl;*/
-        }
-        if (s_IsPipelineReloadFinished.exchange(false))
-        {
-            IsShaderReloadFinished = false;
-            if (s_ShaderWatcher.empty())
-                WatchShaderFiles();
-
-            EndSubmit();
-            ReloadPipelines();
-            BeginSubmit();
-            return;
-        }
-        
-        static auto startTime = std::chrono::high_resolution_clock::now();
-        static auto lastFrameTime = startTime;
-        auto currentTime = std::chrono::high_resolution_clock::now();
-        float time = std::chrono::duration<float>(currentTime - startTime).count();
-        float deltaTime = std::chrono::duration<float>(currentTime - lastFrameTime).count();
-        lastFrameTime = currentTime;
         
         s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
@@ -565,7 +517,6 @@ namespace VanK
         RenderCommand::DispatchCompute(computePass, dispatchCount, 1, 1);
 
         RenderCommand::EndComputePass(computePass);
-        
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
@@ -599,6 +550,17 @@ namespace VanK
     void Renderer::Flush()
     {
         /*BeginSubmit();*/
+        if (s_IsPipelineReloadFinished.exchange(false))
+        {
+            IsShaderReloadFinished = false;
+            if (s_ShaderWatcher.empty())
+                WatchShaderFiles();
+
+            EndSubmit();
+            ReloadPipelines();
+            BeginSubmit();
+            return;
+        }
         DrawFrame();
         /*EndSubmit();*/
     }
