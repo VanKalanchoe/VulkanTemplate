@@ -21,17 +21,6 @@ namespace VanK
     bool IsShaderReloadFinished = false;
     std::string changedFile;
     Timer ReloadTimer;
-
-    struct MeshInfo
-    {
-        uint32_t indexCount;    // number of indices for this mesh
-        uint32_t instanceCount; // how many instances of this mesh you want
-        uint32_t firstIndex;    // starting index in the global index buffer
-        uint32_t vertexOffset;  // vertex base offset
-        uint32_t firstInstance; // optional, for indirect draw
-    };
-    
-    std::vector<MeshInfo> meshes;
     
     struct Renderer3DData
     {
@@ -44,7 +33,7 @@ namespace VanK
             uint64_t countAddress;
             uint64_t storageAddress;
             uint32_t numMeshes;
-            MeshInfo meshes[100]; // fixed size array or dynamic with SSBO
+            shaderio::MeshInfo meshes[100]; // fixed size array or dynamic with SSBO
         };
         CameraData camData;
     };
@@ -337,7 +326,10 @@ namespace VanK
 
         loadModel();
         
-        // Load GLTF mesh
+        Geometry::AppendGeometry("model", vertices, indices);
+        Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices);
+        
+        /*// Load GLTF mesh
         MeshInfo gltfMesh{};
         gltfMesh.firstIndex = 0; // initial index buffer offset
         gltfMesh.indexCount = indices.size();
@@ -366,19 +358,19 @@ namespace VanK
         cubeMesh.vertexOffset = baseVertex; // where cube vertices start
         cubeMesh.instanceCount = 2;         // 5 cubes
         cubeMesh.firstInstance = firstInstance;
-        meshes.push_back(cubeMesh);
+        meshes.push_back(cubeMesh);*/
         
         /*vertices = GeometryData::cubeVertices;
         indices = GeometryData::cubeIndices;*/
         
         //fix upload in geometry.cpp maybe stagingbuffer will see
-        size_t vertexBufferSize = sizeof(vertices[0]) * vertices.size();
+        size_t vertexBufferSize = sizeof(vertices[0]) * Geometry::GetVertices().size();
         m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
 
-        size_t indexBufferSize = sizeof(indices[0]) * indices.size();
+        size_t indexBufferSize = sizeof(indices[0]) * Geometry::GetIndices().size();
         m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
 
-        uint32_t maxDraws = static_cast<uint32_t>(meshes.size());
+        uint32_t maxDraws = static_cast<uint32_t>(Geometry::GetMeshes().size());
         size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * maxDraws;
         indirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
 
@@ -387,7 +379,7 @@ namespace VanK
         
         //needs to be dynamic because it can change per mesh even if they are the same 
         uint32_t totalInstances = 0;
-        for (const auto& mesh : meshes)
+        for (const auto& mesh : Geometry::GetMeshes())
             totalInstances += mesh.instanceCount;
         size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * totalInstances;
         m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
@@ -453,57 +445,47 @@ namespace VanK
     
     void Renderer::DrawFrame()
     {
-        std::vector<shaderio::InstancedStorageData> storageData;
-        
-        // Example transforms for each mesh
-        std::vector<glm::vec3> translations = {
-            glm::vec3(0.0f, 0.0f, 0.0f),
-            glm::vec3(2.0f, 0.0f, 0.0f),
-            glm::vec3(-2.0f, 0.0f, 0.0f)
-        };
-
-        // Loop over meshes + each instance
-        int gridWidth = 3;      // how many per row
+        int gridWidth = 3;
         float spacing = 2.0f;
+        float cubeOffsetX = 1.0f; // move cubes to the right
 
-        size_t instanceCounter = 0;
-        for (size_t i = 0; i < meshes.size(); i++)
+        std::vector<shaderio::InstancedStorageData> storageData;
+
+        for (size_t i = 0; i < Geometry::GetMeshes().size(); i++)
         {
-            for (uint32_t j = 0; j < meshes[i].instanceCount; j++)
+            uint32_t textureIndex = (i == 0) ? vikingRoom->GetTextureIndex() : ChernoLogo->GetTextureIndex();
+
+            for (uint32_t j = 0; j < Geometry::GetMeshes()[i].instanceCount; j++)
             {
-                int row = instanceCounter / gridWidth;
-                int col = instanceCounter % gridWidth;
+                int row = j / gridWidth;
+                int col = j % gridWidth;
 
                 float x = col * spacing;
                 float y = 0.0f;
                 float z = row * spacing;
 
+                // offset cubes
+                if (i == 1) // cube mesh
+                    x += cubeOffsetX;
+
                 shaderio::InstancedStorageData data{};
                 data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
-
-                // Assign textures
-                if (instanceCounter == 0)
-                    data.albedoMap = vikingRoom->GetTextureIndex();
-                else if (instanceCounter == 1)
-                    data.albedoMap = vikingRoom2->GetTextureIndex();
-                else
-                    data.albedoMap = ChernoLogo->GetTextureIndex();
+                data.albedoMap = textureIndex;
 
                 storageData.push_back(data);
-                instanceCounter++;
             }
         }
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, vertices, shaderio::InstancedVertexData, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, indices, uint32_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, storageData, shaderio::InstancedStorageData, 0);
         
         s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
         s_Data.camData.countAddress = countBuffer->GetBufferAddress();
         s_Data.camData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
-        s_Data.camData.numMeshes = static_cast<uint32_t>(meshes.size());
-        memcpy(s_Data.camData.meshes, meshes.data(), meshes.size() * sizeof(MeshInfo));
+        s_Data.camData.numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
+        memcpy(s_Data.camData.meshes, Geometry::GetMeshes().data(), Geometry::GetMeshes().size() * sizeof(shaderio::MeshInfo));
         uniformScene->Update(cmd, &s_Data.camData, sizeof(s_Data.camData));
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
@@ -511,7 +493,7 @@ namespace VanK
         VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get());
         
         RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
-        uint32_t numMeshes = static_cast<uint32_t>(meshes.size());
+        uint32_t numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
         uint32_t threadsPerGroup = 64; // matches [numthreads(64,1,1)]
         uint32_t dispatchCount = (numMeshes + threadsPerGroup - 1) / threadsPerGroup;
         RenderCommand::DispatchCompute(computePass, dispatchCount, 1, 1);
@@ -541,7 +523,7 @@ namespace VanK
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
 
             /*RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);*/
-            RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, static_cast<uint32_t>(meshes.size()), sizeof(shaderio::DrawIndexedIndirectCommand));
+            RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, static_cast<uint32_t>(Geometry::GetMeshes().size()), sizeof(shaderio::DrawIndexedIndirectCommand));
 
             RenderCommand::EndRendering(cmd);
         }

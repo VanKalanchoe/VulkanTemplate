@@ -15,15 +15,35 @@ namespace VanK
         #include "shaderIO.h"
     }
     
+    struct CpuMeshInfo
+    {
+        std::string name;
+        shaderio::MeshInfo gpu;
+    };
+    
     class Geometry
     {
-    private:
-        inline static uint32_t CurrentVertexOffset = 0;
-        inline static uint32_t CurrentIndexOffset  = 0;
-        inline static uint32_t CurrentStorageOffset = 0;
     public:
-        static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, std::vector<uint32_t> indices);
+        static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices);
         static void AppendGeometryData(VanKCommandBuffer cmd, const std::string& name, const std::vector<shaderio::InstancedStorageData>& data);
+        
+        // Getters for upload 
+        static const std::vector<shaderio::InstancedVertexData>& GetVertices() { return s_Vertices; }
+        static const std::vector<uint32_t>& GetIndices() { return s_Indices; }
+        static uint32_t GetTotalInstances() { return s_TotalInstances; }
+        static uint32_t GetMeshCount() { return static_cast<uint32_t>(s_MeshInfos.size()); }
+        static std::vector<shaderio::MeshInfo> GetMeshes()
+        {
+            std::vector<shaderio::MeshInfo> meshes;
+            meshes.reserve(s_MeshInfos.size());
+            for (const auto& cpuMesh : s_MeshInfos) 
+                meshes.push_back(cpuMesh.gpu); return meshes;
+        }
+    private:
+        static std::vector<CpuMeshInfo> s_MeshInfos;
+        static std::vector<shaderio::InstancedVertexData> s_Vertices;
+        static std::vector<uint32_t> s_Indices;
+        static uint32_t s_TotalInstances;
     };
 
     namespace GeometryData

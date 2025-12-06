@@ -48,7 +48,7 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     VertexOutput output;
 
     InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertexAddress;
-    InstancedVertexData vertexData = vertex[vertexID];
+    InstancedVertexData vertexData = vertex[vertexID + ubo.meshes[drawIndex].vertexOffset];
 
     InstancedStorageData* storage = (InstancedStorageData*)ubo.storageAddress;
     InstancedStorageData storageData = storage[instanceID + ubo.meshes[drawIndex].firstInstance];
