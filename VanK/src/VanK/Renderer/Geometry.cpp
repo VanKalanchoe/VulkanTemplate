@@ -1,6 +1,7 @@
 #include "Geometry.h"
 
 #include "Renderer.h"
+#include "VanK/Core/Log.h"
 
 namespace VanK
 {
@@ -29,38 +30,47 @@ namespace VanK
         
         // 3. Update Global State
         s_MeshInfos.emplace_back(name, gpuInfo);
-        s_TotalInstances++;
     }
     
     void Geometry::AppendGeometryData(const std::string& name, const std::vector<shaderio::InstancedStorageData>& data)
     {
-        // 1. Append the new instance data to the global storage vector
-        // This is correct: all instances are stored sequentially.
+        // 1. Append the new instance data
+        // This assumes AppendGeometryData is called only once per mesh.
         s_StorageData.insert(s_StorageData.end(), data.begin(), data.end());
 
-        // 2. Find the corresponding mesh and SET its instance count
-        bool found = false;
-        for (auto& cpuMesh : s_MeshInfos) 
+        uint32_t newInstanceCount = static_cast<uint32_t>(data.size());
+
+        // 2. Find the mesh and update its count
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i) 
         {
-            if (cpuMesh.name == name) 
+            if (s_MeshInfos[i].name == name) 
             {
-                // ⭐ CRITICAL CHANGE: Set the instanceCount to the new total size
-                // Since you set the initial count to 0 in AppendGeometry, we just set the size.
-                cpuMesh.gpu.instanceCount = static_cast<uint32_t>(data.size());
-                found = true;
-                break; 
+                // The old instance count is 0 (set in AppendGeometry).
+                uint32_t oldInstanceCount = s_MeshInfos[i].gpu.instanceCount; // Should be 0
+
+                // The difference to add to the total and subsequent offsets.
+                // This is simply newInstanceCount, as oldInstanceCount is 0.
+                uint32_t instanceCountDifference = newInstanceCount - oldInstanceCount; 
+            
+                s_MeshInfos[i].gpu.instanceCount = newInstanceCount;
+
+                // ⭐ 3. Back-Patch the firstInstance offset for all subsequent meshes
+                if (instanceCountDifference > 0)
+                {
+                    // Iterate through all meshes that were appended *after* the current mesh
+                    for (size_t j = i + 1; j < s_MeshInfos.size(); ++j)
+                    {
+                        // Add the delta instance count (which is the new count)
+                        s_MeshInfos[j].gpu.firstInstance += instanceCountDifference;
+                    }
+                
+                    // Update s_TotalInstances by the difference (which is the new count)
+                    s_TotalInstances += instanceCountDifference;
+                }
+                return;
             }
         }
     
-        if (!found) 
-        {
-            // Log error if mesh not found
-        }
-
-        // 3. Update the total instance count globally
-        // We must recalculate the total count based on all meshes' final instance counts.
-        s_TotalInstances = 0;
-        for (const auto& mesh : s_MeshInfos)
-            s_TotalInstances += mesh.gpu.instanceCount;
+        VK_CORE_ERROR("Geometry::AppendGeometryData: Could not find mesh with name '%s'", name.c_str());
     }
 }
