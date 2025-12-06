@@ -324,50 +324,82 @@ namespace VanK
 
         uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.camData)));
 
+        texture = TextureImporter::LoadTexture2D("");
+        vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
+        vikingRoom2 = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room2.ktx2");
+        ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
+        
         loadModel();
         
         Geometry::AppendGeometry("model", vertices, indices);
         Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices);
         
-        /*// Load GLTF mesh
-        MeshInfo gltfMesh{};
-        gltfMesh.firstIndex = 0; // initial index buffer offset
-        gltfMesh.indexCount = indices.size();
-        gltfMesh.vertexOffset = 0;
-        gltfMesh.instanceCount = 10; // e.g., 1 copies of GLTF mesh
-        gltfMesh.firstInstance = 0;
-        meshes.push_back(gltfMesh);
+        // Grid parameters (matching your DrawFrame values)
+        const int gridWidth = 3;
+        const float spacing = 2.0f;
+        const float cubeOffsetX = 1.0f; // Offset for the cube group
 
-        uint32_t baseVertex = vertices.size();
-        std::cout << "baseVertex: " << baseVertex << std::endl;
-        vertices.insert(vertices.end(), GeometryData::cubeVertices.begin(), GeometryData::cubeVertices.end());
+        // Assuming mesh 0 is "model" and mesh 1 is "cube" based on the creation order:
+        // Geometry::AppendGeometry("model", ...);
+        // Geometry::AppendGeometry("cube", ...);
         
-        uint32_t baseIndex = indices.size();
-        for (uint32_t idx : GeometryData::cubeIndices)
-            indices.push_back(baseVertex + idx);
+        // Check total number of meshes
+        if (Geometry::GetMeshes().size() < 2) return; 
+
+        // --- 1. Generate Transforms for "model" (Mesh 0) ---
+        // The "model" will be placed in a 3x3 grid (9 instances total)
+        std::vector<shaderio::InstancedStorageData> modelStorageData;
+        uint32_t modelInstanceCount = 9; // Let's create a 3x3 grid (9 instances)
         
-        uint32_t firstInstance = 0;
-        if (!meshes.empty()) {
-            const auto& lastMesh = meshes.back();
-            firstInstance = lastMesh.firstInstance + lastMesh.instanceCount;
+        for (uint32_t j = 0; j < modelInstanceCount; j++)
+        {
+            int row = j / gridWidth;
+            int col = j % gridWidth;
+
+            float x = col * spacing;
+            float y = 0.0f;
+            float z = row * spacing;
+
+            shaderio::InstancedStorageData data{};
+            // The first mesh has no offset
+            data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
+            data.albedoMap = vikingRoom->GetTextureIndex(); // Use the model texture
+
+            modelStorageData.push_back(data);
         }
+        Geometry::AppendGeometryData("model", modelStorageData);
+
+
+        // --- 2. Generate Transforms for "cube" (Mesh 1) ---
+        // The "cube" will also be placed in a 3x3 grid (9 instances total)
+        std::vector<shaderio::InstancedStorageData> cubeStorageData;
+        uint32_t cubeInstanceCount = 9; // Let's use the same instance count
         
-        MeshInfo cubeMesh{};
-        cubeMesh.firstIndex = baseIndex; // after GLTF indices appended
-        cubeMesh.indexCount = static_cast<uint32_t>(GeometryData::cubeIndices.size());;
-        cubeMesh.vertexOffset = baseVertex; // where cube vertices start
-        cubeMesh.instanceCount = 2;         // 5 cubes
-        cubeMesh.firstInstance = firstInstance;
-        meshes.push_back(cubeMesh);*/
-        
-        /*vertices = GeometryData::cubeVertices;
-        indices = GeometryData::cubeIndices;*/
+        for (uint32_t j = 0; j < cubeInstanceCount; j++)
+        {
+            int row = j / gridWidth;
+            int col = j % gridWidth;
+
+            float x = col * spacing;
+            float y = 0.0f;
+            float z = row * spacing;
+
+            // ⭐ Apply the offset here during creation
+            x += cubeOffsetX; 
+
+            shaderio::InstancedStorageData data{};
+            data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
+            data.albedoMap = ChernoLogo->GetTextureIndex(); // Use the cube texture
+
+            cubeStorageData.push_back(data);
+        }
+        Geometry::AppendGeometryData("cube", cubeStorageData);
         
         //fix upload in geometry.cpp maybe stagingbuffer will see
-        size_t vertexBufferSize = sizeof(vertices[0]) * Geometry::GetVertices().size();
+        size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
         m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
 
-        size_t indexBufferSize = sizeof(indices[0]) * Geometry::GetIndices().size();
+        size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size();
         m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
 
         uint32_t maxDraws = static_cast<uint32_t>(Geometry::GetMeshes().size());
@@ -391,10 +423,7 @@ namespace VanK
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
         //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
 
-        texture = TextureImporter::LoadTexture2D("");
-        vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
-        vikingRoom2 = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room2.ktx2");
-        ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
+        
     }
     
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
@@ -445,40 +474,11 @@ namespace VanK
     
     void Renderer::DrawFrame()
     {
-        int gridWidth = 3;
-        float spacing = 2.0f;
-        float cubeOffsetX = 1.0f; // move cubes to the right
-
-        std::vector<shaderio::InstancedStorageData> storageData;
-
-        for (size_t i = 0; i < Geometry::GetMeshes().size(); i++)
-        {
-            uint32_t textureIndex = (i == 0) ? vikingRoom->GetTextureIndex() : ChernoLogo->GetTextureIndex();
-
-            for (uint32_t j = 0; j < Geometry::GetMeshes()[i].instanceCount; j++)
-            {
-                int row = j / gridWidth;
-                int col = j % gridWidth;
-
-                float x = col * spacing;
-                float y = 0.0f;
-                float z = row * spacing;
-
-                // offset cubes
-                if (i == 1) // cube mesh
-                    x += cubeOffsetX;
-
-                shaderio::InstancedStorageData data{};
-                data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
-                data.albedoMap = textureIndex;
-
-                storageData.push_back(data);
-            }
-        }
+        
         
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, storageData, shaderio::InstancedStorageData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
         
         s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();

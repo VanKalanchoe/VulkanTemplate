@@ -25,7 +25,7 @@ namespace VanK
     {
     public:
         static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices);
-        static void AppendGeometryData(VanKCommandBuffer cmd, const std::string& name, const std::vector<shaderio::InstancedStorageData>& data);
+        static void AppendGeometryData(const std::string& name, const std::vector<shaderio::InstancedStorageData>& data);
         
         // Getters for upload 
         static const std::vector<shaderio::InstancedVertexData>& GetVertices() { return s_Vertices; }
@@ -39,10 +39,12 @@ namespace VanK
             for (const auto& cpuMesh : s_MeshInfos) 
                 meshes.push_back(cpuMesh.gpu); return meshes;
         }
+        static const std::vector<shaderio::InstancedStorageData>& GetStorageData() { return s_StorageData; }
     private:
         static std::vector<CpuMeshInfo> s_MeshInfos;
         static std::vector<shaderio::InstancedVertexData> s_Vertices;
         static std::vector<uint32_t> s_Indices;
+        static std::vector<shaderio::InstancedStorageData> s_StorageData;
         static uint32_t s_TotalInstances;
     };
 
