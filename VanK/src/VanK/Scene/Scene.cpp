@@ -191,8 +191,8 @@ namespace VanK
 
                     b2BodyId body = r2bd.RuntimeBody;
                     const auto& position = b2Body_GetPosition(body);
-                    transform.Position.x = position.x;
-                    transform.Position.y = position.y;
+                    transform.Translation.x = position.x;
+                    transform.Translation.y = position.y;
                     transform.Rotation.z = b2Rot_GetAngle(b2Body_GetRotation(body));
                 }
             }
@@ -229,7 +229,7 @@ namespace VanK
 
         if (mainCamera)
         {
-            /*Renderer::BeginScene(mainCamera->GetProjection(), cameraTransform);
+            Renderer::BeginScene(mainCamera->GetProjection(), cameraTransform);
 
             // Draw Sprites
             {
@@ -238,10 +238,10 @@ namespace VanK
                 {
                     auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
                     //Renderer2D::DrawQuad(transform.Position, transform.Size, transform.Scale, transform.Rotation, sprite.Color);
-                    Renderer2D::DrawSprite(transform, sprite, (int)entity);
+                    Renderer::DrawSprite(transform.GetTransform(), sprite, (int)entity);
                 }
             }
-
+            /*  
             // Draw Circles
             {
                 auto view = m_Registry.view<TransformComponent, CircleRendererComponent>();
@@ -263,8 +263,8 @@ namespace VanK
                     Renderer2D::DrawString(text.TextString, transform.GetTransform(), text, (int)entity);
                 }
             }
-
-            Renderer::EndScene();*/
+            */
+            Renderer::EndScene();
         }
     }
 
@@ -287,8 +287,8 @@ namespace VanK
 
                 b2BodyId body = r2bd.RuntimeBody;
                 const auto& position = b2Body_GetPosition(body);
-                transform.Position.x = position.x;
-                transform.Position.y = position.y;
+                transform.Translation.x = position.x;
+                transform.Translation.y = position.y;
                 transform.Rotation.z = b2Rot_GetAngle(b2Body_GetRotation(body));
             }
         }
@@ -399,7 +399,7 @@ namespace VanK
 
             b2BodyDef bodyDef = b2DefaultBodyDef();;
             bodyDef.type = Utils::Rigidbody2DTypeToBox2DBody(r2bd.Type);
-            bodyDef.position = b2Vec2{transform.Position.x, transform.Position.y}; //rename to translation
+            bodyDef.position = b2Vec2{transform.Translation.x, transform.Translation.y}; //rename to translation
             bodyDef.rotation = b2MakeRot(transform.Rotation.z); //i could set full rotation will see bodyde.rotation
 
             b2BodyId body = b2CreateBody(m_PhysicsWorldID, &bodyDef);
@@ -453,7 +453,7 @@ namespace VanK
     void Scene::RenderScene(EditorCamera& camera)
     {
         Renderer::BeginScene(camera);
-        /*
+        
         // Draw Sprites
         {
             auto group = m_Registry.group<TransformComponent>(entt::get<SpriteRendererComponent>);
@@ -461,11 +461,11 @@ namespace VanK
             {
                 auto [transform, sprite] = group.get<TransformComponent, SpriteRendererComponent>(entity);
                 //Renderer2D::DrawQuad(transform.Position, transform.Size, transform.Scale, transform.Rotation, sprite.Color);
-                Renderer2D::DrawSprite(transform, sprite, (int)entity);
+                Renderer::DrawSprite(transform.GetTransform(), sprite, (int)entity);
                 //Renderer2D::DrawRect(transform, sprite, (int)entity);
             }
         }
-
+        /*
         // Draw Circles
         {
             auto view = m_Registry.view<TransformComponent, CircleRendererComponent>();
@@ -490,8 +490,8 @@ namespace VanK
 
         //Renderer2D::DrawLine(glm::vec3(2.0f), glm::vec3(5.0f), glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
         //Renderer2D::DrawRect(glm::vec3(0.0f), glm::vec2(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
-        
-        Renderer::EndScene();*/
+        */
+        Renderer::EndScene();
     }
 
     template <typename T>

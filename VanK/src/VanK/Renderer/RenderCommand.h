@@ -18,6 +18,11 @@ namespace VanK
             
             s_RendererAPI.reset();
         }
+        
+        static uint32_t GetCurrentFrameIndex()
+        {
+            return s_RendererAPI ? s_RendererAPI->GetCurrentFrameIndex() : -1;
+        }
 
         // function overloads ??? is tht what teh call it
 

@@ -289,7 +289,7 @@ namespace VanK
 
         DrawComponent<TransformComponent>("Transform", entity, [](auto& component)
         {
-            DrawVec3Control("Position", component.Position);
+            DrawVec3Control("Position", component.Translation);
             glm::vec3 rotation = glm::degrees(component.Rotation);
             DrawVec3Control("Rotation", rotation);
             component.Rotation = glm::radians(rotation);

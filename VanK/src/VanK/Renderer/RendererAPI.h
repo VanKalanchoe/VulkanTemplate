@@ -406,6 +406,7 @@ namespace VanK
 
         // exposing
         virtual void Shutdown() = 0; // shutdown renderer
+        virtual uint32_t GetCurrentFrameIndex() = 0;
         virtual void RebuildSwapchain(bool vSyncVal) = 0;
         virtual void InitImGui() = 0;
         virtual void SetImGuiInit(bool init) = 0;

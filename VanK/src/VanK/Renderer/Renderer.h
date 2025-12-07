@@ -7,6 +7,7 @@
 
 #include "Geometry.h"
 #include "VanK/Asset/TextureImporter.h"
+#include "VanK/Scene/Components.h"
 
 namespace VanK
 {
@@ -41,6 +42,11 @@ namespace VanK
         static void loadModel();
         static void BeginScene(const EditorCamera& camera);
         static void BeginScene(const Camera& camera, const glm::mat4& transform);
+        static void EndScene();
+        static void DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID = -1);
+        static void DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor = 1.0f, const glm::vec4& tintColor = glm::vec4(1.0f), int entityID = -1);
+        static void DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID);
+        
         static void Init(Window& window);
         static void Shutdown();
         static void BeginSubmit();

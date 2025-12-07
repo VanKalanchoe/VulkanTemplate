@@ -157,7 +157,7 @@ namespace VanK
 
     void EditorLayer::OnRender()
     {
-        Renderer::Flush();
+        /*Renderer::Flush();*/
     }
 
     void EditorLayer::OnImGuiRender()
@@ -427,7 +427,7 @@ namespace VanK
                 glm::vec3 position, rotation, scale;
                 Math::DecomposeTransform(transform, position, rotation, scale);
 
-                tc.Position = position;
+                tc.Translation = position;
                 glm::vec3 deltaRotation = rotation - tc.Rotation;
                 tc.Rotation += deltaRotation;
                 tc.Scale = scale;

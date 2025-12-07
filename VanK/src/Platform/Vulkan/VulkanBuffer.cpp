@@ -1,6 +1,7 @@
 #include "VulkanBuffer.h"
 
 #include "VanK/Core/core.h"
+#include "VanK/Renderer/RenderCommand.h"
 
 VanK::VulkanVanKBuffer::VulkanVanKBuffer(uint64_t size) {}
 
@@ -104,6 +105,7 @@ VanK::VulkanTransferBuffer::VulkanTransferBuffer(uint64_t size, VanKTransferBuff
 VanK::VulkanTransferBuffer::~VulkanTransferBuffer()
 {
     VK_CORE_INFO("Destroyed TransferBuffer");
+    RenderCommand::waitForGraphicsQueueIdle();
     /*auto& instance = VulkanRendererAPI::Get();
     
     instance.GetAllocator().destroyBuffer(m_transferBuffer); // not needed raii*/
@@ -296,6 +298,7 @@ VanK::VulkanStorageBuffer::VulkanStorageBuffer(uint64_t size) : m_size(size)
 VanK::VulkanStorageBuffer::~VulkanStorageBuffer()
 {
     VK_CORE_INFO("Destroyed StorageBuffer");
+    RenderCommand::waitForGraphicsQueueIdle();
     /*auto& instance = VulkanRendererAPI::Get();
     
     instance.GetAllocator().destroyBuffer(m_storageBuffer); // not needed raii*/

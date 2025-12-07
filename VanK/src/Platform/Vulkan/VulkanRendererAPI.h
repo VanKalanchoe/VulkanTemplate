@@ -989,6 +989,7 @@ namespace VanK
         bool isImGuiInit() const { return imguiVulkanInitialized; }
         static bool IsInitialized() { return s_instance != nullptr; }
         int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) override;
+        uint32_t GetCurrentFrameIndex() override { return currentFrame; }
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
