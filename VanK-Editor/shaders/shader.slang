@@ -30,7 +30,7 @@ struct PixelOutput
 Sampler2D texture[];
 
 [[vk::binding(LBindSceneInfo, LSetScene)]]
-ConstantBuffer<UniformBuffer, ScalarDataLayout> ubo;
+ConstantBuffer<SceneInfo, ScalarDataLayout> ubo;
 
 // Specialization constant - can be set at pipeline creation time
 // Note: This is equivalent to GLSL's layout(constant_id = X)
@@ -47,11 +47,14 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 {
     VertexOutput output;
 
+    MeshInfo* meshInfo = (MeshInfo*)ubo.meshInfoAddress;
+    MeshInfo meshInfoData = meshInfo[drawIndex];
+
     InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertexAddress;
-    InstancedVertexData vertexData = vertex[vertexID + ubo.meshes[drawIndex].vertexOffset];
+    InstancedVertexData vertexData = vertex[vertexID + meshInfoData.vertexOffset];
 
     InstancedStorageData* storage = (InstancedStorageData*)ubo.storageAddress;
-    InstancedStorageData storageData = storage[instanceID + ubo.meshes[drawIndex].firstInstance];
+    InstancedStorageData storageData = storage[instanceID + meshInfoData.firstInstance];
 
     output.pos = mul(ubo.proj, mul(ubo.view, mul(storageData.Model, float4(vertexData.position, 1.0))));
     output.fragTexCoord = vertexData.texcoords.xy;
@@ -59,7 +62,7 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 
     // Pass entity ID to fragment shader
     // Option 1: Use instanceID directly (if instanceID == entity ID)
-    output.entityID = 10;
+    output.entityID = storageData.EntityID;
 
     return output;
 }

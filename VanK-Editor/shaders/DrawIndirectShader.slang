@@ -5,7 +5,7 @@
 //------------------------------------------------------------------------------
 
 [[vk::binding(0, 1)]]
-ConstantBuffer<UniformBuffer, ScalarDataLayout> ubo;
+ConstantBuffer<SceneInfo, ScalarDataLayout> ubo;
 
 [shader("compute")]
 [numthreads(64,1,1)]
@@ -21,13 +21,14 @@ void compMain(uint3 GlobalInvocationID : SV_DispatchThreadID)
     DrawIndexedIndirectCommand* indirect = (DrawIndexedIndirectCommand*)ubo.indirectAddress;
 
     // Read mesh info from a structured buffer or uniform (e.g., firstIndex, indexCount, vertexOffset, instanceCount, firstInstance)
-    MeshInfo mesh = ubo.meshes[meshIndex];
+    MeshInfo* meshInfo = (MeshInfo*)ubo.meshInfoAddress;
+    MeshInfo meshInfoData = meshInfo[meshIndex];
 
-    indirect[meshIndex].indexCount    = mesh.indexCount;
-    indirect[meshIndex].instanceCount = mesh.instanceCount;
-    indirect[meshIndex].firstIndex    = mesh.firstIndex;
-    indirect[meshIndex].vertexOffset  = mesh.vertexOffset;
-    indirect[meshIndex].firstInstance = mesh.firstInstance;
+    indirect[meshIndex].indexCount    = meshInfoData.indexCount;
+    indirect[meshIndex].instanceCount = meshInfoData.instanceCount;
+    indirect[meshIndex].firstIndex    = meshInfoData.firstIndex;
+    indirect[meshIndex].vertexOffset  = meshInfoData.vertexOffset;
+    indirect[meshIndex].firstInstance = meshInfoData.firstInstance;
 
     // Optionally write draw count (for DrawIndexedIndirectCount)
     if (meshIndex == 0)

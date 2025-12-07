@@ -24,20 +24,10 @@ namespace VanK
     
     struct Renderer3DData
     {
-        struct CameraData
-        {
-            alignas(16) glm::mat4 view;
-            alignas(16) glm::mat4 proj;
-            uint64_t vertexAddress;
-            uint64_t indirectAddress;
-            uint64_t countAddress;
-            uint64_t storageAddress;
-            uint32_t numMeshes;
-            shaderio::MeshInfo meshes[100]; // fixed size array or dynamic with SSBO
-        };
-        CameraData camData;
+        shaderio::SceneInfo SceneData;
     };
     static Renderer3DData s_Data;
+    
     const std::string MODEL_PATH = "../build/VanK/models/viking_room.glb";
     
     void Renderer::loadModel()
@@ -179,8 +169,8 @@ namespace VanK
         glm::mat4 View = camera.GetViewMatrix();
         glm::mat4 Proj = camera.GetProjection();
         
-        s_Data.camData.view = View;
-        s_Data.camData.proj = Proj;
+        s_Data.SceneData.view = View;
+        s_Data.SceneData.proj = Proj;
     }
     
     void Renderer::Init(Window& window)
@@ -322,7 +312,7 @@ namespace VanK
 
         WatchShaderFiles(); // has to be after rednerer2d init othwerise it cant watch it beacuse not created shaders
 
-        uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.camData)));
+        uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.SceneData)));
 
         texture = TextureImporter::LoadTexture2D("");
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
@@ -424,6 +414,8 @@ namespace VanK
         m_InstancedIndexBuffer.reset();
 
         m_InstancedStorageBuffer.reset();
+        
+        m_MeshInfoBuffer.reset();
     }
 
     void Renderer::BeginSubmit()
@@ -447,42 +439,76 @@ namespace VanK
         RenderCommand::EndFrame();
     }
     
-    bool done = false;
+    void Renderer::Flush()
+    {
+        /*BeginSubmit();*/
+        if (s_IsPipelineReloadFinished.exchange(false))
+        {
+            IsShaderReloadFinished = false;
+            if (s_ShaderWatcher.empty())
+                WatchShaderFiles();
+
+            EndSubmit();
+            ReloadPipelines();
+            BeginSubmit();
+            return;
+        }
+        DrawFrame();
+        /*EndSubmit();*/
+    }
+    
     void Renderer::DrawFrame()
     {
-        if (!done)
+        if (Geometry::GetMeshes().empty()) 
         {
-            Geometry::RemoveGeometry("cube");
-            
-            size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
-            m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
-            
-            size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size();
-            m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
-            
-            size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * Geometry::GetMeshes().size();
-            m_IndirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
-            
-            size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * Geometry::GetTotalInstances();
-            m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
-            
-            size_t transferSize = vertexBufferSize + indexBufferSize /*+ indirectBufferSize*/ + storageBufferSize;
-            m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
-            
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
-            s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
-            s_Data.camData.indirectAddress = m_IndirectBuffer->GetBufferAddress();
-            s_Data.camData.countAddress = m_CountBuffer->GetBufferAddress();
-            s_Data.camData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
-            s_Data.camData.numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
-            memcpy(s_Data.camData.meshes, Geometry::GetMeshes().data(), Geometry::GetMeshes().size() * sizeof(shaderio::MeshInfo));
-            
-            done = true;
+            return;
         }
         
-        uniformScene->Update(cmd, &s_Data.camData, sizeof(s_Data.camData));
+        size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
+        if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexBufferSize)
+            m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
+        
+        size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size();
+        if (!m_InstancedIndexBuffer || m_InstancedIndexBuffer->GetSize() < indexBufferSize)
+            m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
+        
+        size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * Geometry::GetMeshes().size();
+        if (!m_IndirectBuffer || m_IndirectBuffer->GetSize() < indirectBufferSize)
+            m_IndirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
+        
+        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * Geometry::GetTotalInstances();
+        if (!m_InstancedStorageBuffer || m_InstancedStorageBuffer->GetSize() < storageBufferSize)
+            m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
+        
+        size_t meshInfoBufferSize = sizeof(shaderio::MeshInfo) * Geometry::GetMeshes().size();
+        if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshInfoBufferSize)
+            m_MeshInfoBuffer.reset(StorageBuffer::Create(meshInfoBufferSize));
+        
+        size_t transferSize = vertexBufferSize + indexBufferSize + storageBufferSize + meshInfoBufferSize;
+        if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
+            m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
+        
+        if (Geometry::GetVerticesChanged())
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
+        
+        if (Geometry::GetIndicesChanged())
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
+        
+        if (Geometry::GetStorageChanged())
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
+        
+        if (Geometry::GetMeshesChanged())
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, Geometry::GetMeshes(), shaderio::MeshInfo, 0);
+        
+        s_Data.SceneData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
+        s_Data.SceneData.indirectAddress = m_IndirectBuffer->GetBufferAddress();
+        s_Data.SceneData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
+        s_Data.SceneData.countAddress = m_CountBuffer->GetBufferAddress();
+        s_Data.SceneData.meshInfoAddress = m_MeshInfoBuffer->GetBufferAddress();
+        s_Data.SceneData.numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
+        
+        uniformScene->Update(cmd, &s_Data.SceneData, sizeof(s_Data.SceneData));
+        
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
         
@@ -521,24 +547,6 @@ namespace VanK
 
             RenderCommand::EndRendering(cmd);
         }
-    }
-
-    void Renderer::Flush()
-    {
-        /*BeginSubmit();*/
-        if (s_IsPipelineReloadFinished.exchange(false))
-        {
-            IsShaderReloadFinished = false;
-            if (s_ShaderWatcher.empty())
-                WatchShaderFiles();
-
-            EndSubmit();
-            ReloadPipelines();
-            BeginSubmit();
-            return;
-        }
-        DrawFrame();
-        /*EndSubmit();*/
     }
 
     struct PipelineReloadEntry

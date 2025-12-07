@@ -1065,6 +1065,8 @@ namespace VanK
         bool imguiVulkanInitialized = false;
         VanKRenderOption m_renderOption = {};
 
+        bool m_hasActiveRenderPass = false;
+
         //statistic
         vk::raii::QueryPool queryPool = nullptr;
         utils::Buffer queryBuffer;

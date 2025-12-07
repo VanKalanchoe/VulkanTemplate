@@ -45,8 +45,8 @@ namespace VanK
         static void Shutdown();
         static void BeginSubmit();
         static void EndSubmit();
-        static void DrawFrame();
         static void Flush();
+        static void DrawFrame();
         static bool GetVSync() { return vSync; };
         static void SetVSync(bool vSyncTemp) { vSync = vSyncTemp; RenderCommand::RebuildSwapchain(vSync); };
         static bool GetIsEditor() { return isEditor; }
@@ -84,6 +84,7 @@ namespace VanK
         inline static Ref<VertexBuffer> m_InstancedVertexBuffer; // change to storage in the future maybe ? 
         inline static Ref<TransferBuffer> m_TransferRingBuffer;
         inline static Ref<StorageBuffer> m_InstancedStorageBuffer;
+        inline static Ref<StorageBuffer> m_MeshInfoBuffer;
         inline static Ref<IndirectBuffer> m_IndirectBuffer;
         inline static Ref<IndirectBuffer> m_CountBuffer;
         

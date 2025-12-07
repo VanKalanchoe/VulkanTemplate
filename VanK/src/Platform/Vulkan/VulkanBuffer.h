@@ -15,11 +15,13 @@ namespace VanK
         virtual void Unbind() const override;
         virtual uint64_t GetBufferAddress() const override { return m_buffer.address; }
         virtual void* GetNativeHandle() const override { return static_cast<vk::Buffer>(m_buffer.buffer); } // not sure
-    
+        virtual uint64_t GetSize() const override { return m_size; }
+        
         const utils::Buffer& GetBuffer() const { return m_buffer; }
 
     private:
         utils::Buffer m_buffer;
+        uint64_t m_size = 0;
     };
 
     class VulkanVertexBuffer : public VertexBuffer
@@ -32,7 +34,8 @@ namespace VanK
         virtual void Unbind() const override;
         virtual uint64_t GetBufferAddress() const override { return m_vertexBuffer.address; }
         virtual void* GetNativeHandle() const override { return static_cast<vk::Buffer>(m_vertexBuffer.buffer); }
-    
+        virtual uint64_t GetSize() const override { return m_size; }
+        
         // Upload for initial setup
         virtual void Upload(const void* data, size_t size) override;
         
@@ -40,6 +43,7 @@ namespace VanK
 
     private:
         utils::Buffer m_vertexBuffer;
+        uint64_t m_size = 0;
     };
 
     class VulkanIndexBuffer : public IndexBuffer
@@ -52,7 +56,8 @@ namespace VanK
         virtual void Unbind() const override;
         virtual uint64_t GetBufferAddress() const override { return m_indexBuffer.address; }
         virtual void* GetNativeHandle() const override { return static_cast<vk::Buffer>(m_indexBuffer.buffer); }
-
+        virtual uint64_t GetSize() const override { return m_size; }
+        
         uint32_t GetCount() const override { return m_Count; }
     
         // Upload for initial setup
@@ -63,6 +68,7 @@ namespace VanK
     private:
         uint32_t m_Count;
         utils::Buffer m_indexBuffer;
+        uint64_t m_size = 0;
     };
 
     class VulkanTransferBuffer : public TransferBuffer
@@ -70,7 +76,8 @@ namespace VanK
     public:
         VulkanTransferBuffer(uint64_t size, VanKTransferBufferUsage usage);
         virtual ~VulkanTransferBuffer();
-
+        virtual uint64_t GetSize() const override { return m_size; }
+        
         virtual void Bind() const override;
         virtual void Unbind() const override;
         virtual uint64_t GetBufferAddress() const override { return m_transferBuffer.address; }
@@ -85,7 +92,7 @@ namespace VanK
     private:
         utils::Buffer m_transferBuffer;
         VkDeviceSize m_currentOffset = 0;
-        VkDeviceSize m_size = 0;
+        uint64_t m_size = 0;
     };
 
     class VulkanUniformBuffer : public UniformBuffer
@@ -98,7 +105,8 @@ namespace VanK
         virtual void Unbind() const override;
         virtual uint64_t GetBufferAddress() const override { return m_uniformBuffer.address; }
         virtual void* GetNativeHandle() const override { return static_cast<vk::Buffer>(m_uniformBuffer.buffer); }
-
+        virtual uint64_t GetSize() const override { return m_size; }
+        
         // Uniform buffers use vkCmdUpdateBuffer with memory barriers
         virtual void Update(VanKCommandBuffer cmd, const void* data, size_t size) override;
     
@@ -106,6 +114,7 @@ namespace VanK
 
     private:
         utils::Buffer m_uniformBuffer;
+        uint64_t m_size = 0;
     };
 
     class VulkanStorageBuffer : public StorageBuffer
@@ -118,7 +127,8 @@ namespace VanK
         virtual void Unbind() const override;
         virtual uint64_t GetBufferAddress() const override { return m_storageBuffer.address; }
         virtual void* GetNativeHandle() const override { return static_cast<vk::Buffer>(m_storageBuffer.buffer); }
-
+        virtual uint64_t GetSize() const override { return m_size; }
+        
         // Upload for initial setup
         virtual void Upload(const void* data, size_t size, size_t offset) override;
 
@@ -126,6 +136,7 @@ namespace VanK
 
     private:
         utils::Buffer m_storageBuffer;
+        uint64_t m_size = 0;
     };
 
     class VulkanIndirectBuffer : public IndirectBuffer
@@ -138,7 +149,8 @@ namespace VanK
         virtual void Unbind() const override;
         virtual uint64_t GetBufferAddress() const override { return m_indirectBuffer.address; }
         virtual void* GetNativeHandle() const override { return static_cast<vk::Buffer>(m_indirectBuffer.buffer); }
-
+        virtual uint64_t GetSize() const override { return m_size; }
+        
         // Upload for initial setup
         virtual void Upload(const void* data, size_t size, size_t offset) override;
 
@@ -146,5 +158,6 @@ namespace VanK
 
     private:
         utils::Buffer m_indirectBuffer;
+        uint64_t m_size = 0;
     };
 }

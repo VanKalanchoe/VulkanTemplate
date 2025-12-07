@@ -30,16 +30,16 @@ struct MeshInfo
     uint32_t firstInstance; // optional, for indirect draw
 };
 
-struct UniformBuffer 
+struct SceneInfo 
 {
     mat4 view;
     mat4 proj;
     uint64_t vertexAddress;
     uint64_t indirectAddress;
-    uint64_t countAddress;
     uint64_t storageAddress;
+    uint64_t countAddress;
+    uint64_t meshInfoAddress;
     uint32_t numMeshes;
-    MeshInfo meshes[100];
 };
 
 struct InstancedIndexData
@@ -60,7 +60,7 @@ struct InstancedStorageData
 {
   mat4 Model;
   mat3 normalMatrix;
-
+  
   //with texture
   uint32_t albedoMap;
   uint32_t normalMap;
@@ -73,6 +73,9 @@ struct InstancedStorageData
   float metallic;
   float roughness;
   float ao;
+
+  // Editor-only
+  int EntityID;
 };
 
 struct DrawIndexedIndirectCommand

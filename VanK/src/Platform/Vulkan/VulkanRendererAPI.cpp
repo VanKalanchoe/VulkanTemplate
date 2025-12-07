@@ -1533,7 +1533,7 @@ namespace  VanK
             (
                 Unwrap(cmd),
                 swapChainImages[currentImageIndex],
-                vk::ImageLayout::eUndefined,
+                sceneImageInitialized ? vk::ImageLayout::ePresentSrcKHR : vk::ImageLayout::eUndefined,
                 vk::ImageLayout::eColorAttachmentOptimal,
                 {}, // srcAccessMask (no need to wait for previous operations)
                 vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
@@ -1542,25 +1542,45 @@ namespace  VanK
                 vk::ImageAspectFlagBits::eColor
             );
         
-            // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                sceneImage,
-                vk::ImageLayout::eColorAttachmentOptimal,
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-                vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                vk::PipelineStageFlagBits2::eFragmentShader,
-                vk::ImageAspectFlagBits::eColor
-            );
-            sceneImageInitialized = true;
+            if (m_hasActiveRenderPass)
+            {
+                // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
+                utils::transition_image_layout
+                (
+                    Unwrap(cmd),
+                    sceneImage,
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+                    vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
+                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                    vk::PipelineStageFlagBits2::eFragmentShader,
+                    vk::ImageAspectFlagBits::eColor
+                );
+                
+                sceneImageInitialized = true;
             
-            entityImageInitialized = true;
+                entityImageInitialized = true;
             
-            entityColorImageInitialized = true;
-
+                entityColorImageInitialized = true;
+            }
+            else
+            {
+                // Case 2: First frame with no 3D - bootstrap from UNDEFINED → SHADER_READ_ONLY
+                utils::transition_image_layout
+                (
+                    Unwrap(cmd),
+                    sceneImage,
+                    vk::ImageLayout::eUndefined,  // Never transitioned
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    {},
+                    vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
+                    vk::PipelineStageFlagBits2::eTopOfPipe,
+                    vk::PipelineStageFlagBits2::eFragmentShader,
+                    vk::ImageAspectFlagBits::eColor
+                );
+                sceneImageInitialized = true;
+            }
             // Second pass: draw ImGui to swapchain image
             vk::RenderingAttachmentInfo swapColorAttachment =
             {

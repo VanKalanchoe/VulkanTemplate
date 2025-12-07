@@ -118,6 +118,7 @@ namespace VanK
         virtual void Unbind() const = 0;
         virtual uint64_t GetBufferAddress() const = 0;
         virtual void* GetNativeHandle() const = 0;
+        virtual uint64_t GetSize() const = 0;
 
         static VanKBuffer* Create(uint64_t size);
     };
@@ -131,6 +132,7 @@ namespace VanK
         virtual void Unbind() const override = 0;
         virtual uint64_t GetBufferAddress() const override = 0;
         virtual void* GetNativeHandle() const override = 0;
+        virtual uint64_t GetSize() const = 0;
 
         // Upload for initial setup
         virtual void Upload(const void* data, size_t size) = 0;
@@ -147,6 +149,7 @@ namespace VanK
         virtual void Unbind() const override = 0;
         virtual uint64_t GetBufferAddress() const override = 0;
         virtual void* GetNativeHandle() const override = 0;
+        virtual uint64_t GetSize() const = 0;
 
         virtual uint32_t GetCount() const = 0;
 
@@ -184,6 +187,7 @@ namespace VanK
         virtual void Unbind() const override = 0;
         virtual uint64_t GetBufferAddress() const override = 0;
         virtual void* GetNativeHandle() const override = 0;
+        virtual uint64_t GetSize() const = 0;
 
         virtual void* MapTransferBuffer(uint64_t size, uint64_t alignment, uint64_t& outOffset) = 0;
         virtual void UnMapTransferBuffer() = 0;
@@ -202,6 +206,7 @@ namespace VanK
         virtual void Unbind() const override = 0;
         virtual uint64_t GetBufferAddress() const override = 0;
         virtual void* GetNativeHandle() const override = 0;
+        virtual uint64_t GetSize() const = 0;
     
         // Uniform buffers use vkCmdUpdateBuffer (special case)
         virtual void Update(VanKCommandBuffer cmd, const void* data, size_t size) = 0;
@@ -218,6 +223,7 @@ namespace VanK
         virtual void Unbind() const override = 0;
         virtual uint64_t GetBufferAddress() const override = 0;
         virtual void* GetNativeHandle() const override = 0;
+        virtual uint64_t GetSize() const = 0;
 
         // Upload - for initial setup (creates its own command buffer)
         virtual void Upload(const void* data, size_t size, size_t offset) = 0;
@@ -234,6 +240,7 @@ namespace VanK
         virtual void Unbind() const override = 0;
         virtual uint64_t GetBufferAddress() const override = 0;
         virtual void* GetNativeHandle() const override = 0;
+        virtual uint64_t GetSize() const = 0;
 
         // Upload - for initial setup (creates its own command buffer)
         virtual void Upload(const void* data, size_t size, size_t offset) = 0;

@@ -10,6 +10,10 @@ namespace VanK
     std::vector<uint32_t> Geometry::s_Indices{};
     uint32_t Geometry::s_TotalInstances = 0;
     std::vector<shaderio::InstancedStorageData> Geometry::s_StorageData{};
+    bool Geometry::s_VerticesChanged = false;
+    bool Geometry::s_IndicesChanged = false;
+    bool Geometry::s_StorageChanged = false;
+    bool Geometry::s_MeshesChanged = false;
     
     void Geometry::AppendGeometry
     (
@@ -31,6 +35,11 @@ namespace VanK
         
         // 3. Update Global State
         s_MeshInfos.emplace_back(name, gpuInfo);
+        
+        // 4. Set Changed Flags
+        s_VerticesChanged = true;
+        s_IndicesChanged = true;
+        s_MeshesChanged = true;
     }
     
     void Geometry::RemoveGeometry(const std::string& name)
@@ -92,13 +101,18 @@ namespace VanK
                     // NOTE: firstInstance does not need to be adjusted here because it was already 
                     // handled by the required preceding call to RemoveGeometryData.
                 }
+                
+                // 5. Set Dirty Flags
+                s_VerticesChanged = true;
+                s_IndicesChanged = true;
+                s_MeshesChanged = true;
 
-                VK_CORE_INFO("Geometry::RemoveGeometry: Removed mesh '%s' (V: %u, I: %u).", name.c_str(), vertexCountToRemove, indexCountToRemove);
+                /*VK_CORE_INFO("Geometry::RemoveGeometry: Removed mesh '%s' (V: %u, I: %u).", name.c_str(), vertexCountToRemove, indexCountToRemove);*/
                 return;
             }
         }
         
-        VK_CORE_WARN("Geometry::RemoveGeometry: Mesh '%s' not found.", name.c_str());
+        /*VK_CORE_WARN("Geometry::RemoveGeometry: Mesh '%s' not found.", name.c_str());*/
     }
     
     void Geometry::AppendGeometryData(const std::string& name, const std::vector<shaderio::InstancedStorageData>& data)
@@ -136,11 +150,15 @@ namespace VanK
                     // Update s_TotalInstances by the difference (which is the new count)
                     s_TotalInstances += instanceCountDifference;
                 }
+                
+                // 4. Set Changed Flag
+                s_StorageChanged = true;
+                
                 return;
             }
         }
         
-        VK_CORE_ERROR("Geometry::AppendGeometryData: Could not find mesh with name '%s'", name.c_str());
+        /*VK_CORE_ERROR("Geometry::AppendGeometryData: Could not find mesh with name '%s'", name.c_str());*/
     }
 
     void Geometry::RemoveGeometryData(const std::string& name)
@@ -174,12 +192,15 @@ namespace VanK
                 {
                     s_MeshInfos[j].gpu.firstInstance -= instanceCountToRemove;
                 }
+                
+                // 4. Set Changed Flag
+                s_StorageChanged = true;
 
-                VK_CORE_INFO("Geometry::RemoveGeometryData: Removed %u instances for mesh '%s'.", instanceCountToRemove, name.c_str());
+                /*VK_CORE_INFO("Geometry::RemoveGeometryData: Removed %u instances for mesh '%s'.", instanceCountToRemove, name.c_str());*/
                 return;
             }
         }
-        VK_CORE_WARN("Geometry::RemoveGeometryData: Mesh '%s' not found.", name.c_str());
+        /*VK_CORE_WARN("Geometry::RemoveGeometryData: Mesh '%s' not found.", name.c_str());*/
     }
 
     void Geometry::RemoveSingleData(const std::string& name, uint32_t instanceLocalIndex)
@@ -191,7 +212,7 @@ namespace VanK
                 // 0. Validate the local index
                 uint32_t currentCount = s_MeshInfos[i].gpu.instanceCount;
                 if (instanceLocalIndex >= currentCount) {
-                    VK_CORE_WARN("Geometry::RemoveSingleInstance: Index %u out of range for mesh '%s' (Count: %u).", instanceLocalIndex, name.c_str(), currentCount);
+                    /*VK_CORE_WARN("Geometry::RemoveSingleInstance: Index %u out of range for mesh '%s' (Count: %u).", instanceLocalIndex, name.c_str(), currentCount);*/
                     return;
                 }
 
@@ -215,15 +236,18 @@ namespace VanK
                     s_MeshInfos[j].gpu.firstInstance -= 1;
                 }
                 
+                // 6. Set Changed Flag
+                s_StorageChanged = true;
+                
                 // 6. Optional: Update the firstInstance for the current mesh
                 // If the removal shifted the elements of this mesh, the firstInstance stays the same.
                 // However, the *remaining* instances in this mesh have been shifted, which is handled
                 // by the s_StorageData.erase call. No change to firstInstance is needed for the current mesh 'i'.
 
-                VK_CORE_INFO("Geometry::RemoveSingleInstance: Removed single instance %u from mesh '%s'.", instanceLocalIndex, name.c_str());
+                /*VK_CORE_INFO("Geometry::RemoveSingleInstance: Removed single instance %u from mesh '%s'.", instanceLocalIndex, name.c_str());*/
                 return;
             }
         }
-        VK_CORE_WARN("Geometry::RemoveSingleInstance: Mesh '%s' not found.", name.c_str());
+        /*VK_CORE_WARN("Geometry::RemoveSingleInstance: Mesh '%s' not found.", name.c_str());*/
     }
 }

@@ -43,12 +43,20 @@ namespace VanK
                 meshes.push_back(cpuMesh.gpu); return meshes;
         }
         static const std::vector<shaderio::InstancedStorageData>& GetStorageData() { return s_StorageData; }
+        static bool GetVerticesChanged() { return s_VerticesChanged;}
+        static bool GetIndicesChanged() { return s_IndicesChanged; }
+        static bool GetStorageChanged() { return s_StorageChanged; }
+        static bool GetMeshesChanged() { return s_MeshesChanged; }
     private:
         static std::vector<CpuMeshInfo> s_MeshInfos;
         static std::vector<shaderio::InstancedVertexData> s_Vertices;
         static std::vector<uint32_t> s_Indices;
         static std::vector<shaderio::InstancedStorageData> s_StorageData;
         static uint32_t s_TotalInstances;
+        static bool s_VerticesChanged;
+        static bool s_IndicesChanged;
+        static bool s_StorageChanged;
+        static bool s_MeshesChanged;
     };
 
     namespace GeometryData

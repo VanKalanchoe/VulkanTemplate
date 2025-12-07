@@ -10,7 +10,7 @@ void VanK::VulkanVanKBuffer::Bind() const {}
 
 void VanK::VulkanVanKBuffer::Unbind() const {}
 
-VanK::VulkanVertexBuffer::VulkanVertexBuffer(uint64_t size)
+VanK::VulkanVertexBuffer::VulkanVertexBuffer(uint64_t size) : m_size(size)
 {
     VK_CORE_INFO("Created VertexBuffer");
     auto& instance = VulkanRendererAPI::Get();
@@ -44,7 +44,7 @@ void VanK::VulkanVertexBuffer::Upload(const void* data, size_t size)
 {
 }
 
-VanK::VulkanIndexBuffer::VulkanIndexBuffer(uint64_t size) : m_Count(static_cast<uint32_t>(size / sizeof(uint32_t)))  // Calculate count from size
+VanK::VulkanIndexBuffer::VulkanIndexBuffer(uint64_t size) : m_size(size), m_Count(static_cast<uint32_t>(size / sizeof(uint32_t)))  // Calculate count from size
 {
     VK_CORE_INFO("Created IndexBuffer");
     auto& instance = VulkanRendererAPI::Get();
@@ -225,7 +225,7 @@ void VanK::VulkanTransferBuffer::UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTr
     );
 }
 
-VanK::VulkanUniformBuffer::VulkanUniformBuffer(uint64_t size)
+VanK::VulkanUniformBuffer::VulkanUniformBuffer(uint64_t size) : m_size(size)
 {
     VK_CORE_INFO("Created UniformBuffer");
     auto& instance = VulkanRendererAPI::Get();
@@ -279,7 +279,7 @@ void VanK::VulkanUniformBuffer::Update(VanKCommandBuffer cmd, const void* data, 
     );
 }
 
-VanK::VulkanStorageBuffer::VulkanStorageBuffer(uint64_t size)
+VanK::VulkanStorageBuffer::VulkanStorageBuffer(uint64_t size) : m_size(size)
 {
     VK_CORE_INFO("Created StorageBuffer");
     auto& instance = VulkanRendererAPI::Get();
@@ -313,7 +313,7 @@ void VanK::VulkanStorageBuffer::Upload(const void* data, size_t size, size_t off
 {
 }
 
-VanK::VulkanIndirectBuffer::VulkanIndirectBuffer(uint64_t size)
+VanK::VulkanIndirectBuffer::VulkanIndirectBuffer(uint64_t size) : m_size(size)
 {
     VK_CORE_INFO("Created IndirectBuffer");
     auto& instance = VulkanRendererAPI::Get();
