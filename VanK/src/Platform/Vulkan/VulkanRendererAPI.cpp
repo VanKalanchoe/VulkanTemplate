@@ -988,23 +988,55 @@ namespace  VanK
         /*downloadQueryBuffer();*/
     }
 
-    VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer)
+    VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, IndirectBuffer* indirectBuffer, IndirectBuffer* countBuffer)
     {
         auto* result = new VanKComputePass
         {
             .VanKCommandBuffer = cmd,
-            .VanKVertexBuffer = buffer
+            .VanKVertexBuffer = vertexBuffer,
+            .VanKIndirectBuffer = indirectBuffer,
+            .VanKIndirectCountBuffer = countBuffer
         };
 
-        if (buffer != nullptr)
+        if (vertexBuffer != nullptr)
         {
             // Add a barrier to make sure nothing was writing to it, before updating its content
             utils::cmdBufferMemoryBarrier
             (
                 Unwrap(cmd),
-                static_cast<VkBuffer>(buffer->GetNativeHandle()),
-                vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
-                vk::PipelineStageFlagBits2::eTransfer
+                static_cast<VkBuffer>(vertexBuffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eAllCommands, // Wait for everything prior to complete
+                vk::PipelineStageFlagBits2::eComputeShader, // Destination: Compute Shader
+                {}, // Src Access: None (just wait for visibility)
+                vk::AccessFlagBits2::eShaderRead // Dst Access: Compute Shader READ
+            );
+        }
+        
+        if (indirectBuffer != nullptr)
+        {
+            // Add a barrier to make sure nothing was writing to it, before updating its content
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(cmd),
+                static_cast<VkBuffer>(indirectBuffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eAllCommands,
+                vk::PipelineStageFlagBits2::eComputeShader,
+                {},
+                vk::AccessFlagBits2::eShaderWrite // Dst Access: Compute Shader WRITE
+            );
+        }
+        
+        if (countBuffer != nullptr)
+        {
+            // Add a barrier to make sure nothing was writing to it, before updating its content
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(cmd),
+                static_cast<VkBuffer>(countBuffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eAllCommands,
+                vk::PipelineStageFlagBits2::eComputeShader,
+                {},
+                vk::AccessFlagBits2::eShaderRead // Dst Access: Compute Shader WRITE
             );
         }
         
@@ -1020,6 +1052,9 @@ namespace  VanK
 
     void VulkanRendererAPI::EndComputePass(VanKComputePass* computePass)
     {
+        // A. If Compute ONLY READS (Standard Culling): No barrier needed, as access doesn't change.
+        // B. If Compute WROTE (Simulation/Generation):
+        
         if (computePass->VanKVertexBuffer != nullptr)
         {
             // Add barrier to make sure the compute shader is finished before the vertex buffer is used
@@ -1028,7 +1063,39 @@ namespace  VanK
                 Unwrap(computePass->VanKCommandBuffer),
                 static_cast<VkBuffer>(computePass->VanKVertexBuffer->GetNativeHandle()),
                 vk::PipelineStageFlagBits2::eComputeShader,
-                vk::PipelineStageFlagBits2::eVertexShader
+                vk::PipelineStageFlagBits2::eVertexShader,
+                vk::AccessFlagBits2::eShaderWrite, // Wait for compute write to finish
+                vk::AccessFlagBits2::eShaderRead // Allow vertex shader to read
+            );
+        }
+        
+        if (computePass->VanKIndirectBuffer != nullptr)
+        {
+            // Barrier for the Indirect buffer
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(computePass->VanKCommandBuffer),
+                static_cast<VkBuffer>(computePass->VanKIndirectBuffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eComputeShader,
+                vk::PipelineStageFlagBits2::eDrawIndirect,
+                vk::AccessFlagBits2::eShaderWrite, // Src Access: Compute Shader WRITE
+                vk::AccessFlagBits2::eIndirectCommandRead // Dst Access: Draw Indirect READ
+            );
+        }
+        
+        if (computePass->VanKIndirectCountBuffer != nullptr)
+        {
+            
+            
+            // Barrier for the Draw Count buffer
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(computePass->VanKCommandBuffer),
+                static_cast<VkBuffer>(computePass->VanKIndirectCountBuffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eComputeShader,
+                vk::PipelineStageFlagBits2::eDrawIndirect,
+                vk::AccessFlagBits2::eShaderWrite, // Src Access: Compute Shader WRITE
+                vk::AccessFlagBits2::eIndirectCommandRead // Dst Access: Draw Indirect READ
             );
         }
         

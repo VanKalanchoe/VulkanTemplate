@@ -359,6 +359,14 @@ namespace VanK
                 access |= vk::AccessFlagBits2::eVertexAttributeRead; // Always read-only
             if ((stage & vk::PipelineStageFlagBits2::eTransfer))
                 access |= src ? vk::AccessFlagBits2::eTransferRead : vk::AccessFlagBits2::eTransferWrite;
+            if ((stage & vk::PipelineStageFlagBits2::eDrawIndirect))
+                access |= vk::AccessFlagBits2::eIndirectCommandRead;
+            if ((stage & vk::PipelineStageFlagBits2::eIndexInput))
+                access |= vk::AccessFlagBits2::eIndexRead;
+            if ((stage & vk::PipelineStageFlagBits2::eColorAttachmentOutput))
+                access |= src ? vk::AccessFlagBits2::eColorAttachmentRead : vk::AccessFlagBits2::eColorAttachmentWrite;
+            if (stage & vk::PipelineStageFlagBits2::eAllCommands)
+                access |= vk::AccessFlagBits2::eMemoryWrite | vk::AccessFlagBits2::eMemoryRead;
             ASSERT(access, "Missing stage implementation");
             return access;
         }
@@ -949,7 +957,7 @@ namespace VanK
         void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void EndRendering(VanKCommandBuffer cmd) override;
         void SubmitRendering(VanKCommandBuffer cmd) override;
-        VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer) override;
+        VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, IndirectBuffer* indirectBuffer, IndirectBuffer* countBuffer) override;
         void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void EndComputePass(VanKComputePass* computePass) override;
     public:

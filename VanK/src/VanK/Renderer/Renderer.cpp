@@ -369,7 +369,6 @@ namespace VanK
         }
         Geometry::AppendGeometryData("model", modelStorageData);
 
-
         // --- 2. Generate Transforms for "cube" (Mesh 1) ---
         // The "cube" will also be placed in a 3x3 grid (9 instances total)
         std::vector<shaderio::InstancedStorageData> cubeStorageData;
@@ -394,36 +393,12 @@ namespace VanK
             cubeStorageData.push_back(data);
         }
         Geometry::AppendGeometryData("cube", cubeStorageData);
-        
-        //fix upload in geometry.cpp maybe stagingbuffer will see
-        size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
-        m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
-
-        size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size();
-        m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
-
-        uint32_t maxDraws = static_cast<uint32_t>(Geometry::GetMeshes().size());
-        size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * maxDraws;
-        indirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
 
         size_t countBufferSize = sizeof(uint32_t);
         countBuffer.reset(IndirectBuffer::Create(countBufferSize));
-        
-        //needs to be dynamic because it can change per mesh even if they are the same 
-        uint32_t totalInstances = 0;
-        for (const auto& mesh : Geometry::GetMeshes())
-            totalInstances += mesh.instanceCount;
-        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * totalInstances;
-        m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
-
-        //maybe for storagebuffer it has to be seprate idk how resizing works will see
-        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + countBufferSize + storageBufferSize;
-        m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         // 4            4        156         152                   152
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
         //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
-
-        
     }
     
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
@@ -472,9 +447,28 @@ namespace VanK
         RenderCommand::EndFrame();
     }
     
+    bool done = false;
     void Renderer::DrawFrame()
     {
-        
+        if (!done)
+        {
+            size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
+            m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
+            
+            size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size();
+            m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
+            
+            size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * Geometry::GetMeshes().size();
+            indirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
+            
+            size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * Geometry::GetTotalInstances();
+            m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
+            
+            size_t transferSize = vertexBufferSize + indexBufferSize /*+ indirectBufferSize*/ + storageBufferSize;
+            m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
+            
+            done = true;
+        }
         
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
@@ -490,15 +484,16 @@ namespace VanK
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
         
-        VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get());
+        {
+            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get(), indirectBuffer.get(), countBuffer.get());
         
-        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
-        uint32_t numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
-        uint32_t threadsPerGroup = 64; // matches [numthreads(64,1,1)]
-        uint32_t dispatchCount = (numMeshes + threadsPerGroup - 1) / threadsPerGroup;
-        RenderCommand::DispatchCompute(computePass, dispatchCount, 1, 1);
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
+            
+            RenderCommand::DispatchCompute(computePass, (Geometry::GetMeshes().size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
-        RenderCommand::EndComputePass(computePass);
+            RenderCommand::EndComputePass(computePass);
+        }
+        
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
