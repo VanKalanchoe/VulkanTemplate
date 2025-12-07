@@ -162,6 +162,11 @@ namespace VanK
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
         /*glm::mat4 viewProj = camera.GetProjection() * glm::inverse(transform);*/
+        glm::mat4 View = glm::inverse(transform);
+        glm::mat4 Proj = camera.GetProjection();
+        
+        s_Data.SceneData.view = View;
+        s_Data.SceneData.proj = Proj;
     }
     
     void Renderer::BeginScene(const EditorCamera& camera)
@@ -319,7 +324,7 @@ namespace VanK
         vikingRoom2 = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room2.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
         
-        loadModel();
+        /*loadModel();
         
         Geometry::AppendGeometry("model", vertices, indices);
         Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices);
@@ -382,7 +387,7 @@ namespace VanK
 
             cubeStorageData.push_back(data);
         }
-        Geometry::AppendGeometryData("cube", cubeStorageData);
+        Geometry::AppendGeometryData("cube", cubeStorageData);*/
 
         size_t countBufferSize = sizeof(uint32_t);
         m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
@@ -461,6 +466,16 @@ namespace VanK
     {
         if (Geometry::GetMeshes().empty()) 
         {
+            // maybe add vkCmdClearColorImage() instead 
+            std::vector<VanKColorTargetInfo> colorAttachments;
+            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
+            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = -1});
+
+            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
+            
+            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
+            
+            RenderCommand::EndRendering(cmd);
             return;
         }
         
