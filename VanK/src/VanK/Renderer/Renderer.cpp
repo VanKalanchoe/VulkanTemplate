@@ -395,7 +395,7 @@ namespace VanK
         Geometry::AppendGeometryData("cube", cubeStorageData);
 
         size_t countBufferSize = sizeof(uint32_t);
-        countBuffer.reset(IndirectBuffer::Create(countBufferSize));
+        m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
         // 4            4        156         152                   152
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
         //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
@@ -415,9 +415,9 @@ namespace VanK
 
         m_TransferRingBuffer.reset();
 
-        indirectBuffer.reset();
+        m_IndirectBuffer.reset();
 
-        countBuffer.reset();
+        m_CountBuffer.reset();
 
         m_InstancedVertexBuffer.reset();
         
@@ -452,6 +452,8 @@ namespace VanK
     {
         if (!done)
         {
+            Geometry::RemoveGeometry("cube");
+            
             size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
             m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
             
@@ -459,7 +461,7 @@ namespace VanK
             m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
             
             size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * Geometry::GetMeshes().size();
-            indirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
+            m_IndirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
             
             size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * Geometry::GetTotalInstances();
             m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
@@ -467,25 +469,25 @@ namespace VanK
             size_t transferSize = vertexBufferSize + indexBufferSize /*+ indirectBufferSize*/ + storageBufferSize;
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
             
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
+            s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
+            s_Data.camData.indirectAddress = m_IndirectBuffer->GetBufferAddress();
+            s_Data.camData.countAddress = m_CountBuffer->GetBufferAddress();
+            s_Data.camData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
+            s_Data.camData.numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
+            memcpy(s_Data.camData.meshes, Geometry::GetMeshes().data(), Geometry::GetMeshes().size() * sizeof(shaderio::MeshInfo));
+            
             done = true;
         }
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
-        
-        s_Data.camData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
-        s_Data.camData.indirectAddress = indirectBuffer->GetBufferAddress();
-        s_Data.camData.countAddress = countBuffer->GetBufferAddress();
-        s_Data.camData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
-        s_Data.camData.numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
-        memcpy(s_Data.camData.meshes, Geometry::GetMeshes().data(), Geometry::GetMeshes().size() * sizeof(shaderio::MeshInfo));
         uniformScene->Update(cmd, &s_Data.camData, sizeof(s_Data.camData));
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
         RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
         
         {
-            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get(), indirectBuffer.get(), countBuffer.get());
+            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get(), m_IndirectBuffer.get(), m_CountBuffer.get());
         
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
             
@@ -512,13 +514,10 @@ namespace VanK
             RenderCommand::SetScissor(cmd, 1, rect);
             
             RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-            
-            /*RenderCommand::BindVertexBuffer(cmd, 0, *vertexMesh, 1);*/
 
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
-
-            /*RenderCommand::DrawIndexed(cmd, indices.size(), 1, 0, 0, 0);*/
-            RenderCommand::DrawIndexedIndirectCount(cmd, *indirectBuffer, 0, *countBuffer, 0, static_cast<uint32_t>(Geometry::GetMeshes().size()), sizeof(shaderio::DrawIndexedIndirectCommand));
+            
+            RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 0, *m_CountBuffer, 0, static_cast<uint32_t>(Geometry::GetMeshes().size()), sizeof(shaderio::DrawIndexedIndirectCommand));
 
             RenderCommand::EndRendering(cmd);
         }
