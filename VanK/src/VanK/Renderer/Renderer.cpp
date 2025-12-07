@@ -489,16 +489,28 @@ namespace VanK
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         
         if (Geometry::GetVerticesChanged())
+        {
             UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
+            Geometry::ClearVerticesChanged();
+        }
         
         if (Geometry::GetIndicesChanged())
+        {
             UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
+            Geometry::ClearIndicesChanged();
+        }
         
         if (Geometry::GetStorageChanged())
+        {
             UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
+            Geometry::ClearStorageChanged();
+        }
         
         if (Geometry::GetMeshesChanged())
+        {
             UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, Geometry::GetMeshes(), shaderio::MeshInfo, 0);
+            Geometry::ClearMeshesChanged();
+        }
         
         s_Data.SceneData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.SceneData.indirectAddress = m_IndirectBuffer->GetBufferAddress();

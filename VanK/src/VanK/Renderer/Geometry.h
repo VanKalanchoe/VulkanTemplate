@@ -47,6 +47,10 @@ namespace VanK
         static bool GetIndicesChanged() { return s_IndicesChanged; }
         static bool GetStorageChanged() { return s_StorageChanged; }
         static bool GetMeshesChanged() { return s_MeshesChanged; }
+        static void ClearVerticesChanged() { s_VerticesChanged = false; }
+        static void ClearIndicesChanged() { s_IndicesChanged = false; }
+        static void ClearStorageChanged() { s_StorageChanged = false; }
+        static void ClearMeshesChanged() { s_MeshesChanged = false; }
     private:
         static std::vector<CpuMeshInfo> s_MeshInfos;
         static std::vector<shaderio::InstancedVertexData> s_Vertices;
