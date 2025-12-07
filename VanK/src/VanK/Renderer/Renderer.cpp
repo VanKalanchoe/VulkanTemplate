@@ -168,7 +168,23 @@ namespace VanK
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
     }
-    
+
+    void Renderer::EndScene()
+    {
+    }
+
+    void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
+    {
+    }
+
+    void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
+    {
+    }
+
+    void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)
+    {
+    }
+
     void Renderer::BeginScene(const EditorCamera& camera)
     {
         glm::mat4 View = camera.GetViewMatrix();
