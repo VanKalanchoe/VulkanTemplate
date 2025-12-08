@@ -69,7 +69,7 @@ struct InstancedStorageData
   uint32_t aoMap;
 
   //without texture
-  vec3 albedo;
+  vec4 albedo;
   float metallic;
   float roughness;
   float ao;

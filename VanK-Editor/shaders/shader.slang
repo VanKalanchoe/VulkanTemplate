@@ -12,6 +12,7 @@ struct VertexOutput
     float2 fragTexCoord : TEXCOORD1;
     uint32_t textureIndex : TEXCOORD2;
     uint32_t entityID : TEXCOORD3;  // Add entity ID to pass to fragment shader
+    float4 color : COLOR0;
 };
 
 // Define the final output of the fragment shader
@@ -59,6 +60,7 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     output.pos = mul(ubo.proj, mul(ubo.view, mul(storageData.Model, float4(vertexData.position, 1.0))));
     output.fragTexCoord = vertexData.texcoords.xy;
     output.textureIndex = storageData.albedoMap;
+    output.color = storageData.albedo;
 
     // Pass entity ID to fragment shader
     // Option 1: Use instanceID directly (if instanceID == entity ID)
@@ -77,7 +79,9 @@ PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0
 {
     PixelOutput output;
 
-    output.Color = texture[input.textureIndex].Sample(input.fragTexCoord);
+    float4 texColor = texture[input.textureIndex].Sample(input.fragTexCoord);
+
+    output.Color = texColor * input.color;
 
     // Output entity ID to second render target (R32_SINT format)
     output.EntityID = (int)input.entityID;

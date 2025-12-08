@@ -117,48 +117,37 @@ namespace VanK
     
     void Geometry::AppendGeometryData(const std::string& name, const std::vector<shaderio::InstancedStorageData>& data)
     {
-        // 1. Append the new instance data
-        // This assumes AppendGeometryData is called only once per mesh.
+        if (data.empty())
+            return;
+
+        // 1. Append the new instance data to global storage
+        uint32_t newInstanceCount = static_cast<uint32_t>(data.size());
         s_StorageData.insert(s_StorageData.end(), data.begin(), data.end());
 
-        uint32_t newInstanceCount = static_cast<uint32_t>(data.size());
-
-        // 2. Find the mesh and update its count
-        for (size_t i = 0; i < s_MeshInfos.size(); ++i) 
+        // 2. Find the mesh and update instance count and offsets
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
         {
-            if (s_MeshInfos[i].name == name) 
+            if (s_MeshInfos[i].name == name)
             {
-                // The old instance count is 0 (set in AppendGeometry).
-                uint32_t oldInstanceCount = s_MeshInfos[i].gpu.instanceCount; // Should be 0
+                // Add to existing count, do NOT overwrite
+                uint32_t oldInstanceCount = s_MeshInfos[i].gpu.instanceCount;
+                s_MeshInfos[i].gpu.instanceCount += newInstanceCount;
 
-                // The difference to add to the total and subsequent offsets.
-                // This is simply newInstanceCount, as oldInstanceCount is 0.
-                uint32_t instanceCountDifference = newInstanceCount - oldInstanceCount; 
-            
-                s_MeshInfos[i].gpu.instanceCount = newInstanceCount;
+                // Update s_TotalInstances
+                s_TotalInstances += newInstanceCount;
 
-                // ⭐ 3. Back-Patch the firstInstance offset for all subsequent meshes
-                if (instanceCountDifference > 0)
+                // Back-patch firstInstance of subsequent meshes
+                for (size_t j = i + 1; j < s_MeshInfos.size(); ++j)
                 {
-                    // Iterate through all meshes that were appended *after* the current mesh
-                    for (size_t j = i + 1; j < s_MeshInfos.size(); ++j)
-                    {
-                        // Add the delta instance count (which is the new count)
-                        s_MeshInfos[j].gpu.firstInstance += instanceCountDifference;
-                    }
-                
-                    // Update s_TotalInstances by the difference (which is the new count)
-                    s_TotalInstances += instanceCountDifference;
+                    s_MeshInfos[j].gpu.firstInstance += newInstanceCount;
                 }
-                
-                // 4. Set Changed Flag
+
                 s_StorageChanged = true;
-                
                 return;
             }
         }
-        
-        /*VK_CORE_ERROR("Geometry::AppendGeometryData: Could not find mesh with name '%s'", name.c_str());*/
+
+        /*VK_CORE_ERROR("Geometry::AppendGeometryData: Could not find mesh '%s'", name.c_str());*/
     }
 
     void Geometry::RemoveGeometryData(const std::string& name)
@@ -256,15 +245,56 @@ namespace VanK
         {
             if (s_MeshInfos[i].name == name)
             {
-                // Reset instance count ONLY
+                // Reset instance count only
                 s_MeshInfos[i].gpu.instanceCount = 0;
-
-                // Reset doesn't move global storage pointer
-                // firstInstance stays the same
-                // s_TotalInstances stays the same (this is global capacity)
-            
                 return;
             }
         }
     }
+    
+    void Geometry::SetFrameInstances(const std::string& name,
+                                 const std::vector<shaderio::InstancedStorageData>& instances)
+    {
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
+        {
+            if (s_MeshInfos[i].name == name)
+            {
+                uint32_t& firstInstance = s_MeshInfos[i].gpu.firstInstance;
+                uint32_t oldCount = s_MeshInfos[i].gpu.instanceCount;
+
+                // If this is the first time setting instances for this mesh
+                if (oldCount == 0)
+                {
+                    // Allocate new instance region at the end of s_StorageData
+                    firstInstance = s_TotalInstances;
+
+                    // Grow storage
+                    s_StorageData.resize(firstInstance + instances.size());
+
+                    // New global instance count
+                    s_TotalInstances += instances.size();
+                }
+                else
+                {
+                    // Normal behavior: replace existing region
+                    if (s_StorageData.size() < firstInstance + instances.size())
+                        s_StorageData.resize(firstInstance + instances.size());
+
+                    // Adjust global count (if size changed)
+                    s_TotalInstances += (instances.size() - oldCount);
+                }
+
+                // Copy data
+                std::copy(instances.begin(), instances.end(),
+                          s_StorageData.begin() + firstInstance);
+
+                // Update mesh count
+                s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
+
+                s_StorageChanged = true;
+                return;
+            }
+        }
+    }
+
 }

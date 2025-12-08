@@ -26,6 +26,7 @@ namespace VanK
     
     struct Renderer3DData
     {
+        std::vector<shaderio::InstancedStorageData> storageInstancesPtr;
         shaderio::SceneInfo SceneData;
     };
     static Renderer3DData s_Data;
@@ -182,7 +183,9 @@ namespace VanK
 
     void Renderer::EndScene()
     {
+        Geometry::SetFrameInstances("cube", s_Data.storageInstancesPtr);
         Flush();
+        s_Data.storageInstancesPtr.clear();
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
@@ -190,7 +193,10 @@ namespace VanK
         shaderio::InstancedStorageData storage;
         storage.Model = transform;
         storage.albedoMap = whiteTexture->GetTextureIndex();
+        storage.albedo = color;
         storage.EntityID = entityID;
+        
+        s_Data.storageInstancesPtr.emplace_back(storage);
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
@@ -198,7 +204,10 @@ namespace VanK
         shaderio::InstancedStorageData storage;
         storage.Model = transform;
         storage.albedoMap = texture->GetTextureIndex();
+        storage.albedo = tintColor;
         storage.EntityID = entityID;
+        
+        s_Data.storageInstancesPtr.emplace_back(storage);
     }
 
     void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)
@@ -362,11 +371,10 @@ namespace VanK
         
         loadModel();
         
-        /*Geometry::AppendGeometry("model", vertices, indices);*/
-        Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices);
+        Geometry::AppendGeometry("model", vertices, indices);
+        Geometry::AppendGeometry("cube", GeometryData::quadVertices, GeometryData::quadIndices);
         
-        /*
-        // Grid parameters (matching your DrawFrame values)
+        /*// Grid parameters (matching your DrawFrame values)
         const int gridWidth = 3;
         const float spacing = 2.0f;
         const float cubeOffsetX = 1.0f; // Offset for the cube group
@@ -425,7 +433,12 @@ namespace VanK
             cubeStorageData.push_back(data);
         }
         Geometry::AppendGeometryData("cube", cubeStorageData);
-        */
+        std::vector<shaderio::InstancedStorageData> cubeStorageData2;
+        shaderio::InstancedStorageData data2;
+        data2.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-1, 0, 0));
+        data2.albedoMap = whiteTexture->GetTextureIndex();
+        cubeStorageData2.emplace_back(data2);
+        Geometry::AppendGeometryData("cube", cubeStorageData2);*/
 
         size_t countBufferSize = sizeof(uint32_t);
         m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
@@ -496,7 +509,26 @@ namespace VanK
             BeginSubmit();
             return;
         }
+        /*std::vector<shaderio::InstancedStorageData> cubeInstances;
+
+        // first cube
+        shaderio::InstancedStorageData a;
+        a.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-4, 0, 0));
+        a.albedoMap = whiteTexture->GetTextureIndex();
+        cubeInstances.push_back(a);
+
+        // second cube
+        shaderio::InstancedStorageData b;
+        b.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-2, 0, 0));
+        b.albedoMap = ChernoLogo->GetTextureIndex();
+        cubeInstances.push_back(b);
+
+        Geometry::SetFrameInstances("cube", cubeInstances);*/
+        /*Geometry::AppendGeometryData("cube", cubeStorageData2);*/
         DrawFrame();
+        /*cubeInstances.clear();*/
+        /*cubeStorageData.clear();*/
+        /*Geometry::ClearInstances("cube");*/
         /*EndSubmit();*/
     }
     
@@ -537,7 +569,7 @@ namespace VanK
         if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshInfoBufferSize)
             m_MeshInfoBuffer.reset(StorageBuffer::Create(meshInfoBufferSize));
         
-        size_t transferSize = vertexBufferSize + indexBufferSize + storageBufferSize + meshInfoBufferSize;
+        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + storageBufferSize + meshInfoBufferSize;
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         

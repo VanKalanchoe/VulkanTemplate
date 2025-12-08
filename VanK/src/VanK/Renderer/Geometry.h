@@ -30,6 +30,7 @@ namespace VanK
         static void RemoveGeometryData(const std::string& name);
         static void RemoveSingleData(const std::string& name, uint32_t instanceLocalIndex);
         static void ClearInstances(const std::string& name);
+        static void SetFrameInstances(const std::string& name, const std::vector<shaderio::InstancedStorageData>& instances);
 
         // Getters for upload 
         static const std::vector<shaderio::InstancedVertexData>& GetVertices() { return s_Vertices; }
@@ -66,6 +67,21 @@ namespace VanK
 
     namespace GeometryData
     {
+        // Quad
+        inline static std::vector<shaderio::InstancedVertexData> quadVertices = 
+        {
+            {{-0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 0.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f}},
+            {{ 0.5f, -0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 0.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f}},
+            {{ 0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f}},
+            {{-0.5f,  0.5f,  0.5f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}, {0.0f,0.0f,0.0f}, {0.0f,0.0f,0.0f}},
+        };
+        
+        inline static std::vector<uint32_t> quadIndices = 
+        {
+            0, 1, 2, 
+            2, 3, 0,
+        };
+        
         // Cube
         inline static std::vector<shaderio::InstancedVertexData> cubeVertices =
         {
