@@ -14,6 +14,8 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
+#include "VanK/Asset/AssetManager.h"
+
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -183,6 +185,15 @@ namespace VanK
 
     void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)
     {
+        if (src.Texture)
+        {
+            Ref<Texture2D> texture = AssetManager::GetAsset<Texture2D>(src.Texture);
+            DrawQuad(transform, texture, src.TilingFactor, src.Color, entityID);
+        }
+        else
+        {
+            DrawQuad(transform, src.Color, entityID);
+        }
     }
 
     void Renderer::BeginScene(const EditorCamera& camera)
@@ -340,7 +351,7 @@ namespace VanK
         vikingRoom2 = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room2.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
         
-        /*loadModel();
+        loadModel();
         
         Geometry::AppendGeometry("model", vertices, indices);
         Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices);
@@ -403,7 +414,7 @@ namespace VanK
 
             cubeStorageData.push_back(data);
         }
-        Geometry::AppendGeometryData("cube", cubeStorageData);*/
+        Geometry::AppendGeometryData("cube", cubeStorageData);
 
         size_t countBufferSize = sizeof(uint32_t);
         m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
