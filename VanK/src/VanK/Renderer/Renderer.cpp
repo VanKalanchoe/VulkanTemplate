@@ -187,10 +187,18 @@ namespace VanK
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
     {
+        shaderio::InstancedStorageData storage;
+        storage.Model = transform;
+        storage.albedoMap = whiteTexture->GetTextureIndex();
+        storage.EntityID = entityID;
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
     {
+        shaderio::InstancedStorageData storage;
+        storage.Model = transform;
+        storage.albedoMap = texture->GetTextureIndex();
+        storage.EntityID = entityID;
     }
 
     void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)

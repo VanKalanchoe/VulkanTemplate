@@ -250,4 +250,21 @@ namespace VanK
         }
         /*VK_CORE_WARN("Geometry::RemoveSingleInstance: Mesh '%s' not found.", name.c_str());*/
     }
+    void Geometry::ClearInstances(const std::string& name)
+    {
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
+        {
+            if (s_MeshInfos[i].name == name)
+            {
+                // Reset instance count ONLY
+                s_MeshInfos[i].gpu.instanceCount = 0;
+
+                // Reset doesn't move global storage pointer
+                // firstInstance stays the same
+                // s_TotalInstances stays the same (this is global capacity)
+            
+                return;
+            }
+        }
+    }
 }

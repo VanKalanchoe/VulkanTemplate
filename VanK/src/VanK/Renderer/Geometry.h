@@ -29,6 +29,7 @@ namespace VanK
         static void AppendGeometryData(const std::string& name, const std::vector<shaderio::InstancedStorageData>& data);
         static void RemoveGeometryData(const std::string& name);
         static void RemoveSingleData(const std::string& name, uint32_t instanceLocalIndex);
+        static void ClearInstances(const std::string& name);
 
         // Getters for upload 
         static const std::vector<shaderio::InstancedVertexData>& GetVertices() { return s_Vertices; }
