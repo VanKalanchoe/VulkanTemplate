@@ -157,7 +157,7 @@ namespace VanK
 
     void EditorLayer::OnRender()
     {
-        Renderer::Flush();
+        /*Renderer::Flush();*/
     }
 
     void EditorLayer::OnImGuiRender()

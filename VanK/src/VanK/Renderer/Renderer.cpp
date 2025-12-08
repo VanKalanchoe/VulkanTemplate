@@ -170,9 +170,19 @@ namespace VanK
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
     }
+    
+    void Renderer::BeginScene(const EditorCamera& camera)
+    {
+        glm::mat4 View = camera.GetViewMatrix();
+        glm::mat4 Proj = camera.GetProjection();
+        
+        s_Data.SceneData.view = View;
+        s_Data.SceneData.proj = Proj;
+    }
 
     void Renderer::EndScene()
     {
+        Flush();
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
@@ -194,15 +204,6 @@ namespace VanK
         {
             DrawQuad(transform, src.Color, entityID);
         }
-    }
-
-    void Renderer::BeginScene(const EditorCamera& camera)
-    {
-        glm::mat4 View = camera.GetViewMatrix();
-        glm::mat4 Proj = camera.GetProjection();
-        
-        s_Data.SceneData.view = View;
-        s_Data.SceneData.proj = Proj;
     }
     
     void Renderer::Init(Window& window)
@@ -346,16 +347,17 @@ namespace VanK
 
         uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.SceneData)));
 
-        texture = TextureImporter::LoadTexture2D("");
+        whiteTexture = TextureImporter::LoadTexture2D("");
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
         vikingRoom2 = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room2.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
         
         loadModel();
         
-        Geometry::AppendGeometry("model", vertices, indices);
+        /*Geometry::AppendGeometry("model", vertices, indices);*/
         Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices);
         
+        /*
         // Grid parameters (matching your DrawFrame values)
         const int gridWidth = 3;
         const float spacing = 2.0f;
@@ -415,6 +417,7 @@ namespace VanK
             cubeStorageData.push_back(data);
         }
         Geometry::AppendGeometryData("cube", cubeStorageData);
+        */
 
         size_t countBufferSize = sizeof(uint32_t);
         m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
@@ -491,7 +494,7 @@ namespace VanK
     
     void Renderer::DrawFrame()
     {
-        if (Geometry::GetMeshes().empty()) 
+        if (Geometry::GetTotalInstances() == 0) 
         {
             // maybe add vkCmdClearColorImage() instead 
             std::vector<VanKColorTargetInfo> colorAttachments;

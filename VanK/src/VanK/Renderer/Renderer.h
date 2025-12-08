@@ -94,6 +94,6 @@ namespace VanK
         inline static Ref<IndirectBuffer> m_IndirectBuffer;
         inline static Ref<IndirectBuffer> m_CountBuffer;
         
-        inline static Ref<Texture2D> texture, vikingRoom, vikingRoom2, ChernoLogo;
+        inline static Ref<Texture2D> whiteTexture, vikingRoom, vikingRoom2, ChernoLogo;
     };
 }
