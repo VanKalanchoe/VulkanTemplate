@@ -19,7 +19,9 @@ namespace VanK
     (
         const std::string& name,
         const std::vector<shaderio::InstancedVertexData>& vertices,
-        const std::vector<uint32_t>& indices)
+        const std::vector<uint32_t>& indices,
+        CpuMeshInfo::PipelineType pipelineType
+    )
     {
         // 1. Fill the GPU Info
         shaderio::MeshInfo gpuInfo;
@@ -32,15 +34,28 @@ namespace VanK
         // 2. Append the Data
         s_Vertices.insert(s_Vertices.end(), vertices.begin(), vertices.end());
         s_Indices.insert(s_Indices.end(), indices.begin(), indices.end());
-        
-        // 3. Update Global State
-        s_MeshInfos.emplace_back(name, gpuInfo);
-        
-        // 4. Set Changed Flags
+
+        // 3. Find insertion point by pipeline type (using std::find_if)
+        auto insertIt = std::ranges::find_if(s_MeshInfos,
+                                             [&](const CpuMeshInfo& info) {
+                                                 return info.pipelineType > pipelineType;
+                                             });
+
+        // 4. Insert the new mesh in sorted order
+        insertIt = s_MeshInfos.insert(insertIt, CpuMeshInfo{name, gpuInfo, pipelineType});
+
+        // 5. Shift firstInstance of subsequent meshes
+        for (auto shiftIt = insertIt + 1; shiftIt != s_MeshInfos.end(); ++shiftIt)
+        {
+            shiftIt->gpu.firstInstance += gpuInfo.instanceCount;
+        }
+
+        // 6. Set changed flags
         s_VerticesChanged = true;
         s_IndicesChanged = true;
         s_MeshesChanged = true;
     }
+
     
     void Geometry::RemoveGeometry(const std::string& name)
     {
@@ -290,11 +305,9 @@ namespace VanK
 
                 // Update mesh count
                 s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
-
                 s_StorageChanged = true;
                 return;
             }
         }
     }
-
 }

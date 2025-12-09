@@ -19,12 +19,13 @@ namespace VanK
     {
         std::string name;
         shaderio::MeshInfo gpu;
+        enum class PipelineType { Quad, Circle, Text } pipelineType;
     };
     
     class Geometry
     {
     public:
-        static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices);
+        static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices, CpuMeshInfo::PipelineType pipelineType);
         static void RemoveGeometry(const std::string& name);
         static void AppendGeometryData(const std::string& name, const std::vector<shaderio::InstancedStorageData>& data);
         static void RemoveGeometryData(const std::string& name);

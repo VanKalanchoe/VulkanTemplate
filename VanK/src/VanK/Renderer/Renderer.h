@@ -78,9 +78,14 @@ namespace VanK
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
         
+        // Graphics Pipelines
         inline static VanKPipeLine m_GraphicsDebugPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_GraphicsDebugPipelineSpecification = {};
         
+        inline static VanKPipeLine m_GraphicsCirclePipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_GraphicsCirclePipelineSpecification = {};
+        
+        // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};
         inline static VanKComputePipelineSpecification m_ComputeDrawIndirectPipelineSpecification = {};
         

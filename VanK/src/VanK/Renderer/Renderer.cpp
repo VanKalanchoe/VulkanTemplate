@@ -183,7 +183,7 @@ namespace VanK
 
     void Renderer::EndScene()
     {
-        Geometry::SetFrameInstances("cube", s_Data.storageInstancesPtr);
+        Geometry::SetFrameInstances("quad", s_Data.storageInstancesPtr);
         Flush();
         s_Data.storageInstancesPtr.clear();
     }
@@ -233,6 +233,7 @@ namespace VanK
 
         // Shader creation
         auto DebugShader = GetShaderLibrary().Load("DebugShader", "shader.slang");
+        /*auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");*/
         auto DrawIndirectShader = GetShaderLibrary().Load("DrawIndirectShader", "DrawIndirectShader.slang");
 
         // Pipeline Creation
@@ -344,6 +345,13 @@ namespace VanK
         m_GraphicsDebugPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsDebugPipelineSpecification);
         RegisterPipelineForShaderWatcher("DebugShader", "shader.slang", &m_GraphicsDebugPipelineSpecification, nullptr, &m_GraphicsDebugPipeline, VanKGraphics);
         
+        /*
+        m_GraphicsCirclePipelineSpecification = GraphicsPipelineSpecification;
+        m_GraphicsCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = CircleShader;
+        m_GraphicsCirclePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsCirclePipelineSpecification);
+        RegisterPipelineForShaderWatcher("CircleShader", "CircleShader.slang", &m_GraphicsCirclePipelineSpecification, nullptr, &m_GraphicsCirclePipeline, VanKGraphics);
+        */
+        
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
         {
@@ -359,8 +367,8 @@ namespace VanK
         
         m_ComputeDrawIndirectPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawIndirectPipelineSpecification);
         RegisterPipelineForShaderWatcher("DrawIndirectShader", "DrawIndirectShader.slang", nullptr, &m_ComputeDrawIndirectPipelineSpecification, &m_ComputeDrawIndirectPipeline, VanKCompute);
-
-        WatchShaderFiles(); // has to be after rednerer2d init othwerise it cant watch it beacuse not created shaders
+        
+        WatchShaderFiles(); // has to be last after pipeline creation
 
         uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.SceneData)));
 
@@ -371,74 +379,8 @@ namespace VanK
         
         loadModel();
         
-        Geometry::AppendGeometry("model", vertices, indices);
-        Geometry::AppendGeometry("cube", GeometryData::quadVertices, GeometryData::quadIndices);
-        
-        /*// Grid parameters (matching your DrawFrame values)
-        const int gridWidth = 3;
-        const float spacing = 2.0f;
-        const float cubeOffsetX = 1.0f; // Offset for the cube group
-
-        // Assuming mesh 0 is "model" and mesh 1 is "cube" based on the creation order:
-        // Geometry::AppendGeometry("model", ...);
-        // Geometry::AppendGeometry("cube", ...);
-        
-        // Check total number of meshes
-        if (Geometry::GetMeshes().size() < 2) return; 
-
-        // --- 1. Generate Transforms for "model" (Mesh 0) ---
-        // The "model" will be placed in a 3x3 grid (9 instances total)
-        std::vector<shaderio::InstancedStorageData> modelStorageData;
-        uint32_t modelInstanceCount = 9; // Let's create a 3x3 grid (9 instances)
-        
-        for (uint32_t j = 0; j < modelInstanceCount; j++)
-        {
-            int row = j / gridWidth;
-            int col = j % gridWidth;
-
-            float x = col * spacing;
-            float y = 0.0f;
-            float z = row * spacing;
-
-            shaderio::InstancedStorageData data{};
-            // The first mesh has no offset
-            data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
-            data.albedoMap = vikingRoom->GetTextureIndex(); // Use the model texture
-
-            modelStorageData.push_back(data);
-        }
-        Geometry::AppendGeometryData("model", modelStorageData);
-
-        // --- 2. Generate Transforms for "cube" (Mesh 1) ---
-        // The "cube" will also be placed in a 3x3 grid (9 instances total)
-        std::vector<shaderio::InstancedStorageData> cubeStorageData;
-        uint32_t cubeInstanceCount = 9; // Let's use the same instance count
-        
-        for (uint32_t j = 0; j < cubeInstanceCount; j++)
-        {
-            int row = j / gridWidth;
-            int col = j % gridWidth;
-
-            float x = col * spacing;
-            float y = 0.0f;
-            float z = row * spacing;
-
-            // ⭐ Apply the offset here during creation
-            x += cubeOffsetX; 
-
-            shaderio::InstancedStorageData data{};
-            data.Model = glm::translate(glm::mat4(1.0f), glm::vec3(x, y, z));
-            data.albedoMap = ChernoLogo->GetTextureIndex(); // Use the cube texture
-
-            cubeStorageData.push_back(data);
-        }
-        Geometry::AppendGeometryData("cube", cubeStorageData);
-        std::vector<shaderio::InstancedStorageData> cubeStorageData2;
-        shaderio::InstancedStorageData data2;
-        data2.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-1, 0, 0));
-        data2.albedoMap = whiteTexture->GetTextureIndex();
-        cubeStorageData2.emplace_back(data2);
-        Geometry::AppendGeometryData("cube", cubeStorageData2);*/
+        /*Geometry::AppendGeometry("model", vertices, indices, TODO);*/
+        Geometry::AppendGeometry("quad", GeometryData::quadVertices, GeometryData::quadIndices, CpuMeshInfo::PipelineType::Quad);
 
         size_t countBufferSize = sizeof(uint32_t);
         m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
@@ -498,6 +440,7 @@ namespace VanK
     void Renderer::Flush()
     {
         /*BeginSubmit();*/
+        
         if (s_IsPipelineReloadFinished.exchange(false))
         {
             IsShaderReloadFinished = false;
@@ -509,26 +452,9 @@ namespace VanK
             BeginSubmit();
             return;
         }
-        /*std::vector<shaderio::InstancedStorageData> cubeInstances;
-
-        // first cube
-        shaderio::InstancedStorageData a;
-        a.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-4, 0, 0));
-        a.albedoMap = whiteTexture->GetTextureIndex();
-        cubeInstances.push_back(a);
-
-        // second cube
-        shaderio::InstancedStorageData b;
-        b.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-2, 0, 0));
-        b.albedoMap = ChernoLogo->GetTextureIndex();
-        cubeInstances.push_back(b);
-
-        Geometry::SetFrameInstances("cube", cubeInstances);*/
-        /*Geometry::AppendGeometryData("cube", cubeStorageData2);*/
+     
         DrawFrame();
-        /*cubeInstances.clear();*/
-        /*cubeStorageData.clear();*/
-        /*Geometry::ClearInstances("cube");*/
+        
         /*EndSubmit();*/
     }
     
@@ -573,7 +499,6 @@ namespace VanK
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         
-    
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
 
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
@@ -613,13 +538,13 @@ namespace VanK
             
             RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
             
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
-            
             VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
             RenderCommand::SetViewport(cmd, 1, viewPort);
 
             VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
             RenderCommand::SetScissor(cmd, 1, rect);
+            
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
             
             RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
