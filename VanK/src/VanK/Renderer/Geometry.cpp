@@ -10,10 +10,12 @@ namespace VanK
     std::vector<uint32_t> Geometry::s_Indices{};
     uint32_t Geometry::s_TotalInstances = 0;
     std::vector<shaderio::InstancedStorageData> Geometry::s_StorageData{};
+    std::vector<shaderio::InstancedCircleData> Geometry::s_CircleData{};
     bool Geometry::s_VerticesChanged = false;
     bool Geometry::s_IndicesChanged = false;
     bool Geometry::s_StorageChanged = false;
     bool Geometry::s_MeshesChanged = false;
+    bool Geometry::s_CirclesChanged = false;
     
     void Geometry::AppendGeometry
     (
@@ -306,6 +308,50 @@ namespace VanK
                 // Update mesh count
                 s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
                 s_StorageChanged = true;
+                return;
+            }
+        }
+    }
+    
+    void Geometry::SetCircleFrameInstances(const std::string& name,
+                                 const std::vector<shaderio::InstancedCircleData>& instances)
+    {
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
+        {
+            if (s_MeshInfos[i].name == name)
+            {
+                uint32_t& firstInstance = s_MeshInfos[i].gpu.firstInstance;
+                uint32_t oldCount = s_MeshInfos[i].gpu.instanceCount;
+
+                // If this is the first time setting instances for this mesh
+                if (oldCount == 0)
+                {
+                    // Allocate new instance region at the end of s_CircleData
+                    firstInstance = s_TotalInstances;
+
+                    // Grow storage
+                    s_CircleData.resize(firstInstance + instances.size());
+
+                    // New global instance count
+                    s_TotalInstances += instances.size();
+                }
+                else
+                {
+                    // Normal behavior: replace existing region
+                    if (s_CircleData.size() < firstInstance + instances.size())
+                        s_CircleData.resize(firstInstance + instances.size());
+                    
+                    // Adjust global count (if size changed)
+                    s_TotalInstances += (instances.size() - oldCount);
+                }
+
+                // Copy data
+                std::copy(instances.begin(), instances.end(),
+                          s_CircleData.begin() + firstInstance);
+
+                // Update mesh count
+                s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
+                s_CirclesChanged = true;
                 return;
             }
         }

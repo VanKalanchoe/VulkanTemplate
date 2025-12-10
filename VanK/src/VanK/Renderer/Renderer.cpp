@@ -27,6 +27,7 @@ namespace VanK
     struct Renderer3DData
     {
         std::vector<shaderio::InstancedStorageData> storageInstancesPtr;
+        std::vector<shaderio::InstancedCircleData> circleInstancesPtr;
         shaderio::SceneInfo SceneData;
     };
     static Renderer3DData s_Data;
@@ -184,8 +185,10 @@ namespace VanK
     void Renderer::EndScene()
     {
         Geometry::SetFrameInstances("quad", s_Data.storageInstancesPtr);
+        Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
         Flush();
         s_Data.storageInstancesPtr.clear();
+        s_Data.circleInstancesPtr.clear();
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
@@ -222,7 +225,19 @@ namespace VanK
             DrawQuad(transform, src.Color, entityID);
         }
     }
-    
+
+    void Renderer::DrawCircle(const glm::mat4& transform, const glm::vec4& color, float thickness /*= 1.0f*/, float fade /*= 0.005f*/, int entityID /*= -1*/)
+    {
+        shaderio::InstancedCircleData circle;
+        circle.WorldPosition = transform;
+        circle.Color = color;
+        circle.Thickness = thickness;
+        circle.Fade = fade;
+        circle.EntityID = entityID;
+        
+        s_Data.circleInstancesPtr.emplace_back(circle);
+    }
+
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -233,7 +248,7 @@ namespace VanK
 
         // Shader creation
         auto DebugShader = GetShaderLibrary().Load("DebugShader", "shader.slang");
-        /*auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");*/
+        auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");
         auto DrawIndirectShader = GetShaderLibrary().Load("DrawIndirectShader", "DrawIndirectShader.slang");
 
         // Pipeline Creation
@@ -345,12 +360,10 @@ namespace VanK
         m_GraphicsDebugPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsDebugPipelineSpecification);
         RegisterPipelineForShaderWatcher("DebugShader", "shader.slang", &m_GraphicsDebugPipelineSpecification, nullptr, &m_GraphicsDebugPipeline, VanKGraphics);
         
-        /*
         m_GraphicsCirclePipelineSpecification = GraphicsPipelineSpecification;
         m_GraphicsCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = CircleShader;
         m_GraphicsCirclePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsCirclePipelineSpecification);
         RegisterPipelineForShaderWatcher("CircleShader", "CircleShader.slang", &m_GraphicsCirclePipelineSpecification, nullptr, &m_GraphicsCirclePipeline, VanKGraphics);
-        */
         
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
@@ -381,6 +394,7 @@ namespace VanK
         
         /*Geometry::AppendGeometry("model", vertices, indices, TODO);*/
         Geometry::AppendGeometry("quad", GeometryData::quadVertices, GeometryData::quadIndices, CpuMeshInfo::PipelineType::Quad);
+        Geometry::AppendGeometry("circle", GeometryData::quadVertices, GeometryData::quadIndices, CpuMeshInfo::PipelineType::Quad);
 
         size_t countBufferSize = sizeof(uint32_t);
         m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
@@ -491,11 +505,15 @@ namespace VanK
         if (!m_InstancedStorageBuffer || m_InstancedStorageBuffer->GetSize() < storageBufferSize)
             m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
         
+        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * Geometry::GetTotalInstances();
+        if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < CircleBufferSize)
+            m_InstancedCircleBuffer.reset(StorageBuffer::Create(CircleBufferSize));
+        
         size_t meshInfoBufferSize = sizeof(shaderio::MeshInfo) * Geometry::GetMeshes().size();
         if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshInfoBufferSize)
             m_MeshInfoBuffer.reset(StorageBuffer::Create(meshInfoBufferSize));
         
-        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + storageBufferSize + meshInfoBufferSize;
+        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + storageBufferSize + CircleBufferSize + meshInfoBufferSize;
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         
@@ -504,14 +522,17 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
 
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
+        
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, Geometry::GetCircleData(), shaderio::InstancedCircleData, 0);
             
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, Geometry::GetMeshes(), shaderio::MeshInfo, 0);
         
         s_Data.SceneData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.SceneData.indirectAddress = m_IndirectBuffer->GetBufferAddress();
-        s_Data.SceneData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
+        s_Data.SceneData.storageAddress = m_InstancedCircleBuffer->GetBufferAddress();
         s_Data.SceneData.countAddress = m_CountBuffer->GetBufferAddress();
         s_Data.SceneData.meshInfoAddress = m_MeshInfoBuffer->GetBufferAddress();
+        /*s_Data.SceneData.circleAddress = m_InstancedCircleBuffer->GetBufferAddress();*/
         s_Data.SceneData.numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
         
         uniformScene->Update(cmd, &s_Data.SceneData, sizeof(s_Data.SceneData));
@@ -544,13 +565,13 @@ namespace VanK
             VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
             RenderCommand::SetScissor(cmd, 1, rect);
             
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsCirclePipeline);
             
             RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
             
-            RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 0, *m_CountBuffer, 0, static_cast<uint32_t>(Geometry::GetMeshes().size()), sizeof(shaderio::DrawIndexedIndirectCommand));
+            RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 0, *m_CountBuffer, 0, Geometry::GetMeshes().size(), sizeof(shaderio::DrawIndexedIndirectCommand));
 
             RenderCommand::EndRendering(cmd);
         }

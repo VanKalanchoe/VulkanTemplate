@@ -465,7 +465,7 @@ namespace VanK
                 //Renderer2D::DrawRect(transform, sprite, (int)entity);
             }
         }
-        /*
+        
         // Draw Circles
         {
             auto view = m_Registry.view<TransformComponent, CircleRendererComponent>();
@@ -473,10 +473,10 @@ namespace VanK
             {
                 auto [transform, circle] = view.get<TransformComponent, CircleRendererComponent>(entity);
 
-                Renderer2D::DrawCircle(transform, circle, (int)entity);
+                Renderer::DrawCircle(transform.GetTransform(), circle.Color, circle.Thickness, circle.Fade, (int)entity);
             }
         }
-
+        /*
         // Draw Text
         {
             auto view = m_Registry.view<TransformComponent, TextComponent>();

@@ -39,6 +39,7 @@ struct SceneInfo
     uint64_t storageAddress;
     uint64_t countAddress;
     uint64_t meshInfoAddress;
+    /*uint64_t circleAddress;*/
     uint32_t numMeshes;
 };
 
@@ -54,6 +55,17 @@ struct InstancedVertexData
     vec2 texcoords;
     vec3 tangent;
     vec3 bitangent;
+};
+
+struct InstancedCircleData
+{
+    mat4 WorldPosition;
+    vec4 Color;
+    float Thickness;
+    float Fade;
+
+    // Editor-only
+    int EntityID;
 };
 
 struct InstancedStorageData

@@ -32,6 +32,7 @@ namespace VanK
         static void RemoveSingleData(const std::string& name, uint32_t instanceLocalIndex);
         static void ClearInstances(const std::string& name);
         static void SetFrameInstances(const std::string& name, const std::vector<shaderio::InstancedStorageData>& instances);
+        static void SetCircleFrameInstances(const std::string& name, const std::vector<shaderio::InstancedCircleData>& instances);
 
         // Getters for upload 
         static const std::vector<shaderio::InstancedVertexData>& GetVertices() { return s_Vertices; }
@@ -46,24 +47,29 @@ namespace VanK
                 meshes.push_back(cpuMesh.gpu); return meshes;
         }
         static const std::vector<shaderio::InstancedStorageData>& GetStorageData() { return s_StorageData; }
+        static const std::vector<shaderio::InstancedCircleData>& GetCircleData() { return s_CircleData; }
         static bool GetVerticesChanged() { return s_VerticesChanged;}
         static bool GetIndicesChanged() { return s_IndicesChanged; }
         static bool GetStorageChanged() { return s_StorageChanged; }
         static bool GetMeshesChanged() { return s_MeshesChanged; }
+        static bool GetCirclesChanged() { return s_CirclesChanged; }
         static void ClearVerticesChanged() { s_VerticesChanged = false; }
         static void ClearIndicesChanged() { s_IndicesChanged = false; }
         static void ClearStorageChanged() { s_StorageChanged = false; }
         static void ClearMeshesChanged() { s_MeshesChanged = false; }
+        static void ClearCirclesChanged() { s_CirclesChanged = false; }
     private:
         static std::vector<CpuMeshInfo> s_MeshInfos;
         static std::vector<shaderio::InstancedVertexData> s_Vertices;
         static std::vector<uint32_t> s_Indices;
         static std::vector<shaderio::InstancedStorageData> s_StorageData;
+        static std::vector<shaderio::InstancedCircleData> s_CircleData;
         static uint32_t s_TotalInstances;
         static bool s_VerticesChanged;
         static bool s_IndicesChanged;
         static bool s_StorageChanged;
         static bool s_MeshesChanged;
+        static bool s_CirclesChanged;
     };
 
     namespace GeometryData

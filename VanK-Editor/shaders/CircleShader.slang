@@ -9,8 +9,9 @@
 struct VertexOutput
 {
     float4 pos : SV_Position;
-    float2 fragTexCoord : TEXCOORD1;
-    uint32_t textureIndex : TEXCOORD2;
+    float Thickness : TEXCOORD0;
+    float3 LocalPosition : TEXCOORD1;
+    float Fade : TEXCOORD2;
     uint32_t entityID : TEXCOORD3;  // Add entity ID to pass to fragment shader
     float4 color : COLOR0;
 };
@@ -48,23 +49,25 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 {
     VertexOutput output;
 
-   /*  MeshInfo* meshInfo = (MeshInfo*)ubo.meshInfoAddress;
+    MeshInfo* meshInfo = (MeshInfo*)ubo.meshInfoAddress;
     MeshInfo meshInfoData = meshInfo[drawIndex];
 
     InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertexAddress;
     InstancedVertexData vertexData = vertex[vertexID + meshInfoData.vertexOffset];
 
-    InstancedStorageData* storage = (InstancedStorageData*)ubo.storageAddress;
-    InstancedStorageData storageData = storage[instanceID + meshInfoData.firstInstance];
+    InstancedCircleData* circle = (InstancedCircleData*)ubo.storageAddress;
+    InstancedCircleData circleData = circle[instanceID + meshInfoData.firstInstance];
 
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(storageData.Model, float4(vertexData.position, 1.0))));
-    output.fragTexCoord = vertexData.texcoords.xy;
-    output.textureIndex = storageData.albedoMap;
-    output.color = storageData.albedo;
+    output.pos = mul(ubo.proj, mul(ubo.view, mul(circleData.WorldPosition, float4(vertexData.position, 1.0))));
+    output.color = circleData.Color;
+    output.Thickness = circleData.Thickness;
+    output.Fade = circleData.Fade;
+    float2 lp = vertexData.position.xy * 2.0; // -0.5..0.5 → -1..1
+    output.LocalPosition = float3(lp, 0.0);
 
     // Pass entity ID to fragment shader
     // Option 1: Use instanceID directly (if instanceID == entity ID)
-    output.entityID = storageData.EntityID; */
+    output.entityID = circleData.EntityID;
 
     return output;
 }
@@ -78,13 +81,21 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0 
 {
     PixelOutput output;
-/* 
-    float4 texColor = texture[input.textureIndex].Sample(input.fragTexCoord);
 
-    output.Color = texColor * input.color;
+    // Calculate distance and fill circle with white
+    float distance = 1.0 - length(input.LocalPosition);
+    float circle = smoothstep(0.0, input.Fade, distance);
+    circle *= smoothstep(input.Thickness + input.Fade, input.Thickness, distance);
+
+    if(circle == 0.0)
+        discard;
+
+    // Set output color
+    output.Color = input.color;
+    output.Color.a *= circle; 
 
     // Output entity ID to second render target (R32_SINT format)
-    output.EntityID = (int)input.entityID; */
+    output.EntityID = (int)input.entityID;
 
    return output;
 }

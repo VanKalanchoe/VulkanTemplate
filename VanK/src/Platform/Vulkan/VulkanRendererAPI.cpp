@@ -1036,7 +1036,7 @@ namespace  VanK
                 vk::PipelineStageFlagBits2::eAllCommands,
                 vk::PipelineStageFlagBits2::eComputeShader,
                 {},
-                vk::AccessFlagBits2::eShaderRead // Dst Access: Compute Shader WRITE
+                vk::AccessFlagBits2::eShaderWrite // Dst Access: Compute Shader WRITE
             );
         }
         
@@ -1085,8 +1085,6 @@ namespace  VanK
         
         if (computePass->VanKIndirectCountBuffer != nullptr)
         {
-            
-            
             // Barrier for the Draw Count buffer
             utils::cmdBufferMemoryBarrier
             (
