@@ -58,24 +58,12 @@ struct InstancedVertexData
 
 struct InstancedStorageData
 {
-  mat4 Model;
-  mat3 normalMatrix;
-  
-  //with texture
-  uint32_t albedoMap;
-  uint32_t normalMap;
-  uint32_t metallicMap;
-  uint32_t roughnessMap;
-  uint32_t aoMap;
+    mat4 Model;
+    vec4 color;
+    uint32_t textureIndex;
 
-  //without texture
-  vec4 albedo;
-  float metallic;
-  float roughness;
-  float ao;
-
-  // Editor-only
-  int EntityID;
+    // Editor-only
+    int EntityID;
 };
 
 struct DrawIndexedIndirectCommand

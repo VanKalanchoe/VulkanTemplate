@@ -59,8 +59,8 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 
     output.pos = mul(ubo.proj, mul(ubo.view, mul(storageData.Model, float4(vertexData.position, 1.0))));
     output.fragTexCoord = vertexData.texcoords.xy;
-    output.textureIndex = storageData.albedoMap;
-    output.color = storageData.albedo;
+    output.color = storageData.color;
+    output.textureIndex = storageData.textureIndex;
 
     // Pass entity ID to fragment shader
     // Option 1: Use instanceID directly (if instanceID == entity ID)

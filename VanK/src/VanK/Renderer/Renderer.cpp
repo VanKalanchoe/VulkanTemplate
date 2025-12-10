@@ -192,8 +192,8 @@ namespace VanK
     {
         shaderio::InstancedStorageData storage;
         storage.Model = transform;
-        storage.albedoMap = whiteTexture->GetTextureIndex();
-        storage.albedo = color;
+        storage.color = color;
+        storage.textureIndex = whiteTexture->GetTextureIndex();
         storage.EntityID = entityID;
         
         s_Data.storageInstancesPtr.emplace_back(storage);
@@ -203,8 +203,8 @@ namespace VanK
     {
         shaderio::InstancedStorageData storage;
         storage.Model = transform;
-        storage.albedoMap = texture->GetTextureIndex();
-        storage.albedo = tintColor;
+        storage.color = tintColor;
+        storage.textureIndex = texture->GetTextureIndex();
         storage.EntityID = entityID;
         
         s_Data.storageInstancesPtr.emplace_back(storage);
