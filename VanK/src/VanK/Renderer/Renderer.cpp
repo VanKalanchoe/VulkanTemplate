@@ -428,6 +428,8 @@ namespace VanK
         m_InstancedStorageBuffer.reset();
         
         m_MeshInfoBuffer.reset();
+        
+        m_InstancedCircleBuffer.reset();
     }
 
     void Renderer::BeginSubmit()
