@@ -14,6 +14,7 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
+#include "MSDFData.h"
 #include "VanK/Asset/AssetManager.h"
 
 namespace VanK
@@ -28,7 +29,10 @@ namespace VanK
     {
         std::vector<shaderio::InstancedStorageData> storageInstancesPtr;
         std::vector<shaderio::InstancedCircleData> circleInstancesPtr;
+        std::vector<shaderio::InstancedTextData> textInstancesPtr;
         shaderio::SceneInfo SceneData;
+        
+        Ref<Texture2D> FontAtlasTexture;
     };
     static Renderer3DData s_Data;
     
@@ -185,10 +189,18 @@ namespace VanK
     void Renderer::EndScene()
     {
         Geometry::SetFrameInstances("quad", s_Data.storageInstancesPtr);
+        
         Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
+        
+        Geometry::SetTextFrameInstances("text", s_Data.textInstancesPtr);
+        
         Flush();
+        
         s_Data.storageInstancesPtr.clear();
+        
         s_Data.circleInstancesPtr.clear();
+        
+        s_Data.textInstancesPtr.clear();
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
@@ -238,6 +250,109 @@ namespace VanK
         s_Data.circleInstancesPtr.emplace_back(circle);
     }
 
+    void Renderer::DrawString(const std::string& string, Ref<Font> font, const glm::mat4& transform, const TextParams& textParams, int entityID)
+    {
+        const auto& fontGeometry = font->GetMSDFData()->FontGeometry;
+        const auto& metrics = fontGeometry.getMetrics();
+        Ref<Texture2D> fontAtlas = font->GetAtlasTexture();
+        
+        s_Data.FontAtlasTexture = fontAtlas;
+        
+        double x = 0.0;
+        double fsScale = 1.0 / (metrics.ascenderY - metrics.descenderY);
+        double y = 0.0;
+        
+        const float spaceGlyphAdvance = fontGeometry.getGlyph(' ')->getAdvance();
+        
+        for (size_t i = 0; i < string.size(); i++)
+        {
+            char character = string[i];
+            if (character == '\r')
+                continue;
+            
+            if (character == '\n')
+            {
+                x = 0;
+                y -= fsScale * metrics.lineHeight * textParams.LineSpacing;
+                continue;
+            }
+            
+            if (character == ' ')
+            {
+                float advance = spaceGlyphAdvance;
+                if (i < string.size() - 1)
+                {
+                    char nextCharacter = string[i + 1];
+                    double dAdvance;
+                    fontGeometry.getAdvance(dAdvance, character, nextCharacter);
+                    advance = (float)dAdvance;
+                }
+                
+                x += fsScale * advance + textParams.Kerning;
+                continue;
+            }
+            
+            if (character == '\t')
+            {
+                // NOTE(Yan): is this right?
+                x += 4.0f * (fsScale * spaceGlyphAdvance + textParams.Kerning);
+                continue;
+            }
+            
+            auto glyph = fontGeometry.getGlyph(character);
+            if (!glyph)
+                glyph = fontGeometry.getGlyph('?');
+            if (!glyph)
+                return;
+            
+            double al, ab, ar, at;
+            glyph->getQuadAtlasBounds(al, ab, ar, at);
+            glm::vec2 texCoordMin((float)al, (float)ab);
+            glm::vec2 texCoordMax((float)ar, (float)at);
+
+            double pl, pb, pr, pt;
+            glyph->getQuadPlaneBounds(pl, pb, pr, pt);
+            glm::vec2 quadMin((float)pl, (float)pb);
+            glm::vec2 quadMax((float)pr, (float)pt);
+
+            quadMin *= fsScale, quadMax *= fsScale;
+            quadMin += glm::vec2(x, y);
+            quadMax += glm::vec2(x, y);
+
+            float texelWidth = 1.0f / fontAtlas->GetWidth();
+            float texelHeight = 1.0f / fontAtlas->GetHeight();
+            texCoordMin *= glm::vec2(texelWidth, texelHeight);
+            texCoordMax *= glm::vec2(texelWidth, texelHeight);
+            
+            // render here
+            shaderio::InstancedTextData inst;
+            inst.QuadMin = quadMin;
+            inst.QuadMax = quadMax;
+            inst.Transform = transform;                // store transform per draw
+            inst.TexMin = texCoordMin;
+            inst.TexMax = texCoordMax;
+            inst.Color = textParams.Color;
+            inst.TextureIndex = fontAtlas->GetTextureIndex();
+            inst.EntityID = entityID;
+
+            s_Data.textInstancesPtr.emplace_back(inst);
+            
+            if (i < string.size() - 1)
+            {
+                double advance = glyph->getAdvance();
+                char nextCharacter = string[i + 1];
+                fontGeometry.getAdvance(advance, character, nextCharacter);
+                
+                x += fsScale * advance + textParams.Kerning;
+            }
+        }
+    }
+
+    void Renderer::DrawString(const std::string& string, const glm::mat4& transform, const TextComponent& component, int entityID)
+    {
+        DrawString(string, component.FontAsset, transform, { component.Color, component.Kerning, component.LineSpacing }, entityID);
+    }
+
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -247,9 +362,10 @@ namespace VanK
         RenderCommand::Init();
 
         // Shader creation
+        auto DrawIndirectShader = GetShaderLibrary().Load("DrawIndirectShader", "DrawIndirectShader.slang");
         auto DebugShader = GetShaderLibrary().Load("DebugShader", "shader.slang");
         auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");
-        auto DrawIndirectShader = GetShaderLibrary().Load("DrawIndirectShader", "DrawIndirectShader.slang");
+        auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -340,7 +456,7 @@ namespace VanK
 
         VanKPipelineRenderingCreateInfo RenderingCreateInfo
         {
-            .VanKColorAttachmentFormats = {VanK_Format_B8G8R8A8Srgb, VanK_FORMAT_R32_SINT}
+            .VanKColorAttachmentFormats = { VanK_Format_B8G8R8A8Srgb, VanK_FORMAT_R32_SINT }
         };
 
         VanKGraphicsPipelineSpecification GraphicsPipelineSpecification
@@ -364,6 +480,11 @@ namespace VanK
         m_GraphicsCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = CircleShader;
         m_GraphicsCirclePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsCirclePipelineSpecification);
         RegisterPipelineForShaderWatcher("CircleShader", "CircleShader.slang", &m_GraphicsCirclePipelineSpecification, nullptr, &m_GraphicsCirclePipeline, VanKGraphics);
+        
+        m_GraphicsTextPipelineSpecification = GraphicsPipelineSpecification;
+        m_GraphicsTextPipelineSpecification.ShaderStageCreateInfo.VanKShader = TextShader;
+        m_GraphicsTextPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsTextPipelineSpecification);
+        RegisterPipelineForShaderWatcher("TextShader", "TextShader.slang", &m_GraphicsTextPipelineSpecification, nullptr, &m_GraphicsTextPipeline, VanKGraphics);
         
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
@@ -391,10 +512,11 @@ namespace VanK
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
         
         loadModel();
-        
         /*Geometry::AppendGeometry("model", vertices, indices, TODO);*/
+        
         Geometry::AppendGeometry("quad", GeometryData::quadVertices, GeometryData::quadIndices, CpuMeshInfo::PipelineType::Quad);
-        Geometry::AppendGeometry("circle", GeometryData::quadVertices, GeometryData::quadIndices, CpuMeshInfo::PipelineType::Quad);
+        Geometry::AppendGeometry("circle", GeometryData::quadVertices, GeometryData::quadIndices, CpuMeshInfo::PipelineType::Circle);
+        Geometry::AppendGeometry("text", GeometryData::quadVertices, GeometryData::quadIndices, CpuMeshInfo::PipelineType::Text);
 
         size_t countBufferSize = sizeof(uint32_t);
         m_CountBuffer.reset(IndirectBuffer::Create(countBufferSize));
@@ -430,6 +552,8 @@ namespace VanK
         m_MeshInfoBuffer.reset();
         
         m_InstancedCircleBuffer.reset();
+        
+        m_InstancedTextBuffer.reset();
     }
 
     void Renderer::BeginSubmit()
@@ -503,19 +627,23 @@ namespace VanK
         if (!m_IndirectBuffer || m_IndirectBuffer->GetSize() < indirectBufferSize)
             m_IndirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
         
-        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * Geometry::GetTotalInstances();
+        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * std::max(1u, (uint32_t)Geometry::GetStorageData().size());
         if (!m_InstancedStorageBuffer || m_InstancedStorageBuffer->GetSize() < storageBufferSize)
             m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
         
-        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * Geometry::GetTotalInstances();
+        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)Geometry::GetCircleData().size());
         if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < CircleBufferSize)
             m_InstancedCircleBuffer.reset(StorageBuffer::Create(CircleBufferSize));
+        
+        size_t TextBufferSize = sizeof(shaderio::InstancedTextData) * std::max(1u, (uint32_t)Geometry::GetTextData().size());
+        if (!m_InstancedTextBuffer || m_InstancedTextBuffer->GetSize() < TextBufferSize)
+            m_InstancedTextBuffer.reset(StorageBuffer::Create(TextBufferSize));
         
         size_t meshInfoBufferSize = sizeof(shaderio::MeshInfo) * Geometry::GetMeshes().size();
         if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshInfoBufferSize)
             m_MeshInfoBuffer.reset(StorageBuffer::Create(meshInfoBufferSize));
         
-        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + storageBufferSize + CircleBufferSize + meshInfoBufferSize;
+        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + storageBufferSize + CircleBufferSize + TextBufferSize + meshInfoBufferSize;
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         
@@ -526,15 +654,18 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
         
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, Geometry::GetCircleData(), shaderio::InstancedCircleData, 0);
+        
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedTextBuffer, Geometry::GetTextData(), shaderio::InstancedTextData, 0);
             
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, Geometry::GetMeshes(), shaderio::MeshInfo, 0);
         
         s_Data.SceneData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.SceneData.indirectAddress = m_IndirectBuffer->GetBufferAddress();
-        s_Data.SceneData.storageAddress = m_InstancedCircleBuffer->GetBufferAddress();
+        s_Data.SceneData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
         s_Data.SceneData.countAddress = m_CountBuffer->GetBufferAddress();
         s_Data.SceneData.meshInfoAddress = m_MeshInfoBuffer->GetBufferAddress();
-        /*s_Data.SceneData.circleAddress = m_InstancedCircleBuffer->GetBufferAddress();*/
+        s_Data.SceneData.circleAddress = m_InstancedCircleBuffer->GetBufferAddress();
+        s_Data.SceneData.textAddress = m_InstancedTextBuffer->GetBufferAddress();
         s_Data.SceneData.numMeshes = static_cast<uint32_t>(Geometry::GetMeshes().size());
         
         uniformScene->Update(cmd, &s_Data.SceneData, sizeof(s_Data.SceneData));
@@ -567,14 +698,61 @@ namespace VanK
             VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
             RenderCommand::SetScissor(cmd, 1, rect);
             
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsCirclePipeline);
-            
-            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
             
-            RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 0, *m_CountBuffer, 0, Geometry::GetMeshes().size(), sizeof(shaderio::DrawIndexedIndirectCommand));
+            uint32_t quadCount = 0;
+            uint32_t circleCount = 0;
+            uint32_t textCount = 0;
+            
+            for (const auto& mesh : Geometry::GetCpuMeshes()) {
+                if (mesh.pipelineType == CpuMeshInfo::PipelineType::Quad) 
+                {
+                    quadCount++;
+                } 
+                else if (mesh.pipelineType == CpuMeshInfo::PipelineType::Circle) 
+                {
+                    circleCount++;
+                } 
+                else if (mesh.pipelineType == CpuMeshInfo::PipelineType::Text)
+                {
+                    textCount++;
+                }
+            }
+            
+            uint32_t offset = 0;
 
+            // Draw quads
+            if (quadCount > 0) {
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+                RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 
+                    offset, *m_CountBuffer, 0, quadCount, sizeof(shaderio::DrawIndexedIndirectCommand));
+            }
+            
+            offset += quadCount * sizeof(shaderio::DrawIndexedIndirectCommand);
+
+            // Draw circles
+            if (circleCount > 0) 
+            {
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsCirclePipeline);
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+                RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 
+                    offset, *m_CountBuffer, 0, 
+                    circleCount, sizeof(shaderio::DrawIndexedIndirectCommand));
+            }
+            
+            offset += circleCount * sizeof(shaderio::DrawIndexedIndirectCommand);
+            
+            // Draw text
+            if (textCount > 0) 
+            {
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsTextPipeline);
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+                RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 
+                    offset, *m_CountBuffer, 0, 
+                    textCount, sizeof(shaderio::DrawIndexedIndirectCommand));
+            }
+            
             RenderCommand::EndRendering(cmd);
         }
     }

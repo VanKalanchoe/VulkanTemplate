@@ -241,7 +241,7 @@ namespace VanK
                     Renderer::DrawSprite(transform.GetTransform(), sprite, (int)entity);
                 }
             }
-            /*  
+             
             // Draw Circles
             {
                 auto view = m_Registry.view<TransformComponent, CircleRendererComponent>();
@@ -249,7 +249,7 @@ namespace VanK
                 {
                     auto [transform, circle] = view.get<TransformComponent, CircleRendererComponent>(entity);
 
-                    Renderer2D::DrawCircle(transform, circle, (int)entity);
+                    Renderer::DrawCircle(transform.GetTransform(), circle.Color, circle.Thickness, circle.Fade, (int)entity);
                 }
             }
 
@@ -260,10 +260,10 @@ namespace VanK
                 {
                     auto [transform, text] = view.get<TransformComponent, TextComponent>(entity);
 
-                    Renderer2D::DrawString(text.TextString, transform.GetTransform(), text, (int)entity);
+                    Renderer::DrawString(text.TextString, transform.GetTransform(), text, (int)entity);
                 }
             }
-            */
+            
             Renderer::EndScene();
         }
     }
@@ -476,7 +476,7 @@ namespace VanK
                 Renderer::DrawCircle(transform.GetTransform(), circle.Color, circle.Thickness, circle.Fade, (int)entity);
             }
         }
-        /*
+        
         // Draw Text
         {
             auto view = m_Registry.view<TransformComponent, TextComponent>();
@@ -484,10 +484,10 @@ namespace VanK
             {
                 auto [transform, text] = view.get<TransformComponent, TextComponent>(entity);
 
-                Renderer2D::DrawString(text.TextString, transform.GetTransform(), text, (int)entity);
+                Renderer::DrawString(text.TextString, transform.GetTransform(), text, (int)entity);
             }
         }
-
+        /*
         //Renderer2D::DrawLine(glm::vec3(2.0f), glm::vec3(5.0f), glm::vec4(1.0f, 0.0f, 1.0f, 1.0f));
         //Renderer2D::DrawRect(glm::vec3(0.0f), glm::vec2(1.0f), glm::vec4(1.0f, 1.0f, 1.0f, 1.0f));
         */

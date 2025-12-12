@@ -30,7 +30,6 @@ void compMain(uint3 GlobalInvocationID : SV_DispatchThreadID)
     indirect[meshIndex].vertexOffset  = meshInfoData.vertexOffset;
     indirect[meshIndex].firstInstance = meshInfoData.firstInstance;
 
-    // Optionally write draw count (for DrawIndexedIndirectCount)
     if (meshIndex == 0)
     {
         uint* count = (uint*)ubo.countAddress;

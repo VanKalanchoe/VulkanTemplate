@@ -9,10 +9,9 @@
 struct VertexOutput
 {
     float4 pos : SV_Position;
-    float Thickness : TEXCOORD0;
-    float3 LocalPosition : TEXCOORD1;
-    float Fade : TEXCOORD2;
-    uint32_t entityID : TEXCOORD3;  // Add entity ID to pass to fragment shader
+    float2 TexCoord : TEXCOORD0;
+    uint32_t textureIndex : TEXCOORD1;
+    uint32_t entityID : TEXCOORD2;  // Add entity ID to pass to fragment shader
     float4 color : COLOR0;
 };
 
@@ -55,21 +54,39 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertexAddress;
     InstancedVertexData vertexData = vertex[vertexID + meshInfoData.vertexOffset];
 
-    InstancedCircleData* circle = (InstancedCircleData*)ubo.circleAddress;
-    InstancedCircleData circleData = circle[instanceID + meshInfoData.firstInstance];
+    InstancedTextData* text = (InstancedTextData*)ubo.textAddress;
+    InstancedTextData textData = text[instanceID + meshInfoData.firstInstance];
 
-    output.pos = mul(ubo.proj, mul(ubo.view, mul(circleData.WorldPosition, float4(vertexData.position, 1.0))));
-    output.color = circleData.Color;
-    output.Thickness = circleData.Thickness;
-    output.Fade = circleData.Fade;
-    float2 lp = vertexData.position.xy * 2.0; // -0.5..0.5 → -1..1
-    output.LocalPosition = float3(lp, 0.0);
+// Compute per-vertex glyph position
+float2 pos = lerp(textData.QuadMin, textData.QuadMax, vertexData.texcoords);
+
+float3 local = float3(pos, 0.0);
+float4 world = mul(textData.Transform, float4(local, 1.0));
+
+output.pos = mul(ubo.proj, mul(ubo.view, world));
+    
+    // Per-vertex UV
+    output.TexCoord = lerp(textData.TexMin, textData.TexMax, vertexData.texcoords);
+
+    output.color = textData.Color;
+
+    output.textureIndex = textData.TextureIndex;
 
     // Pass entity ID to fragment shader
     // Option 1: Use instanceID directly (if instanceID == entity ID)
-    output.entityID = circleData.EntityID;
+    output.entityID = textData.EntityID;
 
     return output;
+}
+
+float screenPxRange(Sampler2D atlas, float2 uv) 
+{
+    uint w, h;
+    atlas.GetDimensions(w, h);
+	const float pxRange = 2.0; // set to distance field's pixel range
+    float2 unitRange = float2(pxRange)/float2(w, h);
+    float2 screenTexSize = float2(1.0)/fwidth(uv);
+    return max(0.5*dot(unitRange, screenTexSize), 1.0);
 }
 
 //------------------------------------------------------------------------------
@@ -82,20 +99,23 @@ PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0
 {
     PixelOutput output;
 
-    // Calculate distance and fill circle with white
-    float distance = 1.0 - length(input.LocalPosition);
-    float circle = smoothstep(0.0, input.Fade, distance);
-    circle *= smoothstep(input.Thickness + input.Fade, input.Thickness, distance);
+   float4 texColor = input.color * texture[input.textureIndex].Sample(input.TexCoord);
 
-    if(circle == 0.0)
+   float3 msd = texture[input.textureIndex].Sample(input.TexCoord).rgb;
+   float sd = median3(msd.r, msd.g, msd.b);
+
+   float screenPxDistance = screenPxRange(texture[input.textureIndex], input.TexCoord) * (sd - 0.5);
+   float opacity = clamp(screenPxDistance + 0.5, 0.0, 1.0);
+   if(opacity == 0.0)
         discard;
 
-    // Set output color
-    output.Color = input.color;
-    output.Color.a *= circle; 
+   float4 bgColor = float4(0.0);
+   output.Color = lerp(bgColor, input.color, opacity);
+   if(output.Color.a == 0.0)
+        discard;
 
     // Output entity ID to second render target (R32_SINT format)
-    output.EntityID = (int)input.entityID;
+    output.EntityID = input.entityID;
 
    return output;
 }

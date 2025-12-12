@@ -39,7 +39,8 @@ struct SceneInfo
     uint64_t storageAddress;
     uint64_t countAddress;
     uint64_t meshInfoAddress;
-    /*uint64_t circleAddress;*/
+    uint64_t circleAddress;
+    uint64_t textAddress;
     uint32_t numMeshes;
 };
 
@@ -55,6 +56,22 @@ struct InstancedVertexData
     vec2 texcoords;
     vec3 tangent;
     vec3 bitangent;
+};
+
+struct InstancedTextData
+{
+    mat4 Transform;
+    vec2 QuadMin;
+    vec2 QuadMax;
+    vec2 TexMin;
+    vec2 TexMax;
+    vec4 Color;
+    uint32_t TextureIndex;
+
+    // TODO: bg color for outline/bg
+
+    // Editor-only
+    int EntityID;
 };
 
 struct InstancedCircleData
