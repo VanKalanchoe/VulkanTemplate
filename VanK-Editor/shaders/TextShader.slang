@@ -57,16 +57,21 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     InstancedTextData* text = (InstancedTextData*)ubo.textAddress;
     InstancedTextData textData = text[instanceID + meshInfoData.firstInstance];
 
-// Compute per-vertex glyph position
-float2 pos = lerp(textData.QuadMin, textData.QuadMax, vertexData.texcoords);
+// Determine which corner of the quad this vertex corresponds to
+uint quadVertex = vertexID % 4;
+float2 pos;
+float2 uv;
 
-float3 local = float3(pos, 0.0);
-float4 world = mul(textData.Transform, float4(local, 1.0));
+// Correct winding order and flip X if needed
+if (quadVertex == 0) { pos = float2(textData.QuadMax.x, textData.QuadMin.y); uv = float2(textData.TexMax.x, textData.TexMin.y); } // bottom-right
+else if (quadVertex == 1) { pos = textData.QuadMax; uv = textData.TexMax; }                                                // top-right
+else if (quadVertex == 2) { pos = float2(textData.QuadMin.x, textData.QuadMax.y); uv = float2(textData.TexMin.x, textData.TexMax.y); } // top-left
+else { pos = textData.QuadMin; uv = textData.TexMin; }                                                                    // bottom-left
 
-output.pos = mul(ubo.proj, mul(ubo.view, world));
-    
-    // Per-vertex UV
-    output.TexCoord = lerp(textData.TexMin, textData.TexMax, vertexData.texcoords);
+// Transform to world space
+float4 worldPos = mul(textData.Transform, float4(pos, 0.0, 1.0));
+output.pos = mul(ubo.proj, mul(ubo.view, worldPos));
+output.TexCoord = uv;
 
     output.color = textData.Color;
 

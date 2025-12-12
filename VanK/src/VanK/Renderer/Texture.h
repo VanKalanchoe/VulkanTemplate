@@ -15,6 +15,7 @@ namespace VanK
         None = 0,
         RGB8,
         RGBA8,
+        SRGBA8
     };
     
     struct TextureSpecification
@@ -22,7 +23,7 @@ namespace VanK
         std::string Name;
         uint32_t Width = 1;
         uint32_t Height = 1;
-        ImageFormat Format = ImageFormat::RGBA8;
+        ImageFormat Format = ImageFormat::SRGBA8;
         bool GenerateMips = true;
         bool FlipTexture = false;
         

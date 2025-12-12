@@ -10,8 +10,9 @@ namespace VanK
     {
         switch (format)
         {
-            case ImageFormat::RGB8: return vk::Format::eB8G8R8Srgb;
-            case ImageFormat::RGBA8: return vk::Format::eB8G8R8A8Srgb; //eR8G8B8A8Unorm
+            case ImageFormat::RGB8: return vk::Format::eB8G8R8Unorm;
+            case ImageFormat::RGBA8: return vk::Format::eB8G8R8A8Unorm; //eR8G8B8A8Unorm
+            case ImageFormat::SRGBA8: return vk::Format::eB8G8R8A8Srgb;
             default: return vk::Format::eUndefined;
         }
     }
