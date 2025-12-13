@@ -62,16 +62,6 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     return output;
 }
 
-float screenPxRange(Sampler2D atlas, float2 uv) 
-{
-    uint w, h;
-    atlas.GetDimensions(w, h);
-	const float pxRange = 2.0; // set to distance field's pixel range
-    float2 unitRange = float2(pxRange)/float2(w, h);
-    float2 screenTexSize = float2(1.0)/fwidth(uv);
-    return max(0.5*dot(unitRange, screenTexSize), 1.0);
-}
-
 //------------------------------------------------------------------------------
 // Fragment/Pixel Shader
 //------------------------------------------------------------------------------
@@ -81,21 +71,6 @@ float screenPxRange(Sampler2D atlas, float2 uv)
 PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0 
 {
     PixelOutput output;
-
-   float4 texColor = input.color * texture[input.textureIndex].Sample(input.TexCoord);
-
-   float3 msd = texture[input.textureIndex].Sample(input.TexCoord).rgb;
-   float sd = median3(msd.r, msd.g, msd.b);
-
-   float screenPxDistance = screenPxRange(texture[input.textureIndex], input.TexCoord) * (sd - 0.5);
-   float opacity = clamp(screenPxDistance + 0.5, 0.0, 1.0);
-   if(opacity == 0.0)
-        discard;
-
-   float4 bgColor = float4(0.0);
-   output.Color = lerp(bgColor, input.color, opacity);
-   if(output.Color.a == 0.0)
-        discard;
 
     // Output entity ID to second render target (R32_SINT format)
     output.EntityID = input.entityID;
