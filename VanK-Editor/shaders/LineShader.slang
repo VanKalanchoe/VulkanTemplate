@@ -8,9 +8,9 @@
 // Note: SV_Position is a special semantic in Slang/HLSL for the clip-space position
 struct VertexOutput
 {
-    float4 pos : SV_Position;
+/*     float4 pos : SV_Position;
     uint32_t entityID : TEXCOORD0;  // Add entity ID to pass to fragment shader
-    float4 color : COLOR0;
+    float4 color : COLOR0; */
 };
 
 // Define the final output of the fragment shader
@@ -45,7 +45,7 @@ const bool useTexture = false; // Controls whether texture sampling is enabled
 VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_InstanceID, uint drawIndex : SV_DrawIndex) 
 {
     VertexOutput output;
-
+/* 
     MeshInfo* meshInfo = (MeshInfo*)ubo.meshInfoAddress;
     MeshInfo meshInfoData = meshInfo[drawIndex];
 
@@ -57,7 +57,7 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 
     // Pass entity ID to fragment shader
     // Option 1: Use instanceID directly (if instanceID == entity ID)
-    output.entityID = textData.EntityID;
+    output.entityID = textData.EntityID; */
 
     return output;
 }
@@ -71,9 +71,9 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
 PixelOutput fragmentMain(VertexOutput input) : SV_TARGET0 
 {
     PixelOutput output;
-
+/* 
     // Output entity ID to second render target (R32_SINT format)
-    output.EntityID = input.entityID;
+    output.EntityID = input.entityID; */
 
    return output;
 }
