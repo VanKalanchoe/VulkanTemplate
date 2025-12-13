@@ -58,6 +58,12 @@ struct InstancedVertexData
     vec3 bitangent;
 };
 
+struct InstancedLineData
+{
+    // Editor-only
+    int EntityID;
+};
+
 struct InstancedTextData
 {
     mat4 Transform;

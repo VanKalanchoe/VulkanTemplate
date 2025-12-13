@@ -98,6 +98,9 @@ namespace VanK
         inline static VanKPipeLine m_GraphicsTextPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_GraphicsTextPipelineSpecification = {};
         
+        inline static VanKPipeLine m_GraphicsLinePipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_GraphicsLinePipelineSpecification = {};
+        
         // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};
         inline static VanKComputePipelineSpecification m_ComputeDrawIndirectPipelineSpecification = {};

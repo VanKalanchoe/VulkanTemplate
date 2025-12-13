@@ -366,6 +366,7 @@ namespace VanK
         auto DebugShader = GetShaderLibrary().Load("DebugShader", "shader.slang");
         auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");
         auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
+        auto LineShader = GetShaderLibrary().Load("LineShader", "LineShader.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -485,6 +486,11 @@ namespace VanK
         m_GraphicsTextPipelineSpecification.ShaderStageCreateInfo.VanKShader = TextShader;
         m_GraphicsTextPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsTextPipelineSpecification);
         RegisterPipelineForShaderWatcher("TextShader", "TextShader.slang", &m_GraphicsTextPipelineSpecification, nullptr, &m_GraphicsTextPipeline, VanKGraphics);
+        
+        m_GraphicsLinePipelineSpecification = GraphicsPipelineSpecification;
+        m_GraphicsLinePipelineSpecification.ShaderStageCreateInfo.VanKShader = LineShader;
+        m_GraphicsLinePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsLinePipelineSpecification);
+        RegisterPipelineForShaderWatcher("LineShader", "LineShader.slang", &m_GraphicsLinePipelineSpecification, nullptr, &m_GraphicsLinePipeline, VanKGraphics);
         
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
