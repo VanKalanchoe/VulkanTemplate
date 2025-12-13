@@ -1492,6 +1492,30 @@ namespace  VanK
     {
         Unwrap(cmd).drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
+    
+    void VulkanRendererAPI::DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+    {
+        if (stride < sizeof(vk::DrawIndexedIndirectCommand))
+            throw std::runtime_error("drawIndexedIndirectCount: stride too small");
+        
+        // Cast to VulkanVertexBuffer
+        const VulkanIndirectBuffer* vulkanIB = dynamic_cast<const VulkanIndirectBuffer*>(&indirectBuffer);
+        if (!vulkanIB)
+            throw std::runtime_error("DrawIndexedIndirectCount: indirectBuffer is not a VulkanIndirectBuffer");
+
+        const utils::Buffer& vkBuffer = vulkanIB->GetBuffer();
+        vk::Buffer bufferIndirect = vkBuffer.buffer; // The actual VkBuffer
+
+        // Cast to VulkanVertexBuffer
+        const VulkanIndirectBuffer* vulkanCB = dynamic_cast<const VulkanIndirectBuffer*>(&countBuffer);
+        if (!vulkanCB)
+            throw std::runtime_error("DrawIndexedIndirectCount: countBuffer is not a VulkanIndirectBuffer");
+
+        const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
+        vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
+        
+        Unwrap(cmd).drawIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
+    }
 
     void VulkanRendererAPI::DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
