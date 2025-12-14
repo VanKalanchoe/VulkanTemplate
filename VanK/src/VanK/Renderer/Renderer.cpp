@@ -188,13 +188,13 @@ namespace VanK
 
     void Renderer::EndScene()
     {
-        if (!s_Data.storageInstancesPtr.empty())
+        /*if (!s_Data.storageInstancesPtr.empty())*/
             Geometry::SetFrameInstances("quad", s_Data.storageInstancesPtr);
         
-        if (!s_Data.circleInstancesPtr.empty())
+        /*if (!s_Data.circleInstancesPtr.empty())*/
             Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
         
-        if (!s_Data.textInstancesPtr.empty())
+        /*if (!s_Data.textInstancesPtr.empty())*/
             Geometry::SetTextFrameInstances("text", s_Data.textInstancesPtr);
     }
 
@@ -625,9 +625,12 @@ namespace VanK
    
     void Renderer::DrawFrame()
     {
-        if (Geometry::GetTotalInstances() == 0) 
+        if (
+            s_Data.storageInstancesPtr.empty() &&
+             s_Data.circleInstancesPtr.empty() &&
+             s_Data.textInstancesPtr.empty()
+        )
         {
-            // maybe add vkCmdClearColorImage() instead 
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = -1});
@@ -636,10 +639,16 @@ namespace VanK
             
             RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
             
+            VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
+            RenderCommand::SetViewport(cmd, 1, viewPort);
+
+            VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
+            RenderCommand::SetScissor(cmd, 1, rect);
+            
             RenderCommand::EndRendering(cmd);
             return;
         }
-   
+        
         size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size()* 10;
         if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexBufferSize)
             m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
