@@ -5,7 +5,7 @@ namespace VanK
     class Timestep
     {
     public:
-        Timestep(float time = 0.0f) : m_Time(time / 1000.0f)
+        Timestep(float time = 0.0f) : m_Time(time)
         {
             
         }

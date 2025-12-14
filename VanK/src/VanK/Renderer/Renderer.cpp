@@ -447,7 +447,7 @@ namespace VanK
         {
             .depthTestEnable = true,
             .depthWriteEnable = true,
-            .VanKdepthCompareOp = VanK_COMPARE_OP_LESS
+            .VanKdepthCompareOp = VanK_COMPARE_OP_LESS_OR_EQUAL
         };
 
         VanKPipelineRenderingCreateInfo RenderingCreateInfo

@@ -197,39 +197,27 @@ namespace VanK
                 }
             }
         }
-        // Render 2D
-        Camera* mainCamera = nullptr;
-        glm::mat4 cameraTransform;
-        {
-            auto view = m_Registry.view<TransformComponent, CameraComponent>();
-            for (auto entity : view)
-            {
-                auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
-
-                if (camera.Primary)
-                {
-                    mainCamera = &camera.Camera;
-                    SceneCamera cam = camera.Camera;
-                    //cameraTransform = glm::translate(glm::mat4(1.0f), transform.Position) * glm::rotate(glm::mat4(1.0f), glm::radians(transform.Rotation), glm::vec3(0, 0, 1));
-                    if (cam.GetProjectionType() == SceneCamera::ProjectionType::Orthographic)
-                    {
-                        nearPlane = cam.GetOrthographicNearClip();
-                        farPlane = cam.GetOrthographicFarClip();
-                    }
-                    if (cam.GetProjectionType() == SceneCamera::ProjectionType::Perspective)
-                    {
-                        nearPlane = cam.GetPerspectiveNearClip();
-                        farPlane = cam.GetPerspectiveFarClip();
-                    }
-                    cameraTransform = transform.GetTransform();
-                    break;
-                }
-            }
-        }
+       // Render 2D
+		Camera* mainCamera = nullptr;
+		glm::mat4 cameraTransform;
+		{
+			auto view = m_Registry.view<TransformComponent, CameraComponent>();
+			for (auto entity : view)
+			{
+				auto [transform, camera] = view.get<TransformComponent, CameraComponent>(entity);
+				
+				if (camera.Primary)
+				{
+					mainCamera = &camera.Camera;
+					cameraTransform = transform.GetTransform();
+					break;
+				}
+			}
+		}
 
         if (mainCamera)
         {
-            Renderer::BeginScene(mainCamera->GetProjection(), cameraTransform);
+            Renderer::BeginScene(*mainCamera, cameraTransform);
 
             // Draw Sprites
             {

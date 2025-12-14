@@ -10,7 +10,7 @@ namespace VanK
         RecalculateProjection();
     }
 
-    void VanK::SceneCamera::SetOrthographic(float size, float nearClip, float farClip)
+    void SceneCamera::SetOrthographic(float size, float nearClip, float farClip)
     {
         m_ProjectionType = ProjectionType::Orthographic;
         m_OrthographicSize = size;
@@ -31,7 +31,6 @@ namespace VanK
 
     void SceneCamera::SetViewportSize(uint32_t width, uint32_t height)
     {
-        /*VK_CORE_ASSERT(width < 0 && height < 0, "SceneCamera::SetViewportSize");*/
         m_AspectRatio = (float)width / (float)height;
         
         RecalculateProjection();
@@ -42,7 +41,6 @@ namespace VanK
         if (m_ProjectionType == ProjectionType::Perspective)
         {
             m_Projection = glm::perspective(m_PerspectiveFOV, m_AspectRatio, m_PerspectiveNear, m_PerspectiveFar);
-            /*m_Projection[1][1] *= -1; // Flip Y for Vulkan//added after vulkan myself*/
         } else 
         {
             float orthoLeft = -m_OrthographicSize * m_AspectRatio * 0.5f;
@@ -51,7 +49,6 @@ namespace VanK
             float orthoTop = m_OrthographicSize  * 0.5f;
         
             m_Projection = glm::ortho(orthoLeft, orthoRight, orthoBottom, orthoTop, m_OrthographicNear, m_OrthographicFar);
-            /*m_Projection[1][1] *= -1; // Flip Y for Vulkan//added after vulkan myself*/
         }
     }
 }

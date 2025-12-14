@@ -94,6 +94,8 @@ namespace VanK
             };
         }
         
+        m_ActiveScene->OnViewportResize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
+        
         if (m_ViewportSize.x != lastViewportExtent.x || m_ViewportSize.y != lastViewportExtent.y)
         {
             std::cout << "Viewport size changed: " << m_ViewportSize.x << ", " << m_ViewportSize.y << std::endl;
@@ -401,7 +403,7 @@ namespace VanK
             glm::mat4 cameraView = glm::inverse(cameraEntity.GetComponent<TransformComponent>().GetTransform());*/
 
             // Editor camera
-            const glm::mat4& cameraProjection = m_EditorCamera.GetProjectionForImGuizmo();
+            const glm::mat4& cameraProjection = m_EditorCamera.GetProjection();
             
             glm::mat4 cameraView = m_EditorCamera.GetViewMatrix();
 
