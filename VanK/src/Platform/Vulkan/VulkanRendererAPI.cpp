@@ -1110,12 +1110,12 @@ namespace  VanK
     if (!*entityReadbackBuffer.buffer)
     {
         entityReadbackBuffer = m_allocator.createBuffer(
-            sizeof(int32_t),
+            sizeof(int32_t),/*sizeof(int32_t) * viewport.width * viewport.height,*/
             vk::BufferUsageFlagBits2::eTransferDst,
             vma::MemoryUsage::eGpuToCpu
         );
     }
-    
+        
     /*
     // Wait for GPU to finish rendering
     queue.waitIdle();*/
@@ -1142,10 +1142,11 @@ namespace  VanK
         .bufferRowLength = 0,
         .bufferImageHeight = 0,
         .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-        .imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0},
-        .imageExtent = {1, 1, 1}
+        .imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0}, /*.imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0},*/
+        .imageExtent = {1, 1, 1} /*.imageExtent = {1, 1, 1} */
     };
-    
+        
+            
     commandBuffers[currentFrame].copyImageToBuffer(
         *entityImage,
         vk::ImageLayout::eTransferSrcOptimal,
@@ -1172,7 +1173,8 @@ namespace  VanK
     // Map and read the pixel
     void* mappedData = entityReadbackBuffer.buffer.getAllocation().map();
     int32_t* entityIDs = static_cast<int32_t*>(mappedData);
-    
+        
+    /*int32_t entityID = entityIDs[y * viewport.width + x];*/
     int32_t entityID = entityIDs[0];
     
     entityReadbackBuffer.buffer.getAllocation().unmap();

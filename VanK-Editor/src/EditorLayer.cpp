@@ -149,6 +149,7 @@ namespace VanK
         {
             /*ScopeTimer timer("MousePicking");*/
             // Retrieve the pixel data (ID) from the calculated index
+            // reading only 1 pixel right now but if multi select maybe i need full viewport ? 
             int pixelData = RenderCommand::ReadEntityIDAtPixel(mouseX, mouseY); // chnage this
             
             m_HoveredEntity = pixelData == -1 ? Entity() : Entity((entt::entity)pixelData, m_ActiveScene.get());
