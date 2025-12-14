@@ -188,19 +188,14 @@ namespace VanK
 
     void Renderer::EndScene()
     {
-        Geometry::SetFrameInstances("quad", s_Data.storageInstancesPtr);
+        if (!s_Data.storageInstancesPtr.empty())
+            Geometry::SetFrameInstances("quad", s_Data.storageInstancesPtr);
         
-        Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
+        if (!s_Data.circleInstancesPtr.empty())
+            Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
         
-        Geometry::SetTextFrameInstances("text", s_Data.textInstancesPtr);
-        
-        Flush();
-        
-        s_Data.storageInstancesPtr.clear();
-        
-        s_Data.circleInstancesPtr.clear();
-        
-        s_Data.textInstancesPtr.clear();
+        if (!s_Data.textInstancesPtr.empty())
+            Geometry::SetTextFrameInstances("text", s_Data.textInstancesPtr);
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
@@ -514,7 +509,6 @@ namespace VanK
 
         whiteTexture = TextureImporter::LoadTexture2D("");
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
-        vikingRoom2 = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room2.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
         
         loadModel();
@@ -561,9 +555,21 @@ namespace VanK
         
         m_InstancedTextBuffer.reset();
     }
+    
+    void Renderer::CheckPendingVSyncChange()
+    {
+        if (!s_VSyncChangeRequested) return;
+        
+        RenderCommand::RebuildSwapchain(vSync);
+        
+        s_VSyncChangeRequested = false;    // reset
+    };
+    static bool s_FlushedThisFrame = false;
 
     void Renderer::BeginSubmit()
     {
+        s_FlushedThisFrame = false;
+        
         if (isEditor)
             RenderCommand::BeginFrame(VanK_Render_ImGui);
         else
@@ -576,15 +582,28 @@ namespace VanK
 
     void Renderer::EndSubmit()
     {
+        Flush();
+        
         RenderCommand::SubmitRendering(cmd);
         
         RenderCommand::EndCommandBuffer(cmd);
         
         RenderCommand::EndFrame();
+        
+        CheckPendingVSyncChange();
+        
+        s_Data.storageInstancesPtr.clear();
+        
+        s_Data.circleInstancesPtr.clear();
+        
+        s_Data.textInstancesPtr.clear();
     }
     
     void Renderer::Flush()
     {
+        VK_CORE_ASSERT(!s_FlushedThisFrame, "Flush called more than once per frame");
+        s_FlushedThisFrame = true;
+        
         /*BeginSubmit();*/
         
         if (s_IsPipelineReloadFinished.exchange(false))
@@ -603,7 +622,7 @@ namespace VanK
         
         /*EndSubmit();*/
     }
-    
+   
     void Renderer::DrawFrame()
     {
         if (Geometry::GetTotalInstances() == 0) 
@@ -620,39 +639,39 @@ namespace VanK
             RenderCommand::EndRendering(cmd);
             return;
         }
-        
-        size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
+   
+        size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size()* 10;
         if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexBufferSize)
             m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
-        
-        size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size();
+    
+        size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size()* 10;
         if (!m_InstancedIndexBuffer || m_InstancedIndexBuffer->GetSize() < indexBufferSize)
             m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
-        
-        size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * Geometry::GetMeshes().size();
+    
+        size_t indirectBufferSize = sizeof(shaderio::DrawIndexedIndirectCommand) * Geometry::GetMeshes().size() * 10;
         if (!m_IndirectBuffer || m_IndirectBuffer->GetSize() < indirectBufferSize)
             m_IndirectBuffer.reset(IndirectBuffer::Create(indirectBufferSize));
-        
-        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * std::max(1u, (uint32_t)Geometry::GetStorageData().size());
+    
+        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * std::max(1u, (uint32_t)Geometry::GetStorageData().size()) * 10;
         if (!m_InstancedStorageBuffer || m_InstancedStorageBuffer->GetSize() < storageBufferSize)
             m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
-        
-        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)Geometry::GetCircleData().size());
+    
+        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)Geometry::GetCircleData().size()) * 10;
         if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < CircleBufferSize)
             m_InstancedCircleBuffer.reset(StorageBuffer::Create(CircleBufferSize));
-        
-        size_t TextBufferSize = sizeof(shaderio::InstancedTextData) * std::max(1u, (uint32_t)Geometry::GetTextData().size());
+    
+        size_t TextBufferSize = sizeof(shaderio::InstancedTextData) * std::max(1u, (uint32_t)Geometry::GetTextData().size()) * 10;
         if (!m_InstancedTextBuffer || m_InstancedTextBuffer->GetSize() < TextBufferSize)
             m_InstancedTextBuffer.reset(StorageBuffer::Create(TextBufferSize));
-        
-        size_t meshInfoBufferSize = sizeof(shaderio::MeshInfo) * Geometry::GetMeshes().size();
+    
+        size_t meshInfoBufferSize = sizeof(shaderio::MeshInfo) * Geometry::GetMeshes().size() * 10;
         if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshInfoBufferSize)
             m_MeshInfoBuffer.reset(StorageBuffer::Create(meshInfoBufferSize));
-        
+    
         size_t transferSize = vertexBufferSize + indexBufferSize + indirectBufferSize + storageBufferSize + CircleBufferSize + TextBufferSize + meshInfoBufferSize;
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
 
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);

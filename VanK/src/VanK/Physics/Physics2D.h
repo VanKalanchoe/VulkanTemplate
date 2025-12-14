@@ -1,6 +1,7 @@
 #pragma once
 
 #include "box2d/box2d.h"
+#include "VanK/Core/Log.h"
 #include "VanK/Scene/Components.h"
 
 namespace VanK

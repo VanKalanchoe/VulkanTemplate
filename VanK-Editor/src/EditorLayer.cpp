@@ -13,6 +13,7 @@
 #include "VanK/Asset/AssetManager.h"
 #include "VanK/Asset/SceneImporter.h"
 #include "VanK/Asset/TextureImporter.h"
+#include "VanK/Core/Timer.h"
 #include "VanK/ImGui/ImGuiLayer.h"
 
 namespace VanK
@@ -146,6 +147,7 @@ namespace VanK
 
         if (mouseX >= 0 && mouseY >= 0 && mouseX < (int)viewportSize.x && mouseY < (int)viewportSize.y)
         {
+            /*ScopeTimer timer("MousePicking");*/
             // Retrieve the pixel data (ID) from the calculated index
             int pixelData = RenderCommand::ReadEntityIDAtPixel(mouseX, mouseY); // chnage this
             
@@ -262,7 +264,7 @@ namespace VanK
             static bool vsync = Renderer::GetVSync();
             if (ImGui::Checkbox("Vsync", &vsync))
             {
-                Renderer::SetVSync(vsync);
+                Renderer::QueVSyncChange(vsync);
             }
 
             ImGui::SameLine();
@@ -313,17 +315,17 @@ namespace VanK
         
         ImGui::Spacing();
         
-        /*ImGui::Begin("Renderer");
-            VanKDeviceProperties properties = RenderCommand::GetDeviceProperties();
+        ImGui::Begin("Renderer");
+          /*  VanKDeviceProperties properties = RenderCommand::GetDeviceProperties();
             ImGui::Text("DeviceName: %s", properties.deviceName.c_str());
             ImGui::Text("Nvidia Driver Version: %u.%u.%u", properties.driverMajor, properties.driverMinor, properties.driverPatch);
             ImGui::Text("Vulkan API Version: %u.%u.%u", properties.apiMajor, properties.apiMinor, properties.apiPatch);
         
             ImGui::Spacing();
-        
+        */
             for (auto& [name, time] : VanK::g_ProfileResults)
                 ImGui::Text("%s: %.3f ms", name.c_str(), time);
-        ImGui::End();*/
+        ImGui::End();
 
         ImGui::Begin("Settings");
         ImGui::Checkbox("Show physics collider", &m_ShowPhysicsColliders);
@@ -661,10 +663,10 @@ namespace VanK
         {
             Renderer::BeginScene(m_EditorCamera);
         }
-        /*
+        
         if (m_ShowPhysicsColliders)
         {
-            // Box Colliders
+           /* // Box Colliders
             {
                 auto view = m_ActiveScene->GetAllEntitiesWith<TransformComponent, BoxCollider2DComponent>();
                 for (auto entity : view)
@@ -680,27 +682,33 @@ namespace VanK
                     Renderer2D::DrawRect(transform, glm::vec4(0, 1, 0, 1));
                 }
             }
-
+            */
             // Circle Colliders
             {
                 auto view = m_ActiveScene->GetAllEntitiesWith<TransformComponent, CircleCollider2DComponent>();
                 for (auto entity : view)
                 {
                     auto [tc, cc2d] = view.get<TransformComponent, CircleCollider2DComponent>(entity);
-            
-                    Renderer2D::DrawCircle(tc.Position + glm::vec3(cc2d.Offset, 0.001f), tc.Size, tc.Scale * glm::vec3(cc2d.Radius * 2.0f), tc.Rotation, glm::vec4(0, 1,0, 1), 0.01f);
+                    
+                    glm::vec3 translation = tc.Translation + glm::vec3(cc2d.Offset, 0.001f);
+                    glm::vec3 scale = tc.Scale * glm::vec3(cc2d.Radius * 2.0f);
+
+                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), translation)
+                        * glm::scale(glm::mat4(1.0f), scale);
+
+                    Renderer::DrawCircle(transform, glm::vec4(0, 1, 0, 1), 0.01f);
                 }
             }
         }
-
+        /*
         // Draw selected entity outline
         if (Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity())
         {
             const TransformComponent& transform = selectedEntity.GetComponent<TransformComponent>();
             Renderer2D::DrawRect(transform.GetTransform(), glm::vec4(1.0f, 0.5f, 0.0f, 1.0f));
         }
-        
-        Renderer::EndScene();*/
+        */
+        Renderer::EndScene();
     }
     
     void EditorLayer::NewProject()

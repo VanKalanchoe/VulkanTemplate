@@ -144,6 +144,12 @@ message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAl
         set_target_properties(${CHAPTER_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/${CHAPTER_NAME}")
     endif()
 
+    target_compile_definitions(${CHAPTER_NAME} PRIVATE
+        $<$<CONFIG:Debug>:VK_DEBUG>
+        $<$<CONFIG:Release>:VK_RELEASE>
+        $<$<CONFIG:RelWithDebInfo>:VK_RELWITHDEBINFO>
+    )
+
     # Link additional libraries if defined
     if(DEFINED CHAPTER_LIBS)
         target_link_libraries(${CHAPTER_NAME} ${CHAPTER_LIBS})

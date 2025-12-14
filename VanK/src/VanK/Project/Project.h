@@ -7,6 +7,7 @@
 
 #include "VanK/Asset/RuntimeAssetManager.h"
 #include "VanK/Asset/EditorAssetManager.h"
+#include "VanK/Core/Log.h"
 
 
 namespace VanK

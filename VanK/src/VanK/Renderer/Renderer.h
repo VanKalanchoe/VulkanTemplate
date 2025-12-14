@@ -59,12 +59,13 @@ namespace VanK
         
         static void Init(Window& window);
         static void Shutdown();
+        static void CheckPendingVSyncChange();
         static void BeginSubmit();
         static void EndSubmit();
         static void Flush();
         static void DrawFrame();
         static bool GetVSync() { return vSync; };
-        static void SetVSync(bool vSyncTemp) { vSync = vSyncTemp; RenderCommand::RebuildSwapchain(vSync); };
+        static void QueVSyncChange(bool vSyncTemp) { vSync = vSyncTemp; s_VSyncChangeRequested = true; };
         static bool GetIsEditor() { return isEditor; }
         static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); }
         static void SetWindowMinimized(bool minimized) { windowMinimized = minimized; }
@@ -82,6 +83,7 @@ namespace VanK
         inline static std::vector<shaderio::InstancedVertexData> vertices;
         inline static std::vector<uint32_t> indices;
         inline static bool vSync = false;
+        inline static bool s_VSyncChangeRequested = false;
         inline static bool windowMinimized = false;
         inline static Extent2D m_ViewportSize  = {640, 480}; // selber gemacht muss mit editorlayer verknüpft werden
         inline static Extent2D lastViewportExtent = {0, 0};
@@ -121,6 +123,6 @@ namespace VanK
         inline static Ref<IndirectBuffer> m_IndirectBuffer;
         inline static Ref<IndirectBuffer> m_CountBuffer;
         
-        inline static Ref<Texture2D> whiteTexture, vikingRoom, vikingRoom2, ChernoLogo;
+        inline static Ref<Texture2D> whiteTexture, vikingRoom, ChernoLogo;
     };
 }

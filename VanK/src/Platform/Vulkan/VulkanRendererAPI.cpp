@@ -1110,21 +1110,22 @@ namespace  VanK
     if (!*entityReadbackBuffer.buffer)
     {
         entityReadbackBuffer = m_allocator.createBuffer(
-            sizeof(int32_t) * viewport.width * viewport.height,
+            sizeof(int32_t),
             vk::BufferUsageFlagBits2::eTransferDst,
             vma::MemoryUsage::eGpuToCpu
         );
     }
     
+    /*
     // Wait for GPU to finish rendering
-    queue.waitIdle();
+    queue.waitIdle();*/
     
     // Transition entity image to transfer source
-    auto cmd = utils::beginSingleTimeCommands(device, commandPool);
-    
+    /*auto cmd = utils::beginSingleTimeCommands(device, commandPool);*/
+   
     utils::transition_image_layout
     (
-        *cmd,
+        commandBuffers[currentFrame],
         *entityImage,
         entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
         vk::ImageLayout::eTransferSrcOptimal,
@@ -1141,11 +1142,11 @@ namespace  VanK
         .bufferRowLength = 0,
         .bufferImageHeight = 0,
         .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-        .imageOffset = {0, 0, 0},
-        .imageExtent = {viewport.width, viewport.height, 1}
+        .imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0},
+        .imageExtent = {1, 1, 1}
     };
     
-    cmd->copyImageToBuffer(
+    commandBuffers[currentFrame].copyImageToBuffer(
         *entityImage,
         vk::ImageLayout::eTransferSrcOptimal,
         entityReadbackBuffer.buffer,
@@ -1155,7 +1156,7 @@ namespace  VanK
     // Transition back
     utils::transition_image_layout
     (
-        *cmd,
+        commandBuffers[currentFrame],
         *entityImage,
         vk::ImageLayout::eTransferSrcOptimal,
         vk::ImageLayout::eColorAttachmentOptimal,
@@ -1166,13 +1167,13 @@ namespace  VanK
         vk::ImageAspectFlagBits::eColor
     );
     
-    utils::endSingleTimeCommands(*cmd, queue);
+    /*utils::endSingleTimeCommands(*cmd, queue);*/
     
     // Map and read the pixel
     void* mappedData = entityReadbackBuffer.buffer.getAllocation().map();
     int32_t* entityIDs = static_cast<int32_t*>(mappedData);
     
-    int32_t entityID = entityIDs[y * viewport.width + x];
+    int32_t entityID = entityIDs[0];
     
     entityReadbackBuffer.buffer.getAllocation().unmap();
     
@@ -1544,6 +1545,10 @@ namespace  VanK
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
     {
         Unwrap(cmd).endRendering();
+        sceneImageInitialized = false;
+        entityImageInitialized = false;
+        entityColorImageInitialized = false;
+        m_hasActiveRenderPass = false;
     }
 
     void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd)
@@ -1602,6 +1607,7 @@ namespace  VanK
                     vk::ImageAspectFlagBits::eColor
                 );
                 sceneImageInitialized = true;
+                m_hasActiveRenderPass = true;
             }
             // Second pass: draw ImGui to swapchain image
             vk::RenderingAttachmentInfo swapColorAttachment =
