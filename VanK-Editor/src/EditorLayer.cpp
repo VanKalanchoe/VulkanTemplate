@@ -410,7 +410,7 @@ namespace VanK
             glm::mat4 transform = tc.GetTransform();
 
             // Snapping
-            bool snap = Input::IsKeyPressed(SDL_Scancode::SDL_SCANCODE_LCTRL);
+            bool snap = Input::IsKeyPressed(SDL_SCANCODE_LCTRL);
             float snapValue = 0.5f; // Snap to 0.5m for translation/scale
             // Snap to 45 degrees for rotation
             if (m_GizmoType == ImGuizmo::OPERATION::ROTATE)
@@ -427,11 +427,11 @@ namespace VanK
             if (ImGuizmo::IsUsing())
             {
                 //translation is position for me maybe change
-                glm::vec3 position, rotation, scale;
-                Math::DecomposeTransform(transform, position, rotation, scale);
+                glm::vec3 translation, rotation, scale;
+                Math::DecomposeTransform(transform, translation, rotation, scale);
 
-                tc.Translation = position;
                 glm::vec3 deltaRotation = rotation - tc.Rotation;
+                tc.Translation = translation;
                 tc.Rotation += deltaRotation;
                 tc.Scale = scale;
             }

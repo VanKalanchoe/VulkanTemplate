@@ -625,11 +625,7 @@ namespace VanK
    
     void Renderer::DrawFrame()
     {
-        if (
-            s_Data.storageInstancesPtr.empty() &&
-             s_Data.circleInstancesPtr.empty() &&
-             s_Data.textInstancesPtr.empty()
-        )
+        if (s_Data.storageInstancesPtr.empty() && s_Data.circleInstancesPtr.empty() && s_Data.textInstancesPtr.empty())
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});

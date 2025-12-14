@@ -13,6 +13,7 @@
 printf((format), __VA_ARGS__);                                                                                     \
 printf("\n");                                                                                                      \
 }
+#include <ImGuizmo.h>
 #include <iostream>
 #include <slang.h>
 
@@ -903,6 +904,7 @@ namespace  VanK
             ImGui_ImplVulkan_NewFrame();
             ImGui_ImplSDL3_NewFrame();
             ImGui::NewFrame();
+            ImGuizmo::BeginFrame();
         }
         
         while (vk::Result::eTimeout == device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX));
