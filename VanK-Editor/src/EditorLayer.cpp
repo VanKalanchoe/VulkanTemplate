@@ -332,6 +332,11 @@ namespace VanK
 
         ImGui::Begin("Settings");
         ImGui::Checkbox("Show physics collider", &m_ShowPhysicsColliders);
+        float lineWidth = Renderer::GetLineWidth();
+        if (ImGui::SliderFloat("Line Width", &lineWidth, 1.0f, 10.0f))
+        {
+            Renderer::SetLineWidth(lineWidth);
+        }
         ImGui::Image(s_Font->GetAtlasTexture()->getImTextureID(), {512, 512}, ImVec2(0, 1), ImVec2(1, 0));
         ImGui::End(); // End Settings
 
@@ -403,7 +408,7 @@ namespace VanK
             glm::mat4 cameraView = glm::inverse(cameraEntity.GetComponent<TransformComponent>().GetTransform());*/
 
             // Editor camera
-            const glm::mat4& cameraProjection = m_EditorCamera.GetProjection();
+            const glm::mat4& cameraProjection = m_EditorCamera.GetProjectionForImGuizmo();
             
             glm::mat4 cameraView = m_EditorCamera.GetViewMatrix();
 
@@ -675,12 +680,15 @@ namespace VanK
                 for (auto entity : view)
                 {
                     auto [tc, bc2d] = view.get<TransformComponent, BoxCollider2DComponent>(entity);
+                    
+                    glm::vec3 translation = tc.Translation + glm::vec3(bc2d.Offset, 0.001f);
+                    glm::vec3 scale = tc.Scale * glm::vec3(bc2d.Size * 2.0f, 1.0f);
 
                     // box2d needs first translation then offset otherwise it offsets the bounding box from center instead of creating from center around
-                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), tc.Translation)
+                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), translation)
                         * glm::rotate(glm::mat4(1.0f), tc.Rotation.z, glm::vec3(0.0f, 0.0f, 1.0f))
                         * glm::translate(glm::mat4(1.0f), glm::vec3(bc2d.Offset, 0.001f))
-                        * glm::scale(glm::mat4(1.0f), tc.Scale * glm::vec3(bc2d.Size * 2.0f, 1.0f));
+                        * glm::scale(glm::mat4(1.0f), scale * glm::vec3(bc2d.Size * 2.0f, 1.0f));
                 
                     Renderer::DrawRect(transform, glm::vec4(0, 1, 0, 1));
                 }

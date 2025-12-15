@@ -73,6 +73,8 @@ namespace VanK
         static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); }
         static void SetWindowMinimized(bool minimized) { windowMinimized = minimized; }
         static bool isWindowMinimized() { return windowMinimized; }
+        static void SetLineWidth(float lineWidth) { m_LineWidth = lineWidth; }
+        static float GetLineWidth() { return m_LineWidth; }
         
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
@@ -90,6 +92,7 @@ namespace VanK
         inline static bool windowMinimized = false;
         inline static Extent2D m_ViewportSize  = {640, 480}; // selber gemacht muss mit editorlayer verknüpft werden
         inline static Extent2D lastViewportExtent = {0, 0};
+        inline static float m_LineWidth = 1.0f;
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
         

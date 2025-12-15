@@ -442,7 +442,7 @@ namespace VanK
         VanKPipelineRasterizationStateCreateInfo RasterizationStateCreateInfo
         {
             .VanKPolygon = VanK_POLYGON_MODE_FILL,
-            .VanKCullMode = VanK_CULL_MODE_NONE, // todo change this for performance reason i think back or front test
+            .VanKCullMode = VanK_CULL_MODE_BACK_BIT, // todo change this for performance reason i think back or front test
             .VanKFrontFace = VanK_FRONT_FACE_COUNTER_CLOCKWISE,
         };
 
@@ -782,7 +782,7 @@ namespace VanK
             VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
             RenderCommand::SetScissor(cmd, 1, rect);
             
-            RenderCommand::SetLineWidth(cmd, 1.0f);
+            RenderCommand::SetLineWidth(cmd, m_LineWidth);
             
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
             

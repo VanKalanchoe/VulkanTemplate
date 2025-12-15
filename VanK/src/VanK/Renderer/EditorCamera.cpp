@@ -18,6 +18,7 @@ namespace VanK {
 	{
 		m_AspectRatio = m_ViewportWidth / m_ViewportHeight;
 		m_Projection = glm::perspective(glm::radians(m_FOV), m_AspectRatio, m_NearClip, m_FarClip);
+		m_Projection[1][1] *= -1;
 	}
 
 	void EditorCamera::UpdateView()
