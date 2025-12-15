@@ -332,10 +332,10 @@ namespace VanK
 
         ImGui::Begin("Settings");
         ImGui::Checkbox("Show physics collider", &m_ShowPhysicsColliders);
-        float lineWidth = Renderer::GetLineWidth();
-        if (ImGui::SliderFloat("Line Width", &lineWidth, 1.0f, 10.0f))
+        int lineWidth = static_cast<int>(Renderer::GetLineWidth());
+        if (ImGui::SliderInt("Line Width", &lineWidth, 1.0f, 10.0f))
         {
-            Renderer::SetLineWidth(lineWidth);
+            Renderer::SetLineWidth(static_cast<float>(lineWidth));
         }
         ImGui::Image(s_Font->GetAtlasTexture()->getImTextureID(), {512, 512}, ImVec2(0, 1), ImVec2(1, 0));
         ImGui::End(); // End Settings
