@@ -56,6 +56,9 @@ namespace VanK
         };
         static void DrawString(const std::string& string, Ref<Font> font, const glm::mat4& transform, const TextParams& textParams, int entityID = -1);
         static void DrawString(const std::string& string, const glm::mat4& transform, const TextComponent& component, int entityID = -1);
+        static void DrawLine(const glm::vec3& p0, const glm::vec3& p1, const glm::vec4& color, int entityID = -1);
+        static void DrawRect(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color, int entityID = -1);
+        static void DrawRect(const glm::mat4& transform, const glm::vec4& color, int entityID = -1);
         
         static void Init(Window& window);
         static void Shutdown();
@@ -118,6 +121,7 @@ namespace VanK
         inline static Ref<StorageBuffer> m_InstancedStorageBuffer;
         inline static Ref<StorageBuffer> m_InstancedCircleBuffer;
         inline static Ref<StorageBuffer> m_InstancedTextBuffer;
+        inline static Ref<StorageBuffer> m_InstancedLineBuffer;
         inline static Ref<StorageBuffer> m_MeshInfoBuffer;
         
         inline static Ref<IndirectBuffer> m_IndirectBuffer;

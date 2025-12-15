@@ -1,5 +1,16 @@
 Scene: Untitled
 Entities:
+  - Entity: 9984908956034629623
+    TagComponent:
+      Tag: circle
+    TransformComponent:
+      Translation: [-3.29999995, 0, 0]
+      Rotation: [0, 0, 0]
+      Scale: [1, 1, 1]
+    CircleRendererComponent:
+      Color: [1, 1, 1, 1]
+      Thickness: 0.5
+      Fade: 0.00499999989
   - Entity: 18362423901527743641
     TagComponent:
       Tag: camera

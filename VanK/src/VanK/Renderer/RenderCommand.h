@@ -120,6 +120,11 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->SetScissor(cmd, scissorCount, scissor);
         }
+        
+        static void SetLineWidth(VanKCommandBuffer cmd, float lineWidth)
+        {
+            if (s_RendererAPI) s_RendererAPI->SetLineWidth(cmd, lineWidth);
+        }
 
         static void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings)
         {

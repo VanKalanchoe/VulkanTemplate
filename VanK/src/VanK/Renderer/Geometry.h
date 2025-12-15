@@ -19,7 +19,7 @@ namespace VanK
     {
         std::string name;
         shaderio::MeshInfo gpu;
-        enum class PipelineType { Quad, Circle, Text } pipelineType;
+        enum class PipelineType { Quad, Circle, Text, Line } pipelineType;
     };
     
     class Geometry
@@ -29,6 +29,8 @@ namespace VanK
         static void SetFrameInstances(const std::string& name, const std::vector<shaderio::InstancedStorageData>& instances);
         static void SetCircleFrameInstances(const std::string& name, const std::vector<shaderio::InstancedCircleData>& instances);
         static void SetTextFrameInstances(const std::string& name, const std::vector<shaderio::InstancedTextData>& instances);
+        static void SetLineFrameInstances(const std::string& name, const std::vector<shaderio::InstancedLineData>& instances);
+        static void BeginFrame();
 
         // Getters for upload 
         static const std::vector<shaderio::InstancedVertexData>& GetVertices() { return s_Vertices; }
@@ -46,6 +48,7 @@ namespace VanK
         static const std::vector<shaderio::InstancedStorageData>& GetStorageData() { return s_StorageData; }
         static const std::vector<shaderio::InstancedCircleData>& GetCircleData() { return s_CircleData; }
         static const std::vector<shaderio::InstancedTextData>& GetTextData() { return s_TextData; }
+        static const std::vector<shaderio::InstancedLineData>& GetLineData() { return s_LineData; }
     private:
         static std::vector<CpuMeshInfo> s_MeshInfos;
         static std::vector<shaderio::InstancedVertexData> s_Vertices;
@@ -53,11 +56,24 @@ namespace VanK
         static std::vector<shaderio::InstancedStorageData> s_StorageData;
         static std::vector<shaderio::InstancedCircleData> s_CircleData;
         static std::vector<shaderio::InstancedTextData> s_TextData;
+        static std::vector<shaderio::InstancedLineData> s_LineData;
         static uint32_t s_TotalInstances;
     };
 
     namespace GeometryData
     {
+        // Line mesh
+        inline static std::vector<shaderio::InstancedVertexData> lineVertices =
+        {
+            {{0.0f, 0.0f, 0.0f}},
+            {{1.0f, 0.0f, 0.0f}},
+        };
+
+        inline static std::vector<uint32_t> lineIndices =
+        {
+            0, 1
+        };
+        
         // Quad
         inline static std::vector<shaderio::InstancedVertexData> quadVertices = 
         {

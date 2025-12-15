@@ -41,6 +41,7 @@ struct SceneInfo
     uint64_t meshInfoAddress;
     uint64_t circleAddress;
     uint64_t textAddress;
+    uint64_t lineAddress;
     uint32_t numMeshes;
 };
 
@@ -60,6 +61,10 @@ struct InstancedVertexData
 
 struct InstancedLineData
 {
+    vec3 P0;
+    vec3 P1;
+    vec4 Color;
+    
     // Editor-only
     int EntityID;
 };

@@ -669,7 +669,7 @@ namespace VanK
         
         if (m_ShowPhysicsColliders)
         {
-           /* // Box Colliders
+            // Box Colliders
             {
                 auto view = m_ActiveScene->GetAllEntitiesWith<TransformComponent, BoxCollider2DComponent>();
                 for (auto entity : view)
@@ -677,15 +677,14 @@ namespace VanK
                     auto [tc, bc2d] = view.get<TransformComponent, BoxCollider2DComponent>(entity);
 
                     // box2d needs first translation then offset otherwise it offsets the bounding box from center instead of creating from center around
-                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), tc.Position)
+                    glm::mat4 transform = glm::translate(glm::mat4(1.0f), tc.Translation)
                         * glm::rotate(glm::mat4(1.0f), tc.Rotation.z, glm::vec3(0.0f, 0.0f, 1.0f))
                         * glm::translate(glm::mat4(1.0f), glm::vec3(bc2d.Offset, 0.001f))
                         * glm::scale(glm::mat4(1.0f), tc.Scale * glm::vec3(bc2d.Size * 2.0f, 1.0f));
                 
-                    Renderer2D::DrawRect(transform, glm::vec4(0, 1, 0, 1));
+                    Renderer::DrawRect(transform, glm::vec4(0, 1, 0, 1));
                 }
             }
-            */
             // Circle Colliders
             {
                 auto view = m_ActiveScene->GetAllEntitiesWith<TransformComponent, CircleCollider2DComponent>();
@@ -703,14 +702,13 @@ namespace VanK
                 }
             }
         }
-        /*
+        
         // Draw selected entity outline
         if (Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity())
         {
             const TransformComponent& transform = selectedEntity.GetComponent<TransformComponent>();
-            Renderer2D::DrawRect(transform.GetTransform(), glm::vec4(1.0f, 0.5f, 0.0f, 1.0f));
+            Renderer::DrawRect(transform.GetTransform(), glm::vec4(1.0f, 0.5f, 0.0f, 1.0f));
         }
-        */
         Renderer::EndScene();
     }
     

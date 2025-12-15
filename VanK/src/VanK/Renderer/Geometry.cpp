@@ -12,6 +12,7 @@ namespace VanK
     std::vector<shaderio::InstancedStorageData> Geometry::s_StorageData{};
     std::vector<shaderio::InstancedCircleData> Geometry::s_CircleData{};
     std::vector<shaderio::InstancedTextData> Geometry::s_TextData{};
+    std::vector<shaderio::InstancedLineData> Geometry::s_LineData{};
     
     void Geometry::AppendGeometry
     (
@@ -191,5 +192,66 @@ namespace VanK
                 return;
             }
         }
+    }
+    
+    void Geometry::SetLineFrameInstances
+    (
+        const std::string& name,
+        const std::vector<shaderio::InstancedLineData>& instances
+    )
+    {
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
+        {
+            if (s_MeshInfos[i].name == name)
+            {
+                uint32_t& firstInstance = s_MeshInfos[i].gpu.firstInstance;
+                uint32_t oldCount = s_MeshInfos[i].gpu.instanceCount;
+
+                // If this is the first time setting instances for this mesh
+                if (oldCount == 0)
+                {
+                    // Allocate new instance region at the end of s_CircleData
+                    firstInstance = s_LineData.size();
+
+                    // Grow storage
+                    s_LineData.resize(firstInstance + instances.size());
+
+                    // New global instance count
+                    
+                    s_TotalInstances += instances.size(); 
+                }
+                else
+                {
+                    // Normal behavior: replace existing region
+                    if (s_LineData.size() < firstInstance + instances.size())
+                        s_LineData.resize(firstInstance + instances.size());
+                    
+                    int32_t sizeDiff = instances.size() - oldCount;
+                    s_TotalInstances += sizeDiff;
+                }
+
+                // Copy data
+                std::copy(instances.begin(), instances.end(),
+                          s_LineData.begin() + firstInstance);
+
+                // Update mesh count
+                s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
+                
+                return;
+            }
+        }
+    }
+    
+    void Geometry::BeginFrame()
+    {
+        s_StorageData.clear();
+        s_CircleData.clear();
+        s_TextData.clear();
+        s_LineData.clear();
+
+        s_TotalInstances = 0;
+
+        for (auto& mesh : s_MeshInfos)
+            mesh.gpu.instanceCount = 0;
     }
 }

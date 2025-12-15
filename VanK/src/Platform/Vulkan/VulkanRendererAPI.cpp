@@ -398,7 +398,7 @@ namespace  VanK
         >
         featureChain =
         {
-            {.features = {.independentBlend = true, .sampleRateShading = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true, .shaderInt64 = true}}, // vk::PhysicalDeviceFeatures2
+            {.features = {.independentBlend = true, .sampleRateShading = true, .wideLines = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true,.shaderInt64 = true, }}, // vk::PhysicalDeviceFeatures2
             {.shaderDrawParameters = true},
             {
                 .drawIndirectCount = true,
@@ -655,7 +655,7 @@ namespace  VanK
             .cullMode = ConvertToVkCullMode(pipelineSpecification.RasterizationStateCreateInfo.VanKCullMode),
             .frontFace = ConvertToVkFrontFace(pipelineSpecification.RasterizationStateCreateInfo.VanKFrontFace),
             .depthBiasEnable = vk::False,
-            .lineWidth = 1.0f // dont needed dynamic now
+            /*.lineWidth = 1.0f // dont needed dynamic now*/
         };
         
         vk::PipelineMultisampleStateCreateInfo multisampling // todo expose this as api
@@ -1440,6 +1440,11 @@ namespace  VanK
         std::vector<vk::Rect2D> scissors(scissorCount, vkScissor);
         
         Unwrap(cmd).setScissorWithCount(scissors);
+    }
+
+    void VulkanRendererAPI::SetLineWidth(VanKCommandBuffer cmd, float lineWidth)
+    {
+        Unwrap(cmd).setLineWidth(lineWidth);
     }
 
     void VulkanRendererAPI::BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings)
