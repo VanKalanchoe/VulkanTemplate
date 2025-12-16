@@ -991,7 +991,7 @@ namespace VanK
         bool isImGuiInit() const { return imguiVulkanInitialized; }
         static bool IsInitialized() { return s_instance != nullptr; }
         int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) override;
-        uint32_t GetCurrentFrameIndex() override { return currentFrame; }
+        uint32_t GetCurrentFrameIndex() override { return frameIndex; }
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -1047,7 +1047,7 @@ namespace VanK
 
         vk::raii::CommandPool commandPool = nullptr;
         std::vector<vk::raii::CommandBuffer> commandBuffers;
-        uint32_t currentImageIndex = {};
+        uint32_t imageIndex = {};
         vk::Result currentResult = {};
         
         std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
@@ -1057,7 +1057,7 @@ namespace VanK
         vk::raii::Semaphore semaphore = nullptr;
         uint64_t timelineValue = 0;
         std::vector<vk::raii::Fence> inFlightFences;
-        uint32_t currentFrame = 0;
+        uint32_t frameIndex = 0;
 
         bool framebufferResized = false;
         bool vSync = false;

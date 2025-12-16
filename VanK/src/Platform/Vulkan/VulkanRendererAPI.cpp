@@ -876,15 +876,15 @@ namespace  VanK
 
     VanKCommandBuffer VulkanRendererAPI::BeginCommandBuffer()
     {
-        commandBuffers[currentFrame].reset();
+        commandBuffers[frameIndex].reset();
         
-        commandBuffers[currentFrame].begin({});
+        commandBuffers[frameIndex].begin({});
 
         //statistics
-        commandBuffers[currentFrame].resetQueryPool(queryPool, 0, 1);
-        commandBuffers[currentFrame].beginQuery(queryPool, 0);
+        commandBuffers[frameIndex].resetQueryPool(queryPool, 0, 1);
+        commandBuffers[frameIndex].beginQuery(queryPool, 0);
         
-        auto cmd = new VanKCommandBuffer_T{&commandBuffers[currentFrame]};
+        auto cmd = new VanKCommandBuffer_T{&commandBuffers[frameIndex]};
         
         return cmd;
     }
@@ -907,12 +907,14 @@ namespace  VanK
             ImGuizmo::BeginFrame();
         }
         
-        while (vk::Result::eTimeout == device.waitForFences(*inFlightFences[currentFrame], vk::True, UINT64_MAX));
-        auto [result, imageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[currentFrame], nullptr);
-
-        currentResult = result;
+        // Note: inFlightFences, presentCompleteSemaphores, and commandBuffers are indexed by frameIndex,
+        //       while renderFinishedSemaphores is indexed by imageIndex
         
-        currentImageIndex = imageIndex;
+        while (vk::Result::eTimeout == device.waitForFences(*inFlightFences[frameIndex], vk::True, UINT64_MAX));
+        
+        device.resetFences(*inFlightFences[frameIndex]);
+        
+        auto [result, acquiredImageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
         
         if (result == vk::Result::eErrorOutOfDateKHR)
         {
@@ -924,8 +926,10 @@ namespace  VanK
         {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
+
+        currentResult = result;
         
-        device.resetFences(*inFlightFences[currentFrame]);
+        imageIndex = acquiredImageIndex;
     }
 
     void VulkanRendererAPI::EndFrame()
@@ -941,28 +945,31 @@ namespace  VanK
         }
         
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        const vk::SubmitInfo submitInfo{
+        
+        const vk::SubmitInfo submitInfo
+        {
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &*presentCompleteSemaphores[currentFrame],
+            .pWaitSemaphores = &*presentCompleteSemaphores[frameIndex],
             .pWaitDstStageMask = &waitDestinationStageMask,
             .commandBufferCount = 1,
-            .pCommandBuffers = &*commandBuffers[currentFrame],
+            .pCommandBuffers = &*commandBuffers[frameIndex],
             .signalSemaphoreCount = 1,
-            .pSignalSemaphores = &*renderFinishedSemaphores[currentImageIndex]
+            .pSignalSemaphores = &*renderFinishedSemaphores[imageIndex]
         };
-        queue.submit(submitInfo, *inFlightFences[currentFrame]);
+        queue.submit(submitInfo, *inFlightFences[frameIndex]);
 
         try
         {
             const vk::PresentInfoKHR presentInfoKHR
             {
                 .waitSemaphoreCount = 1,
-                .pWaitSemaphores = &*renderFinishedSemaphores[currentImageIndex],
+                .pWaitSemaphores = &*renderFinishedSemaphores[imageIndex],
                 .swapchainCount = 1,
                 .pSwapchains = &*swapChain,
-                .pImageIndices = &currentImageIndex
+                .pImageIndices = &imageIndex
             };
             currentResult = queue.presentKHR(presentInfoKHR);
+            
             if (currentResult == vk::Result::eErrorOutOfDateKHR || currentResult == vk::Result::eSuboptimalKHR || framebufferResized)
             {
                 framebufferResized = false;
@@ -986,7 +993,7 @@ namespace  VanK
             }
         }
         
-        currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+        frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
         /*downloadQueryBuffer();*/
     }
 
@@ -1049,7 +1056,7 @@ namespace  VanK
     {
         // Execute the compute shader
         // The workgroup is set to 256, and we only have 3 vertex to deal with, so one group is enough
-        commandBuffers[currentFrame].dispatch(groupCountX, groupCountY, groupCountZ);
+        commandBuffers[frameIndex].dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
     void VulkanRendererAPI::EndComputePass(VanKComputePass* computePass)
@@ -1127,7 +1134,7 @@ namespace  VanK
    
     utils::transition_image_layout
     (
-        commandBuffers[currentFrame],
+        commandBuffers[frameIndex],
         *entityImage,
         entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
         vk::ImageLayout::eTransferSrcOptimal,
@@ -1149,7 +1156,7 @@ namespace  VanK
     };
         
             
-    commandBuffers[currentFrame].copyImageToBuffer(
+    commandBuffers[frameIndex].copyImageToBuffer(
         *entityImage,
         vk::ImageLayout::eTransferSrcOptimal,
         entityReadbackBuffer.buffer,
@@ -1159,7 +1166,7 @@ namespace  VanK
     // Transition back
     utils::transition_image_layout
     (
-        commandBuffers[currentFrame],
+        commandBuffers[frameIndex],
         *entityImage,
         vk::ImageLayout::eTransferSrcOptimal,
         vk::ImageLayout::eColorAttachmentOptimal,
@@ -1568,7 +1575,7 @@ namespace  VanK
             utils::transition_image_layout
             (
                 Unwrap(cmd),
-                swapChainImages[currentImageIndex],
+                swapChainImages[imageIndex],
                 sceneImageInitialized ? vk::ImageLayout::ePresentSrcKHR : vk::ImageLayout::eUndefined,
                 vk::ImageLayout::eColorAttachmentOptimal,
                 {}, // srcAccessMask (no need to wait for previous operations)
@@ -1621,7 +1628,7 @@ namespace  VanK
             // Second pass: draw ImGui to swapchain image
             vk::RenderingAttachmentInfo swapColorAttachment =
             {
-                .imageView = swapChainImageViews[currentImageIndex],
+                .imageView = swapChainImageViews[imageIndex],
                 .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
                 .loadOp = vk::AttachmentLoadOp::eClear,
                 .storeOp = vk::AttachmentStoreOp::eStore
@@ -1650,7 +1657,7 @@ namespace  VanK
             utils::transition_image_layout
             (
                 Unwrap(cmd),
-                swapChainImages[currentImageIndex],
+                swapChainImages[imageIndex],
                 vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageLayout::ePresentSrcKHR,
                 vk::AccessFlagBits2::eColorAttachmentWrite, // srcAccessMask
@@ -1684,7 +1691,7 @@ namespace  VanK
             utils::transition_image_layout
             (
                 Unwrap(cmd),
-                swapChainImages[currentImageIndex],
+                swapChainImages[imageIndex],
                 vk::ImageLayout::eColorAttachmentOptimal,
                 vk::ImageLayout::eTransferDstOptimal,
                 {},
@@ -1711,7 +1718,7 @@ namespace  VanK
             vk::BlitImageInfo2 blitInfo{};
             blitInfo.srcImage = sceneImage;
             blitInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-            blitInfo.dstImage = swapChainImages[currentImageIndex];
+            blitInfo.dstImage = swapChainImages[imageIndex];
             blitInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
             blitInfo.regionCount = 1;
             blitInfo.pRegions = &blitRegion;
@@ -1739,7 +1746,7 @@ namespace  VanK
             utils::transition_image_layout
             (
                 Unwrap(cmd),
-                swapChainImages[currentImageIndex],
+                swapChainImages[imageIndex],
                 vk::ImageLayout::eTransferDstOptimal,
                 vk::ImageLayout::ePresentSrcKHR,
                 vk::AccessFlagBits2::eTransferWrite, // srcAccessMask
@@ -2330,22 +2337,17 @@ namespace  VanK
 
     void VulkanRendererAPI::createSyncObjects()
     {
-        presentCompleteSemaphores.clear();
-        renderFinishedSemaphores.clear();
-        inFlightFences.clear();
+        assert(presentCompleteSemaphores.empty() && renderFinishedSemaphores.empty() && inFlightFences.empty());
 
         for (size_t i = 0; i < swapChainImages.size(); i++)
         {
-            presentCompleteSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
-            DBG_VK_NAME(*presentCompleteSemaphores.back());
             renderFinishedSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
-            DBG_VK_NAME(*renderFinishedSemaphores.back());
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
+            presentCompleteSemaphores.emplace_back(device, vk::SemaphoreCreateInfo());
             inFlightFences.emplace_back(device, vk::FenceCreateInfo{.flags = vk::FenceCreateFlagBits::eSignaled});
-            DBG_VK_NAME(*inFlightFences.back());
         }
     }
 
