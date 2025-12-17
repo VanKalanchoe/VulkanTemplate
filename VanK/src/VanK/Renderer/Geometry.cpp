@@ -10,7 +10,7 @@ namespace VanK
     std::vector<shaderio::InstancedVertexData> Geometry::s_Vertices{};
     std::vector<uint32_t> Geometry::s_Indices{};
     uint32_t Geometry::s_TotalInstances = 0;
-    std::vector<shaderio::InstancedStorageData> Geometry::s_StorageData{};
+    std::vector<shaderio::InstancedQuadData> Geometry::s_QuadData{};
     std::vector<shaderio::InstancedCircleData> Geometry::s_CircleData{};
     std::vector<shaderio::InstancedTextData> Geometry::s_TextData{};
     std::vector<shaderio::InstancedLineData> Geometry::s_LineData{};
@@ -40,7 +40,7 @@ namespace VanK
         gpuInfo.instanceCount = 0;
         gpuInfo.firstIndex = s_Indices.size();
         gpuInfo.vertexOffset = s_Vertices.size();
-        gpuInfo.firstInstance = (pipelineType == shaderio::PipelineType_Quad) ? s_StorageData.size() : 
+        gpuInfo.firstInstance = (pipelineType == shaderio::PipelineType_Quad) ? s_QuadData.size() : 
                                 (pipelineType == shaderio::PipelineType_Circle) ? s_CircleData.size() : 
                                 (pipelineType == shaderio::PipelineType_Text) ? s_TextData.size() : s_LineData.size();
         gpuInfo.pipelineType = pipelineType;
@@ -67,7 +67,7 @@ namespace VanK
     void Geometry::SetFrameInstances
     (
         const std::string& name,
-        const std::vector<shaderio::InstancedStorageData>& instances
+        const std::vector<shaderio::InstancedQuadData>& instances
     )
     {
         for (size_t i = 0; i < s_MeshInfos.size(); ++i)
@@ -81,10 +81,10 @@ namespace VanK
                 if (oldCount == 0)
                 {
                     // Allocate new instance region at the end of s_StorageData
-                    firstInstance = s_StorageData.size();
+                    firstInstance = s_QuadData.size();
 
                     // Grow storage
-                    s_StorageData.resize(firstInstance + instances.size());
+                    s_QuadData.resize(firstInstance + instances.size());
 
                     // New global instance count
                  
@@ -93,8 +93,8 @@ namespace VanK
                 else
                 {
                     // Normal behavior: replace existing region
-                    if (s_StorageData.size() < firstInstance + instances.size())
-                        s_StorageData.resize(firstInstance + instances.size());
+                    if (s_QuadData.size() < firstInstance + instances.size())
+                        s_QuadData.resize(firstInstance + instances.size());
 
                     int32_t sizeDiff = instances.size() - oldCount;
                     s_TotalInstances += sizeDiff;
@@ -102,7 +102,7 @@ namespace VanK
 
                 // Copy data
                 std::copy(instances.begin(), instances.end(),
-                          s_StorageData.begin() + firstInstance);
+                          s_QuadData.begin() + firstInstance);
 
                 // Update mesh count
                 s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
@@ -258,7 +258,7 @@ namespace VanK
     
     void Geometry::BeginFrame()
     {
-        s_StorageData.clear();
+        s_QuadData.clear();
         s_CircleData.clear();
         s_TextData.clear();
         s_LineData.clear();

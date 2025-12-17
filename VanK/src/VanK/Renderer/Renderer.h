@@ -99,8 +99,8 @@ namespace VanK
         inline static std::array<VanKPipeLine, shaderio::PipelineType_Count> pipelines;
         
         // Graphics Pipelines
-        inline static VanKPipeLine m_GraphicsDebugPipeline = {};
-        inline static VanKGraphicsPipelineSpecification m_GraphicsDebugPipelineSpecification = {};
+        inline static VanKPipeLine m_GraphicsQuadPipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_GraphicsQuadPipelineSpecification = {};
         
         inline static VanKPipeLine m_GraphicsCirclePipeline = {};
         inline static VanKGraphicsPipelineSpecification m_GraphicsCirclePipelineSpecification = {};

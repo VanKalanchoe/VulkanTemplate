@@ -106,7 +106,7 @@ struct InstancedCircleData
     int EntityID;
 };
 
-struct InstancedStorageData
+struct InstancedQuadData
 {
     mat4 Model;
     vec4 color;

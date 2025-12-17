@@ -27,7 +27,7 @@ namespace VanK
     
     struct Renderer3DData
     {
-        std::vector<shaderio::InstancedStorageData> storageInstancesPtr;
+        std::vector<shaderio::InstancedQuadData> storageInstancesPtr;
         std::vector<shaderio::InstancedCircleData> circleInstancesPtr;
         std::vector<shaderio::InstancedTextData> textInstancesPtr;
         std::vector<shaderio::InstancedLineData> lineInstancesPtr;
@@ -204,7 +204,7 @@ namespace VanK
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
     {
-        shaderio::InstancedStorageData storage;
+        shaderio::InstancedQuadData storage;
         storage.Model = transform;
         storage.color = color;
         storage.textureIndex = whiteTexture->GetTextureIndex();
@@ -215,7 +215,7 @@ namespace VanK
 
     void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
     {
-        shaderio::InstancedStorageData storage;
+        shaderio::InstancedQuadData storage;
         storage.Model = transform;
         storage.color = tintColor;
         storage.textureIndex = texture->GetTextureIndex();
@@ -507,10 +507,9 @@ namespace VanK
             .RenderingCreateInfo = RenderingCreateInfo,
         };
 
-        m_GraphicsDebugPipelineSpecification = GraphicsPipelineSpecification;
-
-        m_GraphicsDebugPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsDebugPipelineSpecification);
-        RegisterPipelineForShaderWatcher("DebugShader", "shader.slang", &m_GraphicsDebugPipelineSpecification, nullptr, &m_GraphicsDebugPipeline, VanKGraphics);
+        m_GraphicsQuadPipelineSpecification = GraphicsPipelineSpecification;
+        m_GraphicsQuadPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsQuadPipelineSpecification);
+        RegisterPipelineForShaderWatcher("DebugShader", "shader.slang", &m_GraphicsQuadPipelineSpecification, nullptr, &m_GraphicsQuadPipeline, VanKGraphics);
         
         m_GraphicsCirclePipelineSpecification = GraphicsPipelineSpecification;
         m_GraphicsCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = CircleShader;
@@ -548,7 +547,7 @@ namespace VanK
         
         pipelines =
         {
-            m_GraphicsDebugPipeline,
+            m_GraphicsQuadPipeline,
             m_GraphicsCirclePipeline,
             m_GraphicsTextPipeline,
             m_GraphicsLinePipeline
@@ -710,6 +709,18 @@ namespace VanK
         const auto& meshData = Geometry::GetMeshes();
         const uint32_t meshCount = static_cast<uint32_t>(meshData.size());
         
+        const auto& quadData = Geometry::GetQuadData();
+        const uint32_t quadCount = static_cast<uint32_t>(quadData.size());
+        
+        const auto& circleData = Geometry::GetCircleData();
+        const uint32_t circleCount = static_cast<uint32_t>(circleData.size());
+        
+        const auto& textData = Geometry::GetTextData();
+        const uint32_t textCount = static_cast<uint32_t>(textData.size());
+        
+        const auto& lineData = Geometry::GetLineData();
+        const uint32_t lineCount = static_cast<uint32_t>(lineData.size());
+        
         size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
         if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexBufferSize)
             m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
@@ -735,19 +746,19 @@ namespace VanK
                 m_CountBuffers[p].reset(IndirectBuffer::Create(sizeof(uint32_t)));
         }
     
-        size_t storageBufferSize = sizeof(shaderio::InstancedStorageData) * std::max(1u, (uint32_t)Geometry::GetStorageData().size());
+        size_t storageBufferSize = sizeof(shaderio::InstancedQuadData) * std::max(1u, (uint32_t)quadCount);
         if (!m_InstancedStorageBuffer || m_InstancedStorageBuffer->GetSize() < storageBufferSize)
             m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
     
-        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)Geometry::GetCircleData().size());
+        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)lineCount);
         if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < CircleBufferSize)
             m_InstancedCircleBuffer.reset(StorageBuffer::Create(CircleBufferSize));
     
-        size_t TextBufferSize = sizeof(shaderio::InstancedTextData) * std::max(1u, (uint32_t)Geometry::GetTextData().size());
+        size_t TextBufferSize = sizeof(shaderio::InstancedTextData) * std::max(1u, (uint32_t)textCount);
         if (!m_InstancedTextBuffer || m_InstancedTextBuffer->GetSize() < TextBufferSize)
             m_InstancedTextBuffer.reset(StorageBuffer::Create(TextBufferSize));
         
-        size_t LineBufferSize = sizeof(shaderio::InstancedLineData) * std::max(1u, (uint32_t)Geometry::GetLineData().size());
+        size_t LineBufferSize = sizeof(shaderio::InstancedLineData) * std::max(1u, (uint32_t)lineCount);
         if (!m_InstancedLineBuffer || m_InstancedLineBuffer->GetSize() < LineBufferSize)
             m_InstancedLineBuffer.reset(StorageBuffer::Create(LineBufferSize));
     
@@ -763,13 +774,13 @@ namespace VanK
 
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
 
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, Geometry::GetStorageData(), shaderio::InstancedStorageData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, quadData, shaderio::InstancedQuadData, 0);
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, Geometry::GetCircleData(), shaderio::InstancedCircleData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, circleData, shaderio::InstancedCircleData, 0);
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedTextBuffer, Geometry::GetTextData(), shaderio::InstancedTextData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedTextBuffer, textData, shaderio::InstancedTextData, 0);
           
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedLineBuffer, Geometry::GetLineData(), shaderio::InstancedLineData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedLineBuffer, lineData, shaderio::InstancedLineData, 0);
         
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, meshData, shaderio::MeshInfo, 0);
         
