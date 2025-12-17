@@ -19,7 +19,7 @@ namespace VanK
     {
         std::string name;
         shaderio::MeshInfo gpu;
-        enum class PipelineType { Quad, Circle, Text, Line } pipelineType;
+        enum class PipelineType { Quad, Circle, Text, Line, Count } pipelineType;
     };
     
     class Geometry

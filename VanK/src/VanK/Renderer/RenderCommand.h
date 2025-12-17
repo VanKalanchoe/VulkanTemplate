@@ -125,6 +125,11 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->SetLineWidth(cmd, lineWidth);
         }
+        
+        static void SetCullMode(VanKCommandBuffer cmd, VanKCullModeFlags cullMode)
+        {
+            if (s_RendererAPI) s_RendererAPI->SetCullMode(cmd, cullMode);
+        }
 
         static void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings)
         {

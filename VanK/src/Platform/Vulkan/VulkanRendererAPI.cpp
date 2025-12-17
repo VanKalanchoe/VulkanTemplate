@@ -652,10 +652,8 @@ namespace  VanK
             .depthClampEnable = vk::False,
             .rasterizerDiscardEnable = vk::False,
             .polygonMode = ConvertToVkPolygonMode(pipelineSpecification.RasterizationStateCreateInfo.VanKPolygon),
-            .cullMode = ConvertToVkCullMode(pipelineSpecification.RasterizationStateCreateInfo.VanKCullMode),
             .frontFace = ConvertToVkFrontFace(pipelineSpecification.RasterizationStateCreateInfo.VanKFrontFace),
             .depthBiasEnable = vk::False,
-            /*.lineWidth = 1.0f // dont needed dynamic now*/
         };
         
         vk::PipelineMultisampleStateCreateInfo multisampling // todo expose this as api
@@ -710,7 +708,8 @@ namespace  VanK
         {
             vk::DynamicState::eViewportWithCount,
             vk::DynamicState::eScissorWithCount,
-            vk::DynamicState::eLineWidth
+            vk::DynamicState::eLineWidth,
+            vk::DynamicState::eCullMode
         };
         
         vk::PipelineDynamicStateCreateInfo dynamicState
@@ -1457,6 +1456,11 @@ namespace  VanK
     void VulkanRendererAPI::SetLineWidth(VanKCommandBuffer cmd, float lineWidth)
     {
         Unwrap(cmd).setLineWidth(lineWidth);
+    }
+    
+    void VulkanRendererAPI::SetCullMode(VanKCommandBuffer cmd, VanKCullModeFlags cullMode)
+    {
+        Unwrap(cmd).setCullMode(ConvertToVkCullMode(cullMode));
     }
 
     void VulkanRendererAPI::BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings)

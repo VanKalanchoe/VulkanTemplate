@@ -442,7 +442,6 @@ namespace VanK
         VanKPipelineRasterizationStateCreateInfo RasterizationStateCreateInfo
         {
             .VanKPolygon = VanK_POLYGON_MODE_FILL,
-            .VanKCullMode = VanK_CULL_MODE_BACK_BIT, // todo change this for performance reason i think back or front test
             .VanKFrontFace = VanK_FRONT_FACE_COUNTER_CLOCKWISE,
         };
 
@@ -688,6 +687,8 @@ namespace VanK
             VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
             RenderCommand::SetScissor(cmd, 1, rect);
             
+            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
+            
             RenderCommand::EndRendering(cmd);
             return;
         }
@@ -786,74 +787,33 @@ namespace VanK
             
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
             
-            uint32_t quadCount = 0;
-            uint32_t circleCount = 0;
-            uint32_t textCount = 0;
-            uint32_t lineCount = 0;
+            uint32_t numPipelines = static_cast<uint32_t>(CpuMeshInfo::PipelineType::Count);
+            std::vector<uint32_t> drawCounts(numPipelines, 0);
             
             for (const auto& mesh : Geometry::GetCpuMeshes()) {
-                if (mesh.pipelineType == CpuMeshInfo::PipelineType::Quad) 
-                {
-                    quadCount++;
-                } 
-                else if (mesh.pipelineType == CpuMeshInfo::PipelineType::Circle) 
-                {
-                    circleCount++;
-                } 
-                else if (mesh.pipelineType == CpuMeshInfo::PipelineType::Text)
-                {
-                    textCount++;
-                }
-                else if (mesh.pipelineType == CpuMeshInfo::PipelineType::Line)
-                {
-                    lineCount++;
-                }
+                drawCounts[static_cast<uint32_t>(mesh.pipelineType)]++;
             }
+            
+            std::vector<VanKPipeLine> pipelines = {
+                m_GraphicsDebugPipeline,  // Quad
+                m_GraphicsCirclePipeline, // Circle
+                m_GraphicsTextPipeline,   // Text
+                m_GraphicsLinePipeline    // Line
+            };
             
             uint32_t offset = 0;
+            for (uint32_t i = 0; i < numPipelines; i++)
+            {
+                if (drawCounts[i] == 0)
+                    continue;
 
-            // Draw quads
-            if (quadCount > 0) {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsDebugPipeline);
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, pipelines[i]);
                 RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
                 RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 
-                    offset, *m_CountBuffer, 0, quadCount, sizeof(shaderio::DrawIndexedIndirectCommand));
-            }
-            
-            offset += quadCount * sizeof(shaderio::DrawIndexedIndirectCommand);
+                                                        offset, *m_CountBuffer, 0, 
+                                                        drawCounts[i], sizeof(shaderio::DrawIndexedIndirectCommand));
 
-            // Draw circles
-            if (circleCount > 0) 
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsCirclePipeline);
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-                RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 
-                    offset, *m_CountBuffer, 0, 
-                    circleCount, sizeof(shaderio::DrawIndexedIndirectCommand));
-            }
-            
-            offset += circleCount * sizeof(shaderio::DrawIndexedIndirectCommand);
-            
-            // Draw text
-            if (textCount > 0) 
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsTextPipeline);
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-                RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 
-                    offset, *m_CountBuffer, 0, 
-                    textCount, sizeof(shaderio::DrawIndexedIndirectCommand));
-            }
-            
-            offset += textCount * sizeof(shaderio::DrawIndexedIndirectCommand);
-            
-            // Draw text
-            if (lineCount > 0) 
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_GraphicsLinePipeline);
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-                RenderCommand::DrawIndexedIndirectCount(cmd, *m_IndirectBuffer, 
-                    offset, *m_CountBuffer, 0, 
-                    lineCount, sizeof(shaderio::DrawIndexedIndirectCommand));
+                offset += drawCounts[i] * sizeof(shaderio::DrawIndexedIndirectCommand);
             }
             
             RenderCommand::EndRendering(cmd);
