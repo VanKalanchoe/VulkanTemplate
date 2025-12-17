@@ -8,6 +8,8 @@
 #include "VanK/Renderer/Buffer.h"
 #include <imgui.h>
 
+#include "VanK/Core/core.h"
+
 namespace VanK
 {
     // Forward declare an opaque struct (incomplete type)
@@ -296,8 +298,8 @@ namespace VanK
     {
         VanKCommandBuffer VanKCommandBuffer;
         VertexBuffer* VanKVertexBuffer;
-        IndirectBuffer* VanKIndirectBuffer;
-        IndirectBuffer* VanKIndirectCountBuffer;
+        std::span<Ref<IndirectBuffer>> VanKIndirectBuffers;
+        std::span<Ref<IndirectBuffer>> VanKIndirectCountBuffers;
     };
 
     enum class VanKPipelineBindPoint
@@ -435,7 +437,7 @@ namespace VanK
         virtual void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;
         virtual void SubmitRendering(VanKCommandBuffer cmd) = 0;
-        virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, IndirectBuffer* indirectBuffer = nullptr, IndirectBuffer* countBuffer = nullptr) = 0;
+        virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {}, std::span<Ref<IndirectBuffer>> countBuffers = {}) = 0;
         virtual void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
         virtual void EndComputePass(VanKComputePass* computePass) = 0;
         virtual int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) = 0;

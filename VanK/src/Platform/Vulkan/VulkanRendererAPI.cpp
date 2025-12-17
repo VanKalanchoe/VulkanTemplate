@@ -1001,14 +1001,14 @@ namespace  VanK
         /*downloadQueryBuffer();*/
     }
 
-    VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, IndirectBuffer* indirectBuffer, IndirectBuffer* countBuffer)
+    VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers)
     {
         auto* result = new VanKComputePass
         {
             .VanKCommandBuffer = cmd,
             .VanKVertexBuffer = vertexBuffer,
-            .VanKIndirectBuffer = indirectBuffer,
-            .VanKIndirectCountBuffer = countBuffer
+            .VanKIndirectBuffers = indirectBuffers,
+            .VanKIndirectCountBuffers = countBuffers
         };
 
         if (vertexBuffer != nullptr)
@@ -1025,8 +1025,10 @@ namespace  VanK
             );
         }
         
-        if (indirectBuffer != nullptr)
+        for (auto& indirectBuffer : indirectBuffers)
         {
+            if (!indirectBuffer) continue;
+            
             // Add a barrier to make sure nothing was writing to it, before updating its content
             utils::cmdBufferMemoryBarrier
             (
@@ -1039,8 +1041,10 @@ namespace  VanK
             );
         }
         
-        if (countBuffer != nullptr)
+        for (auto& countBuffer : countBuffers)
         {
+            if (!countBuffer) continue;
+                
             // Add a barrier to make sure nothing was writing to it, before updating its content
             utils::cmdBufferMemoryBarrier
             (
@@ -1082,13 +1086,15 @@ namespace  VanK
             );
         }
         
-        if (computePass->VanKIndirectBuffer != nullptr)
+        for (auto& indirectBuffer : computePass->VanKIndirectBuffers)
         {
+            if (!indirectBuffer) continue;
+            
             // Barrier for the Indirect buffer
             utils::cmdBufferMemoryBarrier
             (
                 Unwrap(computePass->VanKCommandBuffer),
-                static_cast<VkBuffer>(computePass->VanKIndirectBuffer->GetNativeHandle()),
+                static_cast<VkBuffer>(indirectBuffer->GetNativeHandle()),
                 vk::PipelineStageFlagBits2::eComputeShader,
                 vk::PipelineStageFlagBits2::eDrawIndirect,
                 vk::AccessFlagBits2::eShaderWrite, // Src Access: Compute Shader WRITE
@@ -1096,13 +1102,15 @@ namespace  VanK
             );
         }
         
-        if (computePass->VanKIndirectCountBuffer != nullptr)
+        for (auto& countBuffer : computePass->VanKIndirectCountBuffers)
         {
+            if (!countBuffer) continue;
+            
             // Barrier for the Draw Count buffer
             utils::cmdBufferMemoryBarrier
             (
                 Unwrap(computePass->VanKCommandBuffer),
-                static_cast<VkBuffer>(computePass->VanKIndirectCountBuffer->GetNativeHandle()),
+                static_cast<VkBuffer>(countBuffer->GetNativeHandle()),
                 vk::PipelineStageFlagBits2::eComputeShader,
                 vk::PipelineStageFlagBits2::eDrawIndirect,
                 vk::AccessFlagBits2::eShaderWrite, // Src Access: Compute Shader WRITE

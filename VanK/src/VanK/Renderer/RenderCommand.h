@@ -184,9 +184,9 @@ namespace VanK
         * 
         * @return A pointer to the created compute pass handle.
         */
-        static VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer = nullptr, IndirectBuffer* indirectBuffer = nullptr, IndirectBuffer* countBuffer = nullptr)
+        static VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* buffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {}, std::span<Ref<IndirectBuffer>> countBuffers = {})
         {
-            return s_RendererAPI ? s_RendererAPI->BeginComputePass(cmd, buffer, indirectBuffer, countBuffer) : nullptr;
+            return s_RendererAPI ? s_RendererAPI->BeginComputePass(cmd, buffer, indirectBuffers, countBuffers) : nullptr;
         }
 
         static void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)

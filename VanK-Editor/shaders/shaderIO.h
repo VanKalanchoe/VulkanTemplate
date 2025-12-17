@@ -21,6 +21,15 @@ STATIC_CONST int LBindTextures = 0;
 STATIC_CONST int LSetScene      = 1;
 STATIC_CONST int LBindSceneInfo = 0;
 
+enum PipelineType 
+{
+    PipelineType_Quad   = 0,
+    PipelineType_Circle = 1,
+    PipelineType_Text   = 2,
+    PipelineType_Line   = 3,
+    PipelineType_Count  = 4
+};
+
 struct MeshInfo
 {
     uint32_t indexCount;    // number of indices for this mesh
@@ -28,16 +37,17 @@ struct MeshInfo
     uint32_t firstIndex;    // starting index in the global index buffer
     uint32_t vertexOffset;  // vertex base offset
     uint32_t firstInstance; // optional, for indirect draw
+    uint32_t pipelineType;
 };
 
 struct SceneInfo 
 {
     mat4 view;
     mat4 proj;
+    uint64_t indirectAddresses[4];
+    uint64_t countAddresses[4];
     uint64_t vertexAddress;
-    uint64_t indirectAddress;
     uint64_t storageAddress;
-    uint64_t countAddress;
     uint64_t meshInfoAddress;
     uint64_t circleAddress;
     uint64_t textAddress;

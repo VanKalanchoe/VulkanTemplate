@@ -5,6 +5,7 @@
 
 namespace VanK
 {
+    std::vector<shaderio::MeshInfo> Geometry::s_MeshCache{};
     std::vector<CpuMeshInfo> Geometry::s_MeshInfos{};
     std::vector<shaderio::InstancedVertexData> Geometry::s_Vertices{};
     std::vector<uint32_t> Geometry::s_Indices{};
@@ -14,12 +15,23 @@ namespace VanK
     std::vector<shaderio::InstancedTextData> Geometry::s_TextData{};
     std::vector<shaderio::InstancedLineData> Geometry::s_LineData{};
     
+    void Geometry::UpdateGpuMeshCache()
+    {
+        if (s_MeshCache.size() != s_MeshInfos.size())
+            s_MeshCache.resize(s_MeshInfos.size());
+
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
+        {
+            s_MeshCache[i] = s_MeshInfos[i].gpu;
+        }
+    }
+    
     void Geometry::AppendGeometry
     (
         const std::string& name,
         const std::vector<shaderio::InstancedVertexData>& vertices,
         const std::vector<uint32_t>& indices,
-        CpuMeshInfo::PipelineType pipelineType
+        shaderio::PipelineType pipelineType
     )
     {
         // 1. Fill the GPU Info
@@ -28,8 +40,10 @@ namespace VanK
         gpuInfo.instanceCount = 0;
         gpuInfo.firstIndex = s_Indices.size();
         gpuInfo.vertexOffset = s_Vertices.size();
-        gpuInfo.firstInstance = (pipelineType == CpuMeshInfo::PipelineType::Quad) ? s_StorageData.size() : (pipelineType == CpuMeshInfo::PipelineType::Circle) ? s_CircleData.size() : s_TextData.size();
-        
+        gpuInfo.firstInstance = (pipelineType == shaderio::PipelineType_Quad) ? s_StorageData.size() : 
+                                (pipelineType == shaderio::PipelineType_Circle) ? s_CircleData.size() : 
+                                (pipelineType == shaderio::PipelineType_Text) ? s_TextData.size() : s_LineData.size();
+        gpuInfo.pipelineType = pipelineType;
         // 2. Append the Data
         s_Vertices.insert(s_Vertices.end(), vertices.begin(), vertices.end());
         s_Indices.insert(s_Indices.end(), indices.begin(), indices.end());

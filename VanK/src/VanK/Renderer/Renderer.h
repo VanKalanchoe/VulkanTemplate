@@ -96,6 +96,8 @@ namespace VanK
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
         
+        inline static std::array<VanKPipeLine, shaderio::PipelineType_Count> pipelines;
+        
         // Graphics Pipelines
         inline static VanKPipeLine m_GraphicsDebugPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_GraphicsDebugPipelineSpecification = {};
@@ -127,8 +129,9 @@ namespace VanK
         inline static Ref<StorageBuffer> m_InstancedLineBuffer;
         inline static Ref<StorageBuffer> m_MeshInfoBuffer;
         
-        inline static Ref<IndirectBuffer> m_IndirectBuffer;
-        inline static Ref<IndirectBuffer> m_CountBuffer;
+        inline static std::array<Ref<IndirectBuffer>, 4> m_IndirectBuffers;
+
+        inline static std::array<Ref<IndirectBuffer>, 4> m_CountBuffers;
         
         inline static Ref<Texture2D> whiteTexture, vikingRoom, ChernoLogo;
     };

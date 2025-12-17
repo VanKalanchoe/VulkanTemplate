@@ -19,13 +19,13 @@ namespace VanK
     {
         std::string name;
         shaderio::MeshInfo gpu;
-        enum class PipelineType { Quad, Circle, Text, Line, Count } pipelineType;
+        shaderio::PipelineType pipelineType;
     };
     
     class Geometry
     {
     public:
-        static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices, CpuMeshInfo::PipelineType pipelineType);
+        static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices, shaderio::PipelineType pipelineType);
         static void SetFrameInstances(const std::string& name, const std::vector<shaderio::InstancedStorageData>& instances);
         static void SetCircleFrameInstances(const std::string& name, const std::vector<shaderio::InstancedCircleData>& instances);
         static void SetTextFrameInstances(const std::string& name, const std::vector<shaderio::InstancedTextData>& instances);
@@ -38,18 +38,18 @@ namespace VanK
         static uint32_t GetTotalInstances() { return s_TotalInstances; }
         static uint32_t GetMeshCount() { return static_cast<uint32_t>(s_MeshInfos.size()); }
         static std::vector<CpuMeshInfo> GetCpuMeshes() { return s_MeshInfos; }
-        static std::vector<shaderio::MeshInfo> GetMeshes()
-        {
-            std::vector<shaderio::MeshInfo> meshes;
-            meshes.reserve(s_MeshInfos.size());
-            for (const auto& cpuMesh : s_MeshInfos) 
-                meshes.push_back(cpuMesh.gpu); return meshes;
+        static const std::vector<shaderio::MeshInfo>& GetMeshes() 
+        { 
+            UpdateGpuMeshCache(); // Ensure cache is sync'd
+            return s_MeshCache; 
         }
         static const std::vector<shaderio::InstancedStorageData>& GetStorageData() { return s_StorageData; }
         static const std::vector<shaderio::InstancedCircleData>& GetCircleData() { return s_CircleData; }
         static const std::vector<shaderio::InstancedTextData>& GetTextData() { return s_TextData; }
         static const std::vector<shaderio::InstancedLineData>& GetLineData() { return s_LineData; }
     private:
+        static void UpdateGpuMeshCache();
+        static std::vector<shaderio::MeshInfo> s_MeshCache;
         static std::vector<CpuMeshInfo> s_MeshInfos;
         static std::vector<shaderio::InstancedVertexData> s_Vertices;
         static std::vector<uint32_t> s_Indices;
