@@ -10,6 +10,7 @@ namespace VanK
     std::vector<shaderio::InstancedVertexData> Geometry::s_Vertices{};
     std::vector<uint32_t> Geometry::s_Indices{};
     uint32_t Geometry::s_TotalInstances = 0;
+    std::vector<shaderio::InstancedPBRData> Geometry::s_PBRData{};
     std::vector<shaderio::InstancedQuadData> Geometry::s_QuadData{};
     std::vector<shaderio::InstancedCircleData> Geometry::s_CircleData{};
     std::vector<shaderio::InstancedTextData> Geometry::s_TextData{};
@@ -40,13 +41,19 @@ namespace VanK
         gpuInfo.instanceCount = 0;
         gpuInfo.firstIndex = s_Indices.size();
         gpuInfo.vertexOffset = s_Vertices.size();
-        gpuInfo.firstInstance = (pipelineType == shaderio::PipelineType_Quad) ? s_QuadData.size() : 
-                                (pipelineType == shaderio::PipelineType_Circle) ? s_CircleData.size() : 
-                                (pipelineType == shaderio::PipelineType_Text) ? s_TextData.size() : s_LineData.size();
+        gpuInfo.firstInstance = 0;
         gpuInfo.pipelineType = pipelineType;
         // 2. Append the Data
         s_Vertices.insert(s_Vertices.end(), vertices.begin(), vertices.end());
-        s_Indices.insert(s_Indices.end(), indices.begin(), indices.end());
+        if (pipelineType == shaderio::PipelineType_Line)
+        {
+            s_Indices.insert(s_Indices.end(), indices.begin(), indices.end());
+        }
+        else
+        {
+            for (uint32_t i : indices)
+                s_Indices.push_back(i + gpuInfo.vertexOffset);
+        }
 
         // 3. Find insertion point by pipeline type (using std::find_if)
         auto insertIt = std::ranges::find_if(s_MeshInfos,
@@ -60,11 +67,60 @@ namespace VanK
         // 5. Shift firstInstance of subsequent meshes
         for (auto shiftIt = insertIt + 1; shiftIt != s_MeshInfos.end(); ++shiftIt)
         {
-            shiftIt->gpu.firstInstance += gpuInfo.instanceCount;
+            if (shiftIt->pipelineType == pipelineType)
+                shiftIt->gpu.firstInstance += gpuInfo.instanceCount;
         }
     }
     
-    void Geometry::SetFrameInstances
+    void Geometry::SetPBRFrameInstances
+    (
+        const std::string& name,
+        const std::vector<shaderio::InstancedPBRData>& instances
+    )
+    {
+        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
+        {
+            if (s_MeshInfos[i].name == name)
+            {
+                uint32_t& firstInstance = s_MeshInfos[i].gpu.firstInstance;
+                uint32_t oldCount = s_MeshInfos[i].gpu.instanceCount;
+
+                // If this is the first time setting instances for this mesh
+                if (oldCount == 0)
+                {
+                    // Allocate new instance region at the end of s_StorageData
+                    firstInstance = s_PBRData.size();
+
+                    // Grow storage
+                    s_PBRData.resize(firstInstance + instances.size());
+
+                    // New global instance count
+                 
+                    s_TotalInstances += instances.size(); 
+                }
+                else
+                {
+                    // Normal behavior: replace existing region
+                    if (s_PBRData.size() < firstInstance + instances.size())
+                        s_PBRData.resize(firstInstance + instances.size());
+
+                    int32_t sizeDiff = instances.size() - oldCount;
+                    s_TotalInstances += sizeDiff;
+                }
+
+                // Copy data
+                std::copy(instances.begin(), instances.end(),
+                          s_PBRData.begin() + firstInstance);
+
+                // Update mesh count
+                s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
+               
+                return;
+            }
+        }
+    }
+    
+    void Geometry::SetQuadFrameInstances
     (
         const std::string& name,
         const std::vector<shaderio::InstancedQuadData>& instances
@@ -258,6 +314,7 @@ namespace VanK
     
     void Geometry::BeginFrame()
     {
+        s_PBRData.clear();
         s_QuadData.clear();
         s_CircleData.clear();
         s_TextData.clear();

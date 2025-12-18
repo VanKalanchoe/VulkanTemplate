@@ -27,7 +27,8 @@ namespace VanK
     
     struct Renderer3DData
     {
-        std::vector<shaderio::InstancedQuadData> storageInstancesPtr;
+        std::vector<shaderio::InstancedPBRData> pbrInstancesPtr;
+        std::vector<shaderio::InstancedQuadData> quadInstancesPtr;
         std::vector<shaderio::InstancedCircleData> circleInstancesPtr;
         std::vector<shaderio::InstancedTextData> textInstancesPtr;
         std::vector<shaderio::InstancedLineData> lineInstancesPtr;
@@ -193,7 +194,16 @@ namespace VanK
 
     void Renderer::EndScene()
     {
-        Geometry::SetFrameInstances("quad", s_Data.storageInstancesPtr);
+        shaderio::InstancedPBRData storage;
+        storage.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f));
+        storage.color = glm::vec4(1.0f);
+        storage.textureIndex = whiteTexture->GetTextureIndex();
+        storage.EntityID = -1;
+        s_Data.pbrInstancesPtr.emplace_back(storage); // ensure at least one quad to avoid issues
+        
+        Geometry::SetPBRFrameInstances("cube", s_Data.pbrInstancesPtr);
+        
+        Geometry::SetQuadFrameInstances("quad", s_Data.quadInstancesPtr);
         
         Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
  
@@ -210,7 +220,7 @@ namespace VanK
         storage.textureIndex = whiteTexture->GetTextureIndex();
         storage.EntityID = entityID;
         
-        s_Data.storageInstancesPtr.emplace_back(storage);
+        s_Data.quadInstancesPtr.emplace_back(storage);
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
@@ -221,7 +231,7 @@ namespace VanK
         storage.textureIndex = texture->GetTextureIndex();
         storage.EntityID = entityID;
         
-        s_Data.storageInstancesPtr.emplace_back(storage);
+        s_Data.quadInstancesPtr.emplace_back(storage);
     }
 
     void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)
@@ -399,7 +409,8 @@ namespace VanK
 
         // Shader creation
         auto DrawIndirectShader = GetShaderLibrary().Load("DrawIndirectShader", "DrawIndirectShader.slang");
-        auto DebugShader = GetShaderLibrary().Load("DebugShader", "shader.slang");
+        auto PBRShader = GetShaderLibrary().Load("PBRShader", "PBRShader.slang");
+        auto QuadShader = GetShaderLibrary().Load("QuadShader", "QuadShader.slang");
         auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");
         auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
         auto LineShader = GetShaderLibrary().Load("LineShader", "LineShader.slang");
@@ -418,7 +429,6 @@ namespace VanK
 
         VanKPipelineShaderStageCreateInfo ShaderStageCreateInfo
         {
-            .VanKShader = DebugShader,
             .specializationInfo = specInfo
         };
 
@@ -506,10 +516,16 @@ namespace VanK
             .DepthStateInfo = DepthStencilStateCreateInfo,
             .RenderingCreateInfo = RenderingCreateInfo,
         };
+        
+        m_GraphicsPBRPipelineSpecification = GraphicsPipelineSpecification;
+        m_GraphicsPBRPipelineSpecification.ShaderStageCreateInfo.VanKShader = PBRShader;
+        m_GraphicsPBRPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsPBRPipelineSpecification);
+        RegisterPipelineForShaderWatcher("PBRShader", "PBRShader.slang", &m_GraphicsPBRPipelineSpecification, nullptr, &m_GraphicsPBRPipeline, VanKGraphics);
 
         m_GraphicsQuadPipelineSpecification = GraphicsPipelineSpecification;
+        m_GraphicsQuadPipelineSpecification.ShaderStageCreateInfo.VanKShader = QuadShader;
         m_GraphicsQuadPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsQuadPipelineSpecification);
-        RegisterPipelineForShaderWatcher("DebugShader", "shader.slang", &m_GraphicsQuadPipelineSpecification, nullptr, &m_GraphicsQuadPipeline, VanKGraphics);
+        RegisterPipelineForShaderWatcher("QuadShader", "QuadShader.slang", &m_GraphicsQuadPipelineSpecification, nullptr, &m_GraphicsQuadPipeline, VanKGraphics);
         
         m_GraphicsCirclePipelineSpecification = GraphicsPipelineSpecification;
         m_GraphicsCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = CircleShader;
@@ -547,6 +563,7 @@ namespace VanK
         
         pipelines =
         {
+            m_GraphicsPBRPipeline,
             m_GraphicsQuadPipeline,
             m_GraphicsCirclePipeline,
             m_GraphicsTextPipeline,
@@ -562,6 +579,7 @@ namespace VanK
         loadModel();
         /*Geometry::AppendGeometry("model", vertices, indices, TODO);*/
         
+        Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices, shaderio::PipelineType_PBR); // adding this offsets the opther picking why
         Geometry::AppendGeometry("quad", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Quad);
         Geometry::AppendGeometry("circle", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Circle);
         Geometry::AppendGeometry("text", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Text);
@@ -599,16 +617,18 @@ namespace VanK
         m_InstancedVertexBuffer.reset();
         
         m_InstancedIndexBuffer.reset();
-
-        m_InstancedStorageBuffer.reset();
         
-        m_MeshInfoBuffer.reset();
+        m_InstancedPBRBuffer.reset();
+
+        m_InstancedQuadBuffer.reset();
         
         m_InstancedCircleBuffer.reset();
         
         m_InstancedTextBuffer.reset();
         
         m_InstancedLineBuffer.reset();
+        
+        m_MeshInfoBuffer.reset();
     }
     
     void Renderer::CheckPendingVSyncChange()
@@ -647,7 +667,9 @@ namespace VanK
         
         CheckPendingVSyncChange();
         
-        s_Data.storageInstancesPtr.clear();
+        s_Data.pbrInstancesPtr.clear();
+        
+        s_Data.quadInstancesPtr.clear();
         
         s_Data.circleInstancesPtr.clear();
         
@@ -684,7 +706,7 @@ namespace VanK
     {
         ScopeTimer timer("Renderer::DrawFrame");
         
-        if (s_Data.storageInstancesPtr.empty() && s_Data.circleInstancesPtr.empty() && s_Data.textInstancesPtr.empty() && s_Data.lineInstancesPtr.empty())
+        if (s_Data.pbrInstancesPtr.empty() && s_Data.quadInstancesPtr.empty() && s_Data.circleInstancesPtr.empty() && s_Data.textInstancesPtr.empty() && s_Data.lineInstancesPtr.empty())
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
@@ -708,6 +730,9 @@ namespace VanK
         
         const auto& meshData = Geometry::GetMeshes();
         const uint32_t meshCount = static_cast<uint32_t>(meshData.size());
+        
+        const auto& pbrData = Geometry::GetPBRData();
+        const uint32_t pbrCount = static_cast<uint32_t>(pbrData.size());
         
         const auto& quadData = Geometry::GetQuadData();
         const uint32_t quadCount = static_cast<uint32_t>(quadData.size());
@@ -745,12 +770,16 @@ namespace VanK
             if (!m_CountBuffers[p] || m_CountBuffers[p]->GetSize() < sizeof(uint32_t))
                 m_CountBuffers[p].reset(IndirectBuffer::Create(sizeof(uint32_t)));
         }
+        
+        size_t pbrBufferSize = sizeof(shaderio::InstancedPBRData) * std::max(1u, (uint32_t)pbrCount);
+        if (!m_InstancedPBRBuffer || m_InstancedPBRBuffer->GetSize() < pbrBufferSize)
+            m_InstancedPBRBuffer.reset(StorageBuffer::Create(pbrBufferSize));
     
-        size_t storageBufferSize = sizeof(shaderio::InstancedQuadData) * std::max(1u, (uint32_t)quadCount);
-        if (!m_InstancedStorageBuffer || m_InstancedStorageBuffer->GetSize() < storageBufferSize)
-            m_InstancedStorageBuffer.reset(StorageBuffer::Create(storageBufferSize));
+        size_t quadBufferSize = sizeof(shaderio::InstancedQuadData) * std::max(1u, (uint32_t)quadCount);
+        if (!m_InstancedQuadBuffer || m_InstancedQuadBuffer->GetSize() < quadBufferSize)
+            m_InstancedQuadBuffer.reset(StorageBuffer::Create(quadBufferSize));
     
-        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)lineCount);
+        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)circleCount);
         if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < CircleBufferSize)
             m_InstancedCircleBuffer.reset(StorageBuffer::Create(CircleBufferSize));
     
@@ -766,7 +795,7 @@ namespace VanK
         if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshInfoBufferSize)
             m_MeshInfoBuffer.reset(StorageBuffer::Create(meshInfoBufferSize));
     
-        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBuffersSize + countBuffersSize + storageBufferSize + CircleBufferSize + TextBufferSize + LineBufferSize + meshInfoBufferSize;
+        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBuffersSize + countBuffersSize + pbrBufferSize + quadBufferSize + CircleBufferSize + TextBufferSize + LineBufferSize + meshInfoBufferSize;
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
 
@@ -774,7 +803,9 @@ namespace VanK
 
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
 
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedStorageBuffer, quadData, shaderio::InstancedQuadData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedPBRBuffer, pbrData, shaderio::InstancedPBRData, 0);
+        
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedQuadBuffer, quadData, shaderio::InstancedQuadData, 0);
         
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, circleData, shaderio::InstancedCircleData, 0);
         
@@ -801,7 +832,8 @@ namespace VanK
         }
         
         s_Data.SceneData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
-        s_Data.SceneData.storageAddress = m_InstancedStorageBuffer->GetBufferAddress();
+        s_Data.SceneData.pbrAddress = m_InstancedPBRBuffer->GetBufferAddress();
+        s_Data.SceneData.quadAddress = m_InstancedQuadBuffer->GetBufferAddress();
         s_Data.SceneData.meshInfoAddress = m_MeshInfoBuffer->GetBufferAddress();
         s_Data.SceneData.circleAddress = m_InstancedCircleBuffer->GetBufferAddress();
         s_Data.SceneData.textAddress = m_InstancedTextBuffer->GetBufferAddress();

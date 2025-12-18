@@ -23,11 +23,12 @@ STATIC_CONST int LBindSceneInfo = 0;
 
 enum PipelineType 
 {
-    PipelineType_Quad   = 0,
-    PipelineType_Circle = 1,
-    PipelineType_Text   = 2,
-    PipelineType_Line   = 3,
-    PipelineType_Count  = 4
+    PipelineType_PBR   = 0,
+    PipelineType_Quad   = 1,
+    PipelineType_Circle = 2,
+    PipelineType_Text   = 3,
+    PipelineType_Line   = 4,
+    PipelineType_Count  = 5
 };
 
 struct MeshInfo
@@ -44,15 +45,17 @@ struct SceneInfo
 {
     mat4 view;
     mat4 proj;
-    uint64_t indirectAddresses[4];
-    uint64_t countAddresses[4];
+    uint64_t indirectAddresses[5];
+    uint64_t countAddresses[5];
     uint64_t vertexAddress;
-    uint64_t storageAddress;
+    uint64_t pbrAddress;
+    uint64_t quadAddress;
     uint64_t meshInfoAddress;
     uint64_t circleAddress;
     uint64_t textAddress;
     uint64_t lineAddress;
     uint32_t numMeshes;
+    uint32_t numMeshe2;
 };
 
 struct InstancedIndexData
@@ -107,6 +110,16 @@ struct InstancedCircleData
 };
 
 struct InstancedQuadData
+{
+    mat4 Model;
+    vec4 color;
+    uint32_t textureIndex;
+
+    // Editor-only
+    int EntityID;
+};
+
+struct InstancedPBRData
 {
     mat4 Model;
     vec4 color;

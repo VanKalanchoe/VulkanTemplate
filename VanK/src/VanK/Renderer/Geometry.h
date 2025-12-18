@@ -26,7 +26,8 @@ namespace VanK
     {
     public:
         static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices, shaderio::PipelineType pipelineType);
-        static void SetFrameInstances(const std::string& name, const std::vector<shaderio::InstancedQuadData>& instances);
+        static void SetPBRFrameInstances(const std::string& name, const std::vector<shaderio::InstancedPBRData>& instances);
+        static void SetQuadFrameInstances(const std::string& name, const std::vector<shaderio::InstancedQuadData>& instances);
         static void SetCircleFrameInstances(const std::string& name, const std::vector<shaderio::InstancedCircleData>& instances);
         static void SetTextFrameInstances(const std::string& name, const std::vector<shaderio::InstancedTextData>& instances);
         static void SetLineFrameInstances(const std::string& name, const std::vector<shaderio::InstancedLineData>& instances);
@@ -43,6 +44,7 @@ namespace VanK
             UpdateGpuMeshCache(); // Ensure cache is sync'd
             return s_MeshCache; 
         }
+        static const std::vector<shaderio::InstancedPBRData>& GetPBRData() { return s_PBRData; }
         static const std::vector<shaderio::InstancedQuadData>& GetQuadData() { return s_QuadData; }
         static const std::vector<shaderio::InstancedCircleData>& GetCircleData() { return s_CircleData; }
         static const std::vector<shaderio::InstancedTextData>& GetTextData() { return s_TextData; }
@@ -53,6 +55,7 @@ namespace VanK
         static std::vector<CpuMeshInfo> s_MeshInfos;
         static std::vector<shaderio::InstancedVertexData> s_Vertices;
         static std::vector<uint32_t> s_Indices;
+        static std::vector<shaderio::InstancedPBRData> s_PBRData;
         static std::vector<shaderio::InstancedQuadData> s_QuadData;
         static std::vector<shaderio::InstancedCircleData> s_CircleData;
         static std::vector<shaderio::InstancedTextData> s_TextData;

@@ -54,8 +54,8 @@ VertexOutput vertexMain(uint vertexID : SV_VertexID, uint instanceID : SV_Instan
     InstancedVertexData* vertex = (InstancedVertexData*)ubo.vertexAddress;
     InstancedVertexData vertexData = vertex[vertexID + meshInfoData.vertexOffset];
 
-    InstancedStorageData* storage = (InstancedStorageData*)ubo.storageAddress;
-    InstancedStorageData storageData = storage[instanceID + meshInfoData.firstInstance];
+    InstancedQuadData* storage = (InstancedQuadData*)ubo.quadAddress;
+    InstancedQuadData storageData = storage[instanceID + meshInfoData.firstInstance];
 
     output.pos = mul(ubo.proj, mul(ubo.view, mul(storageData.Model, float4(vertexData.position, 1.0))));
     output.fragTexCoord = vertexData.texcoords.xy;
