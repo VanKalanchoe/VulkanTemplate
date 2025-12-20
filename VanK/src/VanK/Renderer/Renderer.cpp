@@ -28,12 +28,9 @@ namespace VanK
     
     struct Renderer3DData
     {
-        /*std::vector<shaderio::InstancedPBRData> pbrInstancesPt2r;
-        std::vector<shaderio::InstancedPBRData> pbrInstancesPtr;
-        std::vector<shaderio::InstancedQuadData> quadInstancesPtr;
-        std::vector<shaderio::InstancedCircleData> circleInstancesPtr;
-        std::vector<shaderio::InstancedTextData> textInstancesPtr;
-        std::vector<shaderio::InstancedLineData> lineInstancesPtr;*/
+        MeshHandle vikingHandle;
+        MeshHandle cubeHandle;
+        MeshHandle quadHandle;
         
         shaderio::SceneInfo SceneData;
         
@@ -179,9 +176,6 @@ namespace VanK
         
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
-        
-        /*
-        Geometry::BeginFrame();*/
     }
     
     void Renderer::BeginScene(const EditorCamera& camera)
@@ -191,55 +185,58 @@ namespace VanK
         
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
-        
-        /*Geometry::BeginFrame();*/
     }
 
     void Renderer::EndScene()
     {
-        /*shaderio::InstancedPBRData storage;
-        storage.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f));
-        storage.color = glm::vec4(1.0f);
-        storage.textureIndex = whiteTexture->GetTextureIndex();
-        storage.EntityID = -1;
-        s_Data.pbrInstancesPtr.emplace_back(storage); // ensure at least one quad to avoid issues
-        shaderio::InstancedPBRData storag2e;
-        storag2e.Model = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f));
-        storag2e.color = glm::vec4(1.0f);
-        storag2e.textureIndex = vikingRoom->GetTextureIndex();
-        storag2e.EntityID = -1;
-        s_Data.pbrInstancesPt2r.emplace_back(storag2e); // ensure at least one quad to avoid issues
-        Geometry::SetPBRFrameInstances("cube", s_Data.pbrInstancesPtr);
-        Geometry::SetPBRFrameInstances("model", s_Data.pbrInstancesPt2r);
-        Geometry::SetQuadFrameInstances("quad", s_Data.quadInstancesPtr);
+        shaderio::InstancedPBRData inst1;
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(0,1,0)); // rotate around Y axis
+        inst1.Model = model;
+        inst1.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        inst1.textureIndex = vikingRoom->GetTextureIndex();
+        inst1.EntityID = -1;
         
-        Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
- 
-        Geometry::SetTextFrameInstances("text", s_Data.textInstancesPtr);
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst1);
         
-        Geometry::SetLineFrameInstances("line", s_Data.lineInstancesPtr);*/
+        shaderio::InstancedPBRData inst2;
+        inst2.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+        inst2.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        inst2.textureIndex = whiteTexture->GetTextureIndex();
+        inst2.EntityID = -1;
+        
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.cubeHandle, inst2);
+        /*
+        shaderio::InstancedPBRData inst3;
+        inst3.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        inst3.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        inst3.textureIndex = vikingRoom->GetTextureIndex();
+        inst3.EntityID = -1;
+        
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, viking, inst3);
+        */
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
     {
-        shaderio::InstancedQuadData storage;
-        storage.Model = transform;
-        storage.color = color;
-        storage.textureIndex = whiteTexture->GetTextureIndex();
-        storage.EntityID = entityID;
+        shaderio::InstancedQuadData instance;
+        instance.Model = transform;
+        instance.color = color;
+        instance.textureIndex = whiteTexture->GetTextureIndex();
+        instance.EntityID = entityID;
         
-        /*s_Data.quadInstancesPtr.emplace_back(storage);*/
+        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
     {
-        shaderio::InstancedQuadData storage;
-        storage.Model = transform;
-        storage.color = tintColor;
-        storage.textureIndex = texture->GetTextureIndex();
-        storage.EntityID = entityID;
+        shaderio::InstancedQuadData instance;
+        instance.Model = transform;
+        instance.color = tintColor;
+        instance.textureIndex = texture->GetTextureIndex();
+        instance.EntityID = entityID;
         
-        /*s_Data.quadInstancesPtr.emplace_back(storage);*/
+        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);
     }
 
     void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)
@@ -594,46 +591,9 @@ namespace VanK
         Geometry::AppendGeometry("text", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Text);
         Geometry::AppendGeometry("line", GeometryData::lineVertices, GeometryData::lineIndices, shaderio::PipelineType_Line);*/
         
-        MeshHandle viking = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
-        MeshHandle cube = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, GeometryData::cubeVertices, GeometryData::cubeIndices);
-        MeshHandle quad = RegistryMesh::registerMesh(shaderio::PipelineType_Quad, GeometryData::quadVertices, GeometryData::quadIndices);
-        std::cout << std::dec << "vikingvert: " << vertices.size() << " vikingindic: " << indices.size() << std::endl;
-        std::cout << std::dec << "cubevert: " << GeometryData::cubeVertices.size() << " cubeindic: " << GeometryData::cubeIndices.size() << std::endl;
-        std::cout << std::dec << "quadvert: " << GeometryData::quadVertices.size() << " quadindic: " << GeometryData::quadIndices.size() << std::endl;
-        
-        shaderio::InstancedPBRData inst1;
-        glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(0,1,0)); // rotate around Y axis
-        inst1.Model = model;
-        inst1.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        inst1.textureIndex = vikingRoom->GetTextureIndex();
-        inst1.EntityID = -1;
-        
-        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, viking, inst1);
-        
-        shaderio::InstancedPBRData inst2;
-        inst2.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
-        inst2.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        inst2.textureIndex = whiteTexture->GetTextureIndex();
-        inst2.EntityID = -1;
-        
-        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, cube, inst2);
-        /*
-        shaderio::InstancedPBRData inst3;
-        inst3.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-        inst3.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        inst3.textureIndex = vikingRoom->GetTextureIndex();
-        inst3.EntityID = -1;
-        
-        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, viking, inst3);
-        */
-        shaderio::InstancedQuadData inst4;
-        inst4.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f));
-        inst4.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
-        inst4.textureIndex = whiteTexture->GetTextureIndex();
-        inst4.EntityID = -1;
-        
-        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, quad, inst4);
+        s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
+        s_Data.cubeHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, GeometryData::cubeVertices, GeometryData::cubeIndices);
+        s_Data.quadHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Quad, GeometryData::quadVertices, GeometryData::quadIndices);
         
         RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_PBR);
         RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_Quad);
@@ -706,10 +666,16 @@ namespace VanK
         cmd = RenderCommand::BeginCommandBuffer();
         if (!cmd)
             SDL_Log("AcquireGPUCommandBuffer failed: %s", SDL_GetError());
+        
+        RegistryMesh::clearAllInstances();
     }
 
     void Renderer::EndSubmit()
     {
+        RegistryMesh::rebuildInstances<shaderio::InstancedPBRData>(shaderio::PipelineType_PBR);
+        
+        RegistryMesh::rebuildInstances<shaderio::InstancedQuadData>(shaderio::PipelineType_Quad);
+        
         Flush();
         
         RenderCommand::SubmitRendering(cmd);
@@ -719,16 +685,6 @@ namespace VanK
         RenderCommand::EndFrame();
         
         CheckPendingVSyncChange();
-        
-        /*s_Data.pbrInstancesPtr.clear();
-        s_Data.pbrInstancesPt2r.clear();
-        s_Data.quadInstancesPtr.clear();
-        
-        s_Data.circleInstancesPtr.clear();
-        
-        s_Data.textInstancesPtr.clear();
-        
-        s_Data.lineInstancesPtr.clear();*/
     }
     
     void Renderer::Flush()

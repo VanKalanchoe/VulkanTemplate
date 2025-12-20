@@ -51,7 +51,11 @@ namespace VanK
         static MeshHandle registerMesh(shaderio::PipelineType pipelineType, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices);
         template<typename InstanceType>
         static void registerInstance(shaderio::PipelineType pipelineType, MeshHandle meshHandle, InstanceType& instance);
-        
+        static void clearAllInstances();
+        static void clearInstances();
+        template<typename InstanceType>
+        static void rebuildInstances(shaderio::PipelineType pipeline);
+
     public:
         static bool hasDraws() { return hasAnyDraws; }
         static std::vector<shaderio::InstancedVertexData>& getVertices() { return globalVertices; }
@@ -98,24 +102,46 @@ namespace VanK
     void RegistryMesh::registerInstance(shaderio::PipelineType pipelineType, MeshHandle meshHandle, InstanceType& instance)
     {
         meshInstances<InstanceType>[meshHandle].push_back(instance);
+    }
+    
+    inline void RegistryMesh::clearAllInstances() 
+    { 
+        meshInstances<shaderio::InstancedPBRData>.clear(); 
+        meshInstances<shaderio::InstancedQuadData>.clear(); 
+        /*meshInstances<shaderio::InstancedLineData>.clear(); 
+         meshInstances<shaderio::InstancedTextData>.clear();*/ // etc 
+    }
+
+    inline void RegistryMesh::clearInstances()
+    {
         
-        uint32_t meshID = meshHandle.meshHandle;
-        auto& meshes = meshInfos[pipelineType];
-        meshes[meshID].instanceCount = static_cast<uint32_t>(meshInstances<InstanceType>[meshHandle].size());
-        
-        if (meshID == 0)
-            meshes[0].firstInstance = 0;
-        else
-            meshes[meshID].firstInstance = meshes[meshID - 1].firstInstance + meshes[meshID - 1].instanceCount;
-        
-        uint32_t cumulative = meshes[meshID].firstInstance + meshes[meshID].instanceCount;
-        for (size_t i = meshID + 1; i < meshes.size(); ++i)
+        for (auto& [pipeline, meshes] : meshInfos)
         {
-            meshes[i].firstInstance = cumulative;
-            cumulative += meshes[i].instanceCount;
-        }
-        
-        hasAnyDraws = true;
+            for (auto& mesh : meshes)
+            {
+                mesh.instanceCount = 0; 
+                mesh.firstInstance = 0;
+            }
+        } 
+        clearAllInstances(); 
+        hasAnyDraws = false;
+    }
+    
+    template<typename InstanceType>
+    void RegistryMesh::rebuildInstances(shaderio::PipelineType pipeline)
+    {
+        auto& meshes = meshInfos[pipeline]; 
+        uint32_t firstInstance = 0; 
+        for (uint32_t i = 0; i < meshes.size(); i++)
+        {
+            MeshHandle h{ pipeline, i }; 
+            auto it = meshInstances<InstanceType>.find(h); 
+            uint32_t count = (it != meshInstances<InstanceType>.end()) ? uint32_t(it->second.size()) : 0; 
+            meshes[i].firstInstance = firstInstance; 
+            meshes[i].instanceCount = count; 
+            firstInstance += count;
+        } 
+        if (firstInstance > 0) hasAnyDraws = true;
     }
 
     namespace GeometryData
