@@ -33,7 +33,7 @@ Entities:
     TagComponent:
       Tag: entity1
     TransformComponent:
-      Translation: [0, 0, 0]
+      Translation: [-1.39999998, 0, 0]
       Rotation: [0, 0, 0]
       Scale: [1, 1, 1]
     SpriteRendererComponent:

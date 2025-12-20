@@ -33,11 +33,11 @@ enum PipelineType
 
 struct MeshInfo
 {
-    uint32_t indexCount;    // number of indices for this mesh
-    uint32_t instanceCount; // how many instances of this mesh you want
-    uint32_t firstIndex;    // starting index in the global index buffer
-    uint32_t vertexOffset;  // vertex base offset
-    uint32_t firstInstance; // optional, for indirect draw
+    uint32_t indexCount;
+    uint32_t instanceCount;
+    uint32_t firstIndex;
+    uint32_t vertexOffset;
+    uint32_t firstInstance;
     uint32_t pipelineType;
 };
 

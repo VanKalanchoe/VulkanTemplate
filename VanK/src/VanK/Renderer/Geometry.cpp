@@ -1,10 +1,11 @@
+/*
 #include "Geometry.h"
 
 #include "Renderer.h"
 #include "VanK/Core/Log.h"
 
 namespace VanK
-{
+{std::unordered_map<std::string, std::vector<VanK::shaderio::InstancedPBRData>> VanK::Geometry::s_PBRMeshData{};
     std::vector<shaderio::MeshInfo> Geometry::s_MeshCache{};
     std::vector<CpuMeshInfo> Geometry::s_MeshInfos{};
     std::vector<shaderio::InstancedVertexData> Geometry::s_Vertices{};
@@ -27,98 +28,82 @@ namespace VanK
         }
     }
     
-    void Geometry::AppendGeometry
-    (
-        const std::string& name,
-        const std::vector<shaderio::InstancedVertexData>& vertices,
-        const std::vector<uint32_t>& indices,
-        shaderio::PipelineType pipelineType
-    )
+    void Geometry::AppendGeometry(
+    const std::string& name,
+    const std::vector<shaderio::InstancedVertexData>& vertices,
+    const std::vector<uint32_t>& indices,
+    shaderio::PipelineType pipelineType)
     {
-        // 1. Fill the GPU Info
-        shaderio::MeshInfo gpuInfo;
+        shaderio::MeshInfo gpuInfo{};
         gpuInfo.indexCount = static_cast<uint32_t>(indices.size());
         gpuInfo.instanceCount = 0;
-        gpuInfo.firstIndex = s_Indices.size();
-        gpuInfo.vertexOffset = s_Vertices.size();
         gpuInfo.firstInstance = 0;
         gpuInfo.pipelineType = pipelineType;
-        // 2. Append the Data
+
+        // Each mesh gets its own vertexOffset and firstIndex
+        gpuInfo.vertexOffset = static_cast<uint32_t>(s_Vertices.size());
+        gpuInfo.firstIndex  = static_cast<uint32_t>(s_Indices.size());
+
+        // Append vertices for this mesh
         s_Vertices.insert(s_Vertices.end(), vertices.begin(), vertices.end());
-        if (pipelineType == shaderio::PipelineType_Line)
-        {
+
+        // Append indices with proper offset
+        s_Indices.reserve(s_Indices.size() + indices.size());
+        if (pipelineType == shaderio::PipelineType_Line) {
             s_Indices.insert(s_Indices.end(), indices.begin(), indices.end());
-        }
-        else
-        {
+        } else {
             for (uint32_t i : indices)
                 s_Indices.push_back(i + gpuInfo.vertexOffset);
         }
 
-        // 3. Find insertion point by pipeline type (using std::find_if)
-        auto insertIt = std::ranges::find_if(s_MeshInfos,
-                                             [&](const CpuMeshInfo& info) {
-                                                 return info.pipelineType > pipelineType;
-                                             });
-
-        // 4. Insert the new mesh in sorted order
-        insertIt = s_MeshInfos.insert(insertIt, CpuMeshInfo{name, gpuInfo, pipelineType});
-
-        // 5. Shift firstInstance of subsequent meshes
-        for (auto shiftIt = insertIt + 1; shiftIt != s_MeshInfos.end(); ++shiftIt)
-        {
-            if (shiftIt->pipelineType == pipelineType)
-                shiftIt->gpu.firstInstance += gpuInfo.instanceCount;
-        }
+        // Add to CPU mesh list
+        s_MeshInfos.push_back(CpuMeshInfo{name, gpuInfo, pipelineType});
     }
-    
-    void Geometry::SetPBRFrameInstances
-    (
-        const std::string& name,
-        const std::vector<shaderio::InstancedPBRData>& instances
-    )
-    {
-        for (size_t i = 0; i < s_MeshInfos.size(); ++i)
-        {
-            if (s_MeshInfos[i].name == name)
-            {
-                uint32_t& firstInstance = s_MeshInfos[i].gpu.firstInstance;
-                uint32_t oldCount = s_MeshInfos[i].gpu.instanceCount;
 
-                // If this is the first time setting instances for this mesh
+
+
+    void Geometry::SetPBRFrameInstances(
+     const std::string& name,
+     const std::vector<shaderio::InstancedPBRData>& instances)
+    {
+        bool updated = false;
+        for (auto& mesh : s_MeshInfos)
+        {
+            if (mesh.name == name && mesh.pipelineType == shaderio::PipelineType_PBR)
+            {
+                uint32_t& firstInstance = mesh.gpu.firstInstance;
+                uint32_t oldCount = mesh.gpu.instanceCount;
+
                 if (oldCount == 0)
                 {
-                    // Allocate new instance region at the end of s_StorageData
-                    firstInstance = s_PBRData.size();
-
-                    // Grow storage
-                    s_PBRData.resize(firstInstance + instances.size());
-
-                    // New global instance count
-                 
-                    s_TotalInstances += instances.size(); 
+                    firstInstance = static_cast<uint32_t>(s_PBRData.size());
+                    s_PBRData.insert(s_PBRData.end(), instances.begin(), instances.end());
                 }
                 else
                 {
-                    // Normal behavior: replace existing region
                     if (s_PBRData.size() < firstInstance + instances.size())
                         s_PBRData.resize(firstInstance + instances.size());
 
-                    int32_t sizeDiff = instances.size() - oldCount;
-                    s_TotalInstances += sizeDiff;
+                    std::copy(instances.begin(), instances.end(), s_PBRData.begin() + firstInstance);
                 }
 
-                // Copy data
-                std::copy(instances.begin(), instances.end(),
-                          s_PBRData.begin() + firstInstance);
-
-                // Update mesh count
-                s_MeshInfos[i].gpu.instanceCount = (uint32_t)instances.size();
-               
-                return;
+                mesh.gpu.instanceCount = static_cast<uint32_t>(instances.size());
+                s_TotalInstances += instances.size() - oldCount;
+                updated = true;
+                // continue looping to update other meshes with the same name if needed
             }
         }
+
+        if (!updated)
+        {
+            // fallback for meshes not yet appended
+            s_PBRMeshData[name] = instances;
+        }
     }
+
+
+
+
     
     void Geometry::SetQuadFrameInstances
     (
@@ -326,3 +311,4 @@ namespace VanK
             mesh.gpu.instanceCount = 0;
     }
 }
+*/

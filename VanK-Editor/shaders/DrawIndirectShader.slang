@@ -17,8 +17,8 @@ void compMain(uint3 GlobalInvocationID : SV_DispatchThreadID)
     MeshInfo* meshInfo = (MeshInfo*)ubo.meshInfoAddress;
     MeshInfo meshInfoData = meshInfo[meshIndex];
 
-    if (meshInfoData.instanceCount == 0)
-        return;
+   /*  if (meshInfoData.instanceCount == 0)
+        return; */
 
     uint32_t pipelineType = meshInfoData.pipelineType;
 

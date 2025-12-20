@@ -5,7 +5,7 @@
 #include "FileWatch.h"
 #include "VanK/Core/core.h"
 
-#include "Geometry.h"
+#include "RegistryMesh.h"
 #include "VanK/Asset/TextureImporter.h"
 #include "VanK/Scene/Components.h"
 

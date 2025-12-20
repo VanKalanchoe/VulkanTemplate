@@ -15,6 +15,7 @@
 #include <tiny_gltf.h>
 
 #include "MSDFData.h"
+#include "RegistryMesh.h"
 #include "VanK/Asset/AssetManager.h"
 
 namespace VanK
@@ -27,11 +28,12 @@ namespace VanK
     
     struct Renderer3DData
     {
+        /*std::vector<shaderio::InstancedPBRData> pbrInstancesPt2r;
         std::vector<shaderio::InstancedPBRData> pbrInstancesPtr;
         std::vector<shaderio::InstancedQuadData> quadInstancesPtr;
         std::vector<shaderio::InstancedCircleData> circleInstancesPtr;
         std::vector<shaderio::InstancedTextData> textInstancesPtr;
-        std::vector<shaderio::InstancedLineData> lineInstancesPtr;
+        std::vector<shaderio::InstancedLineData> lineInstancesPtr;*/
         
         shaderio::SceneInfo SceneData;
         
@@ -178,7 +180,8 @@ namespace VanK
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
         
-        Geometry::BeginFrame();
+        /*
+        Geometry::BeginFrame();*/
     }
     
     void Renderer::BeginScene(const EditorCamera& camera)
@@ -189,27 +192,32 @@ namespace VanK
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
         
-        Geometry::BeginFrame();
+        /*Geometry::BeginFrame();*/
     }
 
     void Renderer::EndScene()
     {
-        shaderio::InstancedPBRData storage;
+        /*shaderio::InstancedPBRData storage;
         storage.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f));
         storage.color = glm::vec4(1.0f);
         storage.textureIndex = whiteTexture->GetTextureIndex();
         storage.EntityID = -1;
         s_Data.pbrInstancesPtr.emplace_back(storage); // ensure at least one quad to avoid issues
-        
+        shaderio::InstancedPBRData storag2e;
+        storag2e.Model = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f));
+        storag2e.color = glm::vec4(1.0f);
+        storag2e.textureIndex = vikingRoom->GetTextureIndex();
+        storag2e.EntityID = -1;
+        s_Data.pbrInstancesPt2r.emplace_back(storag2e); // ensure at least one quad to avoid issues
         Geometry::SetPBRFrameInstances("cube", s_Data.pbrInstancesPtr);
-        
+        Geometry::SetPBRFrameInstances("model", s_Data.pbrInstancesPt2r);
         Geometry::SetQuadFrameInstances("quad", s_Data.quadInstancesPtr);
         
         Geometry::SetCircleFrameInstances("circle", s_Data.circleInstancesPtr);
  
         Geometry::SetTextFrameInstances("text", s_Data.textInstancesPtr);
         
-        Geometry::SetLineFrameInstances("line", s_Data.lineInstancesPtr);
+        Geometry::SetLineFrameInstances("line", s_Data.lineInstancesPtr);*/
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
@@ -220,7 +228,7 @@ namespace VanK
         storage.textureIndex = whiteTexture->GetTextureIndex();
         storage.EntityID = entityID;
         
-        s_Data.quadInstancesPtr.emplace_back(storage);
+        /*s_Data.quadInstancesPtr.emplace_back(storage);*/
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
@@ -231,7 +239,7 @@ namespace VanK
         storage.textureIndex = texture->GetTextureIndex();
         storage.EntityID = entityID;
         
-        s_Data.quadInstancesPtr.emplace_back(storage);
+        /*s_Data.quadInstancesPtr.emplace_back(storage);*/
     }
 
     void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)
@@ -256,7 +264,7 @@ namespace VanK
         circle.Fade = fade;
         circle.EntityID = entityID;
         
-        s_Data.circleInstancesPtr.emplace_back(circle);
+        /*s_Data.circleInstancesPtr.emplace_back(circle);*/
     }
 
     void Renderer::DrawString(const std::string& string, Ref<Font> font, const glm::mat4& transform, const TextParams& textParams, int entityID)
@@ -344,7 +352,7 @@ namespace VanK
             inst.TextureIndex = fontAtlas->GetTextureIndex();
             inst.EntityID = entityID;
 
-            s_Data.textInstancesPtr.emplace_back(inst);
+            /*s_Data.textInstancesPtr.emplace_back(inst);*/
             
             if (i < string.size() - 1)
             {
@@ -370,7 +378,7 @@ namespace VanK
         line.Color = color;
         line.EntityID = entityID;
         
-        s_Data.lineInstancesPtr.emplace_back(line);
+        /*s_Data.lineInstancesPtr.emplace_back(line);*/
     }
 
     void Renderer::DrawRect(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color, int entityID)
@@ -578,12 +586,57 @@ namespace VanK
         
         loadModel();
         /*Geometry::AppendGeometry("model", vertices, indices, TODO);*/
-        
-        Geometry::AppendGeometry("cube", GeometryData::cubeVertices, GeometryData::cubeIndices, shaderio::PipelineType_PBR); // adding this offsets the opther picking why
+        /*Geometry::AppendGeometry("cube",  GeometryData::cubeVertices,  GeometryData::cubeIndices, shaderio::PipelineType_PBR);
+        Geometry::AppendGeometry("model", vertices, indices, shaderio::PipelineType_PBR);
+         // adding this offsets the opther picking why
         Geometry::AppendGeometry("quad", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Quad);
         Geometry::AppendGeometry("circle", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Circle);
         Geometry::AppendGeometry("text", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Text);
-        Geometry::AppendGeometry("line", GeometryData::lineVertices, GeometryData::lineIndices, shaderio::PipelineType_Line);
+        Geometry::AppendGeometry("line", GeometryData::lineVertices, GeometryData::lineIndices, shaderio::PipelineType_Line);*/
+        
+        MeshHandle viking = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
+        MeshHandle cube = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, GeometryData::cubeVertices, GeometryData::cubeIndices);
+        MeshHandle quad = RegistryMesh::registerMesh(shaderio::PipelineType_Quad, GeometryData::quadVertices, GeometryData::quadIndices);
+        std::cout << std::dec << "vikingvert: " << vertices.size() << " vikingindic: " << indices.size() << std::endl;
+        std::cout << std::dec << "cubevert: " << GeometryData::cubeVertices.size() << " cubeindic: " << GeometryData::cubeIndices.size() << std::endl;
+        std::cout << std::dec << "quadvert: " << GeometryData::quadVertices.size() << " quadindic: " << GeometryData::quadIndices.size() << std::endl;
+        
+        shaderio::InstancedPBRData inst1;
+        glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(0,1,0)); // rotate around Y axis
+        inst1.Model = model;
+        inst1.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        inst1.textureIndex = vikingRoom->GetTextureIndex();
+        inst1.EntityID = -1;
+        
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, viking, inst1);
+        
+        shaderio::InstancedPBRData inst2;
+        inst2.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+        inst2.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        inst2.textureIndex = whiteTexture->GetTextureIndex();
+        inst2.EntityID = -1;
+        
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, cube, inst2);
+        /*
+        shaderio::InstancedPBRData inst3;
+        inst3.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        inst3.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        inst3.textureIndex = vikingRoom->GetTextureIndex();
+        inst3.EntityID = -1;
+        
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, viking, inst3);
+        */
+        shaderio::InstancedQuadData inst4;
+        inst4.Model = glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f));
+        inst4.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        inst4.textureIndex = whiteTexture->GetTextureIndex();
+        inst4.EntityID = -1;
+        
+        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, quad, inst4);
+        
+        RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_PBR);
+        RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_Quad);
         
         // 4            4        156         152                   152
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
@@ -667,15 +720,15 @@ namespace VanK
         
         CheckPendingVSyncChange();
         
-        s_Data.pbrInstancesPtr.clear();
-        
+        /*s_Data.pbrInstancesPtr.clear();
+        s_Data.pbrInstancesPt2r.clear();
         s_Data.quadInstancesPtr.clear();
         
         s_Data.circleInstancesPtr.clear();
         
         s_Data.textInstancesPtr.clear();
         
-        s_Data.lineInstancesPtr.clear();
+        s_Data.lineInstancesPtr.clear();*/
     }
     
     void Renderer::Flush()
@@ -706,7 +759,7 @@ namespace VanK
     {
         ScopeTimer timer("Renderer::DrawFrame");
         
-        if (s_Data.pbrInstancesPtr.empty() && s_Data.quadInstancesPtr.empty() && s_Data.circleInstancesPtr.empty() && s_Data.textInstancesPtr.empty() && s_Data.lineInstancesPtr.empty())
+        if (!RegistryMesh::hasDraws())
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
@@ -728,102 +781,65 @@ namespace VanK
             return;
         }
         
-        const auto& meshData = Geometry::GetMeshes();
-        const uint32_t meshCount = static_cast<uint32_t>(meshData.size());
+        auto& globalVertices = RegistryMesh::getVertices();
+        uint64_t vertexSize = sizeof(shaderio::InstancedVertexData) * std::max(1ull, globalVertices.size());
+        if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexSize)
+            m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexSize));
         
-        const auto& pbrData = Geometry::GetPBRData();
-        const uint32_t pbrCount = static_cast<uint32_t>(pbrData.size());
+        auto& globalIndices = RegistryMesh::getIndices();
+        uint64_t indexSize = sizeof(uint32_t) * std::max(1ull, globalIndices.size());
+        if (!m_InstancedIndexBuffer || m_InstancedIndexBuffer->GetSize() < indexSize)
+            m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexSize));
         
-        const auto& quadData = Geometry::GetQuadData();
-        const uint32_t quadCount = static_cast<uint32_t>(quadData.size());
+        auto pbrInstances = RegistryMesh::getInstances<shaderio::InstancedPBRData>(shaderio::PipelineType_PBR);
+        uint64_t pbrSize = sizeof(shaderio::InstancedPBRData) * std::max(1ull, pbrInstances.size());
+        if (!m_InstancedPBRBuffer || m_InstancedPBRBuffer->GetSize() < pbrSize)
+            m_InstancedPBRBuffer.reset(StorageBuffer::Create(pbrSize));
         
-        const auto& circleData = Geometry::GetCircleData();
-        const uint32_t circleCount = static_cast<uint32_t>(circleData.size());
+        auto quadInstances = RegistryMesh::getInstances<shaderio::InstancedQuadData>(shaderio::PipelineType_Quad);
+        uint64_t quadSize = sizeof(shaderio::InstancedQuadData) * std::max(1ull, quadInstances.size());
+        if (!m_InstancedQuadBuffer || m_InstancedQuadBuffer->GetSize() < quadSize)
+            m_InstancedQuadBuffer.reset(StorageBuffer::Create(quadSize));
         
-        const auto& textData = Geometry::GetTextData();
-        const uint32_t textCount = static_cast<uint32_t>(textData.size());
-        
-        const auto& lineData = Geometry::GetLineData();
-        const uint32_t lineCount = static_cast<uint32_t>(lineData.size());
-        
-        size_t vertexBufferSize = sizeof(shaderio::InstancedVertexData) * Geometry::GetVertices().size();
-        if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexBufferSize)
-            m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexBufferSize));
-    
-        size_t indexBufferSize = sizeof(shaderio::InstancedIndexData) * Geometry::GetIndices().size();
-        if (!m_InstancedIndexBuffer || m_InstancedIndexBuffer->GetSize() < indexBufferSize)
-            m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexBufferSize));
-    
-        size_t indirectBuffersSize = sizeof(shaderio::DrawIndexedIndirectCommand) * std::max(1u, meshCount);
-        for (size_t p = 0; p < (size_t)shaderio::PipelineType_Count; p++)
-        {
-            size_t maxDraws = meshCount; // safe upper bound
-            size_t size = sizeof(shaderio::DrawIndexedIndirectCommand) * maxDraws;
-
-            if (!m_IndirectBuffers[p] || m_IndirectBuffers[p]->GetSize() < size)
-                m_IndirectBuffers[p].reset(IndirectBuffer::Create(size));
-        }
-        
+        std::vector<shaderio::MeshInfo> allMeshInfos;
         size_t countBuffersSize = sizeof(uint32_t) * (size_t)shaderio::PipelineType_Count;
-        for (size_t p = 0; p < (size_t)shaderio::PipelineType_Count; p++)
+        for (uint32_t p = 0; p < static_cast<uint32_t>(shaderio::PipelineType_Count); ++p)
         {
+            auto& meshes = RegistryMesh::getMeshInfo(static_cast<shaderio::PipelineType>(p));
+            allMeshInfos.insert(allMeshInfos.end(), meshes.begin(), meshes.end());
+            
             if (!m_CountBuffers[p] || m_CountBuffers[p]->GetSize() < sizeof(uint32_t))
                 m_CountBuffers[p].reset(IndirectBuffer::Create(sizeof(uint32_t)));
         }
+        uint64_t meshSize = sizeof(shaderio::MeshInfo) * std::max(1ull, allMeshInfos.size());
+        if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshSize)
+            m_MeshInfoBuffer.reset(StorageBuffer::Create(meshSize));
         
-        size_t pbrBufferSize = sizeof(shaderio::InstancedPBRData) * std::max(1u, (uint32_t)pbrCount);
-        if (!m_InstancedPBRBuffer || m_InstancedPBRBuffer->GetSize() < pbrBufferSize)
-            m_InstancedPBRBuffer.reset(StorageBuffer::Create(pbrBufferSize));
-    
-        size_t quadBufferSize = sizeof(shaderio::InstancedQuadData) * std::max(1u, (uint32_t)quadCount);
-        if (!m_InstancedQuadBuffer || m_InstancedQuadBuffer->GetSize() < quadBufferSize)
-            m_InstancedQuadBuffer.reset(StorageBuffer::Create(quadBufferSize));
-    
-        size_t CircleBufferSize = sizeof(shaderio::InstancedCircleData) * std::max(1u, (uint32_t)circleCount);
-        if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < CircleBufferSize)
-            m_InstancedCircleBuffer.reset(StorageBuffer::Create(CircleBufferSize));
-    
-        size_t TextBufferSize = sizeof(shaderio::InstancedTextData) * std::max(1u, (uint32_t)textCount);
-        if (!m_InstancedTextBuffer || m_InstancedTextBuffer->GetSize() < TextBufferSize)
-            m_InstancedTextBuffer.reset(StorageBuffer::Create(TextBufferSize));
-        
-        size_t LineBufferSize = sizeof(shaderio::InstancedLineData) * std::max(1u, (uint32_t)lineCount);
-        if (!m_InstancedLineBuffer || m_InstancedLineBuffer->GetSize() < LineBufferSize)
-            m_InstancedLineBuffer.reset(StorageBuffer::Create(LineBufferSize));
-    
-        size_t meshInfoBufferSize = sizeof(shaderio::MeshInfo) * meshCount;
-        if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshInfoBufferSize)
-            m_MeshInfoBuffer.reset(StorageBuffer::Create(meshInfoBufferSize));
-    
-        size_t transferSize = vertexBufferSize + indexBufferSize + indirectBuffersSize + countBuffersSize + pbrBufferSize + quadBufferSize + CircleBufferSize + TextBufferSize + LineBufferSize + meshInfoBufferSize;
+        uint64_t transferSize = vertexSize + indexSize + pbrSize + quadSize + countBuffersSize + meshSize;
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, Geometry::GetVertices(), shaderio::InstancedVertexData, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, Geometry::GetIndices(), uint32_t, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedPBRBuffer, pbrData, shaderio::InstancedPBRData, 0);
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedQuadBuffer, quadData, shaderio::InstancedQuadData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, globalVertices, shaderio::InstancedVertexData, 0);
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, circleData, shaderio::InstancedCircleData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, globalIndices, uint32_t, 0);
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedTextBuffer, textData, shaderio::InstancedTextData, 0);
-          
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedLineBuffer, lineData, shaderio::InstancedLineData, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedPBRBuffer, pbrInstances, shaderio::InstancedPBRData, 0);
         
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, meshData, shaderio::MeshInfo, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedQuadBuffer, quadInstances, shaderio::InstancedQuadData, 0);
         
-        static const std::vector<uint32_t> resetValue = { 0 }; // Define once
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, allMeshInfos, shaderio::MeshInfo, 0);
         
-        for (uint32_t p = 0; p < (uint32_t)shaderio::PipelineType_Count; p++)
+        static const std::vector<uint32_t> resetValue = { 0 };
+        
+        for (uint32_t p = 0; p < static_cast<uint32_t>(shaderio::PipelineType_Count); p++)
         {
+            uint64_t totalDraws = sizeof(shaderio::DrawIndexedIndirectCommand) * std::max(1ull, allMeshInfos.size());
+            
+            if (!m_IndirectBuffers[p] || m_IndirectBuffers[p]->GetSize() < totalDraws)
+                m_IndirectBuffers[p].reset(IndirectBuffer::Create(totalDraws));
+            
             UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_CountBuffers[p], resetValue, uint32_t, 0);
-        }
-        
-        for (uint32_t p = 0; p < (uint32_t)shaderio::PipelineType_Count; p++)
-        {
+            
             s_Data.SceneData.indirectAddresses[p] =
                 m_IndirectBuffers[p]->GetBufferAddress();
 
@@ -835,9 +851,13 @@ namespace VanK
         s_Data.SceneData.pbrAddress = m_InstancedPBRBuffer->GetBufferAddress();
         s_Data.SceneData.quadAddress = m_InstancedQuadBuffer->GetBufferAddress();
         s_Data.SceneData.meshInfoAddress = m_MeshInfoBuffer->GetBufferAddress();
-        s_Data.SceneData.circleAddress = m_InstancedCircleBuffer->GetBufferAddress();
+        /*s_Data.SceneData.circleAddress = m_InstancedCircleBuffer->GetBufferAddress();
         s_Data.SceneData.textAddress = m_InstancedTextBuffer->GetBufferAddress();
-        s_Data.SceneData.lineAddress = m_InstancedLineBuffer->GetBufferAddress();
+        s_Data.SceneData.lineAddress = m_InstancedLineBuffer->GetBufferAddress();*/
+        uint32_t meshCount = 0;
+        for (uint32_t p = 0; p < shaderio::PipelineType_Count; ++p)
+            meshCount += static_cast<uint32_t>(RegistryMesh::getMeshInfo(static_cast<shaderio::PipelineType>(p)).size());
+
         s_Data.SceneData.numMeshes = meshCount;
         
         uniformScene->Update(cmd, &s_Data.SceneData, sizeof(s_Data.SceneData));
@@ -854,7 +874,6 @@ namespace VanK
 
             RenderCommand::EndComputePass(computePass);
         }
-        
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
@@ -876,7 +895,7 @@ namespace VanK
             
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
             
-            for (uint32_t p = 0; p < (uint32_t)shaderio::PipelineType_Count; p++)
+            for (uint32_t p = 0; p < 2; p++)
             {
                 RenderCommand::BindPipeline(
                     cmd,

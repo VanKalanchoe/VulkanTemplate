@@ -1,12 +1,12 @@
-/*
 #pragma once
-#include <string>
-#include <vector>
-#include <glm/glm.hpp>
 
+#include <iostream>
+#include <unordered_map>
+#include <vector>
+
+#include <glm/glm.hpp>
 #include "glm/ext/scalar_constants.hpp"
 #include "glm/gtc/constants.hpp"
-#include "RenderCommand.h"
 
 namespace VanK
 {
@@ -16,58 +16,107 @@ namespace VanK
         #include "shaderIO.h"
     }
     
-    struct CpuMeshInfo
+    struct MeshHandle
     {
-        std::string name;
-        shaderio::MeshInfo gpu;
-        shaderio::PipelineType pipelineType;
+        uint32_t pipelineType;
+        uint32_t meshHandle;
+        MeshHandle() = default;
+        MeshHandle(shaderio::PipelineType pipeline, uint32_t handle) : pipelineType(static_cast<uint32_t>(pipeline)), meshHandle(handle) {} 
+        
+        bool operator==(const MeshHandle& other) const
+        {
+            return pipelineType == other.pipelineType && meshHandle == other.meshHandle;
+        }
     };
     
-    class Geometry
+    class RegistryMesh
     {
     public:
-        static void AppendGeometry(const std::string& name, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices, shaderio::PipelineType pipelineType);
-        static void SetPBRFrameInstances(const std::string& name, const std::vector<shaderio::InstancedPBRData>& instances);
-        static void SetQuadFrameInstances(const std::string& name, const std::vector<shaderio::InstancedQuadData>& instances);
-        static void SetCircleFrameInstances(const std::string& name, const std::vector<shaderio::InstancedCircleData>& instances);
-        static void SetTextFrameInstances(const std::string& name, const std::vector<shaderio::InstancedTextData>& instances);
-        static void SetLineFrameInstances(const std::string& name, const std::vector<shaderio::InstancedLineData>& instances);
-        static void BeginFrame();
-
-        // Getters for upload 
-        static const std::vector<shaderio::InstancedVertexData>& GetVertices() { return s_Vertices; }
-        static const std::vector<uint32_t>& GetIndices() { return s_Indices; }
-        static uint32_t GetTotalInstances() { return s_TotalInstances; }
-        static uint32_t GetMeshCount() { return static_cast<uint32_t>(s_MeshInfos.size()); }
-        static std::vector<CpuMeshInfo> GetCpuMeshes() { return s_MeshInfos; }
-        static const std::vector<shaderio::MeshInfo>& GetMeshes() 
-        { 
-            UpdateGpuMeshCache(); // Ensure cache is sync'd
-            return s_MeshCache; 
-        }
-        static const std::vector<shaderio::InstancedPBRData>& GetPBRData()
+        static void DebugPrintPipelineInstances(shaderio::PipelineType pipelineType)
         {
-            // DO NOT clear or rebuild the vector here!
-            return s_PBRData;
+            auto& meshes = meshInfos[pipelineType];
+
+            std::cout << "Pipeline " << pipelineType << " MeshInfo:\n";
+            for (size_t i = 0; i < meshes.size(); ++i)
+            {
+                const auto& info = meshes[i];
+                std::cout << std::dec << "Mesh " << i
+                          << " | instanceCount = " << info.instanceCount
+                          << " | firstInstance = " << info.firstInstance
+                          << " | firstIndex = " << info.firstIndex
+                          << " | vertexOffset = " << info.vertexOffset
+                          << "\n";
+            }
         }
-        static const std::vector<shaderio::InstancedQuadData>& GetQuadData() { return s_QuadData; }
-        static const std::vector<shaderio::InstancedCircleData>& GetCircleData() { return s_CircleData; }
-        static const std::vector<shaderio::InstancedTextData>& GetTextData() { return s_TextData; }
-        static const std::vector<shaderio::InstancedLineData>& GetLineData() { return s_LineData; }
+        static MeshHandle registerMesh(shaderio::PipelineType pipelineType, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices);
+        template<typename InstanceType>
+        static void registerInstance(shaderio::PipelineType pipelineType, MeshHandle meshHandle, InstanceType& instance);
+        
+    public:
+        static bool hasDraws() { return hasAnyDraws; }
+        static std::vector<shaderio::InstancedVertexData>& getVertices() { return globalVertices; }
+        static std::vector<uint32_t>& getIndices() { return globalIndices; }
+        static std::vector<shaderio::MeshInfo>& getMeshInfo(shaderio::PipelineType pipelineType) { return meshInfos[pipelineType]; }
+        template<typename InstanceType>
+        static std::vector<InstanceType> getInstances(shaderio::PipelineType pipelineType)
+        {
+            std::vector<InstanceType> allInstances;
+
+            auto& meshes = meshInfos[pipelineType];
+
+            for (uint32_t meshID = 0; meshID < meshes.size(); ++meshID)
+            {
+                MeshHandle handle{ pipelineType, meshID };
+
+                auto it = meshInstances<InstanceType>.find(handle);
+                if (it != meshInstances<InstanceType>.end())
+                {
+                    auto& instances = it->second;
+                    allInstances.insert(allInstances.end(), instances.begin(), instances.end());
+                }
+            }
+
+            return allInstances;
+        }
     private:
-        static void UpdateGpuMeshCache();
-        static std::vector<shaderio::MeshInfo> s_MeshCache;
-        static std::vector<shaderio::InstancedPBRData> s_PBRData;
-        static std::vector<CpuMeshInfo> s_MeshInfos;
-        static std::vector<shaderio::InstancedVertexData> s_Vertices;
-        static std::vector<uint32_t> s_Indices;
-        static std::unordered_map<std::string, std::vector<shaderio::InstancedPBRData>> s_PBRMeshData;
-        static std::vector<shaderio::InstancedQuadData> s_QuadData;
-        static std::vector<shaderio::InstancedCircleData> s_CircleData;
-        static std::vector<shaderio::InstancedTextData> s_TextData;
-        static std::vector<shaderio::InstancedLineData> s_LineData;
-        static uint32_t s_TotalInstances;
+        inline static bool hasAnyDraws = false;
+        inline static std::unordered_map<uint32_t, std::vector<shaderio::MeshInfo>> meshInfos;
+        struct MeshHandleHash 
+        {
+            size_t operator()(const MeshHandle& h) const 
+            {
+                return std::hash<uint32_t>()(h.pipelineType) ^ (std::hash<uint32_t>()(h.meshHandle) << 1);
+            }
+        };
+        template<typename InstanceType>
+        inline static std::unordered_map<MeshHandle, std::vector<InstanceType>, MeshHandleHash> meshInstances;
+        inline static std::vector<shaderio::InstancedVertexData> globalVertices;
+        inline static std::vector<uint32_t> globalIndices;
     };
+
+    template <typename InstanceType>
+    void RegistryMesh::registerInstance(shaderio::PipelineType pipelineType, MeshHandle meshHandle, InstanceType& instance)
+    {
+        meshInstances<InstanceType>[meshHandle].push_back(instance);
+        
+        uint32_t meshID = meshHandle.meshHandle;
+        auto& meshes = meshInfos[pipelineType];
+        meshes[meshID].instanceCount = static_cast<uint32_t>(meshInstances<InstanceType>[meshHandle].size());
+        
+        if (meshID == 0)
+            meshes[0].firstInstance = 0;
+        else
+            meshes[meshID].firstInstance = meshes[meshID - 1].firstInstance + meshes[meshID - 1].instanceCount;
+        
+        uint32_t cumulative = meshes[meshID].firstInstance + meshes[meshID].instanceCount;
+        for (size_t i = meshID + 1; i < meshes.size(); ++i)
+        {
+            meshes[i].firstInstance = cumulative;
+            cumulative += meshes[i].instanceCount;
+        }
+        
+        hasAnyDraws = true;
+    }
 
     namespace GeometryData
     {
@@ -279,4 +328,3 @@ namespace VanK
         }
     }
 }
-*/
