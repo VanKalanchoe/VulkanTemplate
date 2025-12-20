@@ -9,17 +9,24 @@ namespace VanK
         
         globalVertices.insert(globalVertices.end(), vertices.begin(), vertices.end());
         
-        std::vector<uint32_t> offsetIndices = indices;
-        for (auto& idx : offsetIndices)
-            idx += vertexOffset;
+        if (pipelineType == shaderio::PipelineType::PipelineType_Line)
+        {
+            globalIndices.insert(globalIndices.end(), indices.begin(), indices.end());
+        }
+        else
+        {
+            std::vector<uint32_t> offsetIndices = indices;
+            for (auto& idx : offsetIndices)
+                idx += vertexOffset;
 
-        globalIndices.insert(globalIndices.end(), offsetIndices.begin(), offsetIndices.end());
+            globalIndices.insert(globalIndices.end(), offsetIndices.begin(), offsetIndices.end()); 
+        }
         
         shaderio::MeshInfo meshInfo;
         meshInfo.indexCount = static_cast<uint32_t>(indices.size());
         meshInfo.instanceCount = 0;
         meshInfo.firstIndex = indexOffset;
-        meshInfo.vertexOffset = 0;
+        meshInfo.vertexOffset = (pipelineType == shaderio::PipelineType::PipelineType_Line) ? vertexOffset : 0;
         meshInfo.firstInstance = 0;
         meshInfo.pipelineType = pipelineType;
         

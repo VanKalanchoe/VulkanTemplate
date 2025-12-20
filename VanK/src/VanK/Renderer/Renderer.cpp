@@ -351,7 +351,7 @@ namespace VanK
             instance.TextureIndex = fontAtlas->GetTextureIndex();
             instance.EntityID = entityID;
 
-            RegistryMesh::registerInstance(shaderio::PipelineType_Text, s_Data.circleHandle, instance);
+            RegistryMesh::registerInstance(shaderio::PipelineType_Text, s_Data.textHandle, instance);
             
             if (i < string.size() - 1)
             {
@@ -377,7 +377,7 @@ namespace VanK
         instance.Color = color;
         instance.EntityID = entityID;
         
-        RegistryMesh::registerInstance(shaderio::PipelineType_Line, s_Data.circleHandle, instance);
+        RegistryMesh::registerInstance(shaderio::PipelineType_Line, s_Data.lineHandle, instance);
     }
 
     void Renderer::DrawRect(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color, int entityID)
@@ -584,14 +584,6 @@ namespace VanK
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
         
         loadModel();
-        /*Geometry::AppendGeometry("model", vertices, indices, TODO);*/
-        /*Geometry::AppendGeometry("cube",  GeometryData::cubeVertices,  GeometryData::cubeIndices, shaderio::PipelineType_PBR);
-        Geometry::AppendGeometry("model", vertices, indices, shaderio::PipelineType_PBR);
-         // adding this offsets the opther picking why
-        Geometry::AppendGeometry("quad", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Quad);
-        Geometry::AppendGeometry("circle", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Circle);
-        Geometry::AppendGeometry("text", GeometryData::quadVertices, GeometryData::quadIndices, shaderio::PipelineType_Text);
-        Geometry::AppendGeometry("line", GeometryData::lineVertices, GeometryData::lineIndices, shaderio::PipelineType_Line);*/
         
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
         s_Data.cubeHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, GeometryData::cubeVertices, GeometryData::cubeIndices);
