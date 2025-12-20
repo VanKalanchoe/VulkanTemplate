@@ -916,8 +916,6 @@ namespace  VanK
             throw std::runtime_error("failed to wait for fence!");
         }
         
-        device.resetFences(*inFlightFences[frameIndex]);
-        
         auto [result, acquiredImageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
         
         if (result == vk::Result::eErrorOutOfDateKHR)
@@ -930,6 +928,8 @@ namespace  VanK
         {
             throw std::runtime_error("failed to acquire swap chain image!");
         }
+        
+        device.resetFences(*inFlightFences[frameIndex]);
 
         currentResult = result;
         
