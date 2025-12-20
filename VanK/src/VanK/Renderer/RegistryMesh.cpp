@@ -8,6 +8,7 @@ namespace VanK
         uint32_t indexOffset = static_cast<uint32_t>(globalIndices.size());
         
         globalVertices.insert(globalVertices.end(), vertices.begin(), vertices.end());
+        
         std::vector<uint32_t> offsetIndices = indices;
         for (auto& idx : offsetIndices)
             idx += vertexOffset;

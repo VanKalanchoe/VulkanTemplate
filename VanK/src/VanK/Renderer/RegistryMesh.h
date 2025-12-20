@@ -1,7 +1,9 @@
 #pragma once
 
+#include <functional>
 #include <iostream>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include <glm/glm.hpp>
@@ -51,13 +53,16 @@ namespace VanK
         static MeshHandle registerMesh(shaderio::PipelineType pipelineType, const std::vector<shaderio::InstancedVertexData>& vertices, const std::vector<uint32_t>& indices);
         template<typename InstanceType>
         static void registerInstance(shaderio::PipelineType pipelineType, MeshHandle meshHandle, InstanceType& instance);
+        static void rebuildAllInstances();
         static void clearAllInstances();
         static void clearInstances();
         template<typename InstanceType>
         static void rebuildInstances(shaderio::PipelineType pipeline);
-
     public:
         static bool hasDraws() { return hasAnyDraws; }
+        inline static std::vector<std::function<void()>> clearCallbacks;
+        inline static std::vector<std::function<void()>> rebuildCallbacks;
+        inline static std::unordered_set<std::string> registeredInstanceTypes;
         static std::vector<shaderio::InstancedVertexData>& getVertices() { return globalVertices; }
         static std::vector<uint32_t>& getIndices() { return globalIndices; }
         static std::vector<shaderio::MeshInfo>& getMeshInfo(shaderio::PipelineType pipelineType) { return meshInfos[pipelineType]; }
@@ -102,14 +107,39 @@ namespace VanK
     void RegistryMesh::registerInstance(shaderio::PipelineType pipelineType, MeshHandle meshHandle, InstanceType& instance)
     {
         meshInstances<InstanceType>[meshHandle].push_back(instance);
+        
+        const std::string typeName = typeid(InstanceType).name();
+        if (registeredInstanceTypes.find(typeName) == registeredInstanceTypes.end())
+        {
+            // Add callbacks only once per InstanceType
+            rebuildCallbacks.push_back([pipelineType]() {
+                RegistryMesh::rebuildInstances<InstanceType>(pipelineType);
+            });
+
+            clearCallbacks.push_back([]() {
+                meshInstances<InstanceType>.clear();
+            });
+
+            registeredInstanceTypes.insert(typeName);
+        }
+    }
+
+    inline void RegistryMesh::rebuildAllInstances()
+    {
+        for (auto& callback : rebuildCallbacks)
+        {
+            callback(); // calls the appropriate rebuildInstances<InstanceType>
+        }
     }
     
     inline void RegistryMesh::clearAllInstances() 
     { 
-        meshInstances<shaderio::InstancedPBRData>.clear(); 
-        meshInstances<shaderio::InstancedQuadData>.clear(); 
-        /*meshInstances<shaderio::InstancedLineData>.clear(); 
-         meshInstances<shaderio::InstancedTextData>.clear();*/ // etc 
+        for (auto& clearFunc : clearCallbacks)
+            clearFunc();
+
+        clearCallbacks.clear();
+        rebuildCallbacks.clear();
+        registeredInstanceTypes.clear();
     }
 
     inline void RegistryMesh::clearInstances()
