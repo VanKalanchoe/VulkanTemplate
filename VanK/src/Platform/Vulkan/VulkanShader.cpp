@@ -37,9 +37,11 @@ namespace VanK
         {
             // Map known entry points to Vulkan shader stages
             vk::ShaderStageFlagBits stage;
-            if (entryPoint == "vertexMain")         stage = vk::ShaderStageFlagBits::eVertex;
-            else if (entryPoint == "fragmentMain")  stage = vk::ShaderStageFlagBits::eFragment;
-            else if (entryPoint == "compMain")          stage = vk::ShaderStageFlagBits::eCompute;
+            if (entryPoint == "vertexMain") stage = vk::ShaderStageFlagBits::eVertex;
+            else if (entryPoint == "fragmentMain") stage = vk::ShaderStageFlagBits::eFragment;
+            else if (entryPoint == "compMain") stage = vk::ShaderStageFlagBits::eCompute;
+            else if (entryPoint == "taskMain") stage = vk::ShaderStageFlagBits::eTaskEXT;
+            else if (entryPoint == "meshMain") stage = vk::ShaderStageFlagBits::eMeshEXT;
             else continue;
                 
             std::string fileName = m_Name + "." + entryPoint + ".spv";
@@ -65,6 +67,8 @@ namespace VanK
         if (entry == "vertexMain")   return vk::ShaderStageFlagBits::eVertex;
         if (entry == "fragmentMain") return vk::ShaderStageFlagBits::eFragment;
         if (entry == "compMain")         return vk::ShaderStageFlagBits::eCompute;
+        if (entry == "taskMain")         return vk::ShaderStageFlagBits::eTaskEXT;
+        if (entry == "meshMain")         return vk::ShaderStageFlagBits::eMeshEXT;
         throw std::runtime_error("Unknown entry point: " + entry);
     }
     
@@ -77,6 +81,8 @@ namespace VanK
             "vertexMain",
             "fragmentMain",
             "compMain", // maybe i can call this computemain ? will see
+            "taskMain",
+            "meshMain",
         };
 
         std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> spirvPerStage;
