@@ -297,6 +297,11 @@ namespace VanK
 
         return "";
     }
+    
+    bool VulkanShader::HasStage(vk::ShaderStageFlagBits stage) const
+    {
+        return m_ShaderModules.find(stage) != m_ShaderModules.end();
+    }
 
     void VulkanShader::Bind() const
     {

@@ -590,28 +590,33 @@ namespace  VanK
         auto specShader = pipelineSpecification.ShaderStageCreateInfo.VanKShader;
         auto vkShader = dynamic_cast<VulkanShader*>(specShader);
         
-        std::string vertShaderEntryName = vkShader->GetShaderEntryName(vk::ShaderStageFlagBits::eVertex);
-        std::string fragShaderEntryName = vkShader->GetShaderEntryName(vk::ShaderStageFlagBits::eFragment);
-        auto& vertShaderModule = vkShader->GetShaderModule(vk::ShaderStageFlagBits::eVertex);
-        auto& fragShaderModule = vkShader->GetShaderModule(vk::ShaderStageFlagBits::eFragment);
+        std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+        std::vector<std::string> entryNames;  // only need to keep names alive
+        entryNames.reserve(4); // needs to be reserved or string changes to random bs
 
-        vk::PipelineShaderStageCreateInfo vertShaderStageInfo
+        auto addStage = [&](vk::ShaderStageFlagBits stage)
         {
-            .stage = vk::ShaderStageFlagBits::eVertex,
-            .module = vertShaderModule,
-            .pName = vertShaderEntryName.c_str()
-        };
-        vk::PipelineShaderStageCreateInfo fragShaderStageInfo
-        {
-            .stage = vk::ShaderStageFlagBits::eFragment,
-            .module = fragShaderModule,
-            .pName = fragShaderEntryName.c_str(),
+            if (!vkShader->HasStage(stage))
+                return;
+
+            entryNames.push_back(vkShader->GetShaderEntryName(stage));
+
+            auto& module = vkShader->GetShaderModule(stage);
+
+            shaderStages.push_back
+            ({
+                .stage = stage,
+                .module = module,
+                .pName = entryNames.back().c_str()
+            });
         };
         
-        vk::PipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+        addStage(vk::ShaderStageFlagBits::eVertex);
+        addStage(vk::ShaderStageFlagBits::eFragment);
+        addStage(vk::ShaderStageFlagBits::eTaskEXT);
+        addStage(vk::ShaderStageFlagBits::eMeshEXT);
 
         VertexInputDescription vertexInput; // Keep this alive until vkCreateGraphicsPipelines finishes
-        
         vk::PipelineVertexInputStateCreateInfo vertexInputInfo{};
         // Describe the layout of the Vertex in the Buffer, which is passed to the vertex shader
         if (!pipelineSpecification.VertexInputStateCreateInfo.VanKBufferLayout.GetElements().empty())
@@ -743,18 +748,18 @@ namespace  VanK
         vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = 
         {
             {
-                .stageCount = static_cast<uint32_t>(std::size(shaderStages)),
-            .pStages = shaderStages,
-            .pVertexInputState = &vertexInputInfo,
-            .pInputAssemblyState = &inputAssembly,
-            .pViewportState = &viewportState,
-            .pRasterizationState = &rasterizer,
-            .pMultisampleState = &multisampling,
-            .pDepthStencilState = &depthStencil,
-            .pColorBlendState = &colorBlending,
-            .pDynamicState = &dynamicState,
-            .layout = tempPipelineLayout,
-            .renderPass = nullptr
+                .stageCount = static_cast<uint32_t>(shaderStages.size()),
+                .pStages = shaderStages.data(),
+                .pVertexInputState = (pipelineSpecification.PipelineType == VanK_Mesh) ? nullptr : &vertexInputInfo,
+                .pInputAssemblyState = (pipelineSpecification.PipelineType == VanK_Mesh) ? nullptr : &inputAssembly,
+                .pViewportState = &viewportState,
+                .pRasterizationState = &rasterizer,
+                .pMultisampleState = &multisampling,
+                .pDepthStencilState = &depthStencil,
+                .pColorBlendState = &colorBlending,
+                .pDynamicState = &dynamicState,
+                .layout = tempPipelineLayout,
+                .renderPass = nullptr
             },
             {
                 .colorAttachmentCount = static_cast<uint32_t>(colorFormats.size()),

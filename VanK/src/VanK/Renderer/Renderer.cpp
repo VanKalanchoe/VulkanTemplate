@@ -514,6 +514,7 @@ namespace VanK
 
         VanKGraphicsPipelineSpecification GraphicsPipelineSpecification
         {
+            .PipelineType = VanK_Graphics,
             .ShaderStageCreateInfo = ShaderStageCreateInfo,
             .VertexInputStateCreateInfo = VertexInputStateCreateInfo,
             .InputAssemblyStateCreateInfo = InputAssemblyStateCreateInfo,

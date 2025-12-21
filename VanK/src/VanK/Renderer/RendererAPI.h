@@ -271,12 +271,21 @@ namespace VanK
     {
         std::vector<VanKFormat> VanKColorAttachmentFormats;
     };
+    
+    enum VanKPipelineType
+    {
+        VanK_Graphics,   // Vertex + Fragment
+        VanK_Mesh        // Mesh (+ optional Task) + Fragment
+    };
 
     struct VanKGraphicsPipelineSpecification
     {
+        VanKPipelineType PipelineType;
         VanKPipelineShaderStageCreateInfo ShaderStageCreateInfo;
-        VanKPipelineVertexInputStateCreateInfo VertexInputStateCreateInfo;
-        VanKPipelineInputAssemblyStateCreateInfo InputAssemblyStateCreateInfo;
+        
+        VanKPipelineVertexInputStateCreateInfo VertexInputStateCreateInfo; // only vertex not mesh
+        VanKPipelineInputAssemblyStateCreateInfo InputAssemblyStateCreateInfo; // only vertex not mesh
+        
         VanKPipelineRasterizationStateCreateInfo RasterizationStateCreateInfo;
         VanKPipelineColorBlendStateCreateInfo ColorBlendStateCreateInfo;
         VanKPipelineMultisampleStateCreateInfo MultisampleStateCreateInfo;

@@ -25,6 +25,7 @@ namespace VanK
 
         vk::raii::ShaderModule& GetShaderModule(vk::ShaderStageFlagBits stage);
         std::string GetShaderEntryName(vk::ShaderStageFlagBits stage) const;
+        bool HasStage(vk::ShaderStageFlagBits stage) const;
         virtual const std::string& GetName() const override { return m_Name; };
         const std::string& GetFilePath() const override { return m_FilePath; }
 
