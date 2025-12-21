@@ -140,6 +140,11 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->BindIndexBuffer(cmd, indexBuffer, elementSize);
         }
+        
+        static void PushConstans(VanKCommandBuffer cmd, VanKShaderStageFlags stageFlags, uint32_t slot, const void* data, uint32_t dataSize)
+        {
+            if (s_RendererAPI) s_RendererAPI->PushConstans(cmd, stageFlags, slot, data, dataSize);
+        }
 
         static void Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
         {

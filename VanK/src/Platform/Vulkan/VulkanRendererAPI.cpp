@@ -1527,6 +1527,34 @@ namespace  VanK
 
         Unwrap(cmd).bindIndexBuffer(buffer, 0, vkIndexType);
     }
+    
+    void VulkanRendererAPI::PushConstans(VanKCommandBuffer cmd, VanKShaderStageFlags stageFlags, uint32_t slot, const void* data, uint32_t dataSize)
+    {
+        vk::PipelineLayout layout = VK_NULL_HANDLE;
+        
+         vk::ShaderStageFlagBits flag = ConvertToVkShaderStageFlagBits(stageFlags);
+        
+        if (flag == vk::ShaderStageFlagBits::eAllGraphics)
+        {
+            layout = m_currentGraphicPipelineLayout;
+        }
+        
+        if (flag == vk::ShaderStageFlagBits::eCompute)
+        {
+            layout = m_currentComputePipelineLayout;
+        }
+        
+        vk::PushConstantsInfo pushConstantsInfo
+        {
+            .layout = layout,
+            .stageFlags = flag,
+            .offset = slot,
+            .size = dataSize,
+            .pValues = data,
+        };
+    
+        Unwrap(cmd).pushConstants2(pushConstantsInfo);
+    }
 
     void VulkanRendererAPI::Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {

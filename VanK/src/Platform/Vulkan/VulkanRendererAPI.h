@@ -954,6 +954,7 @@ namespace VanK
         void SetCullMode(VanKCommandBuffer cmd, VanKCullModeFlags cullMode) override;
         void BindVertexBuffer(VanKCommandBuffer cmd, uint32_t first_slot, const VertexBuffer& vertexBuffer, uint32_t num_bindings) override;
         void BindIndexBuffer(VanKCommandBuffer cmd, const IndexBuffer& indexBuffer, VanKIndexElementSize elementSize) override;
+        void PushConstans(VanKCommandBuffer cmd, VanKShaderStageFlags stageFlags, uint32_t slot, const void* data, uint32_t dataSize) override;
         void Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
         void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
         void DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
@@ -1369,5 +1370,15 @@ namespace VanK
         case VanK_COMPARE_OP_ALWAYS: return vk::CompareOp::eAlways;
         }
         return vk::CompareOp::eLess;
+    }
+    
+    inline vk::ShaderStageFlagBits ConvertToVkShaderStageFlagBits(VanKShaderStageFlags flags)
+    {
+        switch (flags)
+        {
+        case VanKGraphics: return vk::ShaderStageFlagBits::eAllGraphics;
+        case VanKCompute: return vk::ShaderStageFlagBits::eCompute;
+        }
+        return vk::ShaderStageFlagBits::eAll;
     }
 }
