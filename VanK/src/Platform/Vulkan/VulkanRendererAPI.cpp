@@ -345,14 +345,16 @@ namespace  VanK
             <
                 vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features,
                 vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-                vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR
+                vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
+                vk::PhysicalDeviceMeshShaderFeaturesEXT
             >();
             bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceFeatures2>().features.
                                                      samplerAnisotropy &&
                 features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
                 features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
                 features.template get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>().timelineSemaphore;    
-
+                features.template get<vk::PhysicalDeviceMeshShaderFeaturesEXT>().meshShader;
+            
             return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
         });
         if (devIter != devices.end())
@@ -394,7 +396,8 @@ namespace  VanK
             vk::PhysicalDeviceVulkan12Features,
             vk::PhysicalDeviceVulkan13Features,
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-            vk::PhysicalDeviceMaintenance5Features
+            vk::PhysicalDeviceMaintenance5Features,
+            vk::PhysicalDeviceMeshShaderFeaturesEXT
         >
         featureChain =
         {
@@ -416,7 +419,10 @@ namespace  VanK
             {.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
             {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
             {.maintenance5 = true},
+            {.taskShader = true, .meshShader = true},
         };
+        
+        requiredDeviceExtension.push_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
 
         // create a Device
         float queuePriority = 0.5f;
@@ -1579,6 +1585,16 @@ namespace  VanK
         
         Unwrap(cmd).drawIndexedIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
+    
+    void VulkanRendererAPI::DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+    {
+        Unwrap(cmd).drawMeshTasksEXT(groupCountX, groupCountY, groupCountZ);
+    }
+    
+    /*void VulkanRendererAPI::DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+    {
+        Unwrap(cmd).drawMeshTasksEXT();
+    }*/
 
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
     {

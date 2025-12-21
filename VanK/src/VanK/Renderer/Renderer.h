@@ -66,6 +66,7 @@ namespace VanK
         static void BeginSubmit();
         static void EndSubmit();
         static void Flush();
+        static void DrawMeshShader();
         static void DrawFrame();
         static bool GetVSync() { return vSync; };
         static void QueVSyncChange(bool vSyncTemp) { vSync = vSyncTemp; s_VSyncChangeRequested = true; };
@@ -113,6 +114,9 @@ namespace VanK
         
         inline static VanKPipeLine m_GraphicsLinePipeline = {};
         inline static VanKGraphicsPipelineSpecification m_GraphicsLinePipelineSpecification = {};
+        
+        inline static VanKPipeLine m_MeshPipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_MeshPipelineSpecification = {};
         
         // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};

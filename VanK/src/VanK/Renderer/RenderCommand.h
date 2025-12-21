@@ -160,6 +160,11 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->DrawIndexedIndirectCount(cmd, indirectBuffer, indirectBufferOffset, countBuffer, countBufferOffset, maxDrawCount, stride);       
         }
+        
+        static void DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+        {
+            if (s_RendererAPI) s_RendererAPI->DrawMeshTasks(cmd, groupCountX, groupCountY, groupCountZ);
+        }
 
         static void EndRendering(VanKCommandBuffer cmd)
         {

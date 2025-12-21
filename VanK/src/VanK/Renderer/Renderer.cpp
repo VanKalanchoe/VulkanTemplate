@@ -421,7 +421,8 @@ namespace VanK
         auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");
         auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
         auto LineShader = GetShaderLibrary().Load("LineShader", "LineShader.slang");
-
+        auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
+        
         // Pipeline Creation
         uint32_t useTexture = true;
         std::vector<VanKSpecializationMapEntries> mapEntries
@@ -550,6 +551,12 @@ namespace VanK
         m_GraphicsLinePipelineSpecification.InputAssemblyStateCreateInfo.VanKPrimitive = VanK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         m_GraphicsLinePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsLinePipelineSpecification);
         RegisterPipelineForShaderWatcher("LineShader", "LineShader.slang", &m_GraphicsLinePipelineSpecification, nullptr, &m_GraphicsLinePipeline, VanKGraphics);
+        
+        m_MeshPipelineSpecification = GraphicsPipelineSpecification;
+        m_MeshPipelineSpecification.PipelineType = VanK_Mesh;
+        m_MeshPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshShader;
+        m_MeshPipeline = RenderCommand::createGraphicsPipeline(m_MeshPipelineSpecification);
+        RegisterPipelineForShaderWatcher("MeshShader", "MeshShader.slang", &m_MeshPipelineSpecification, nullptr, &m_MeshPipeline, VanKGraphics);
         
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
@@ -701,12 +708,42 @@ namespace VanK
             BeginSubmit();
             return;
         }
+        
+        DrawMeshShader();
      
-        DrawFrame();
+        /*DrawFrame();*/
         
         /*EndSubmit();*/
     }
-   
+    void Renderer::DrawMeshShader()
+    {
+        ScopeTimer timer("Renderer::DrawMeshShader");
+        
+        std::vector<VanKColorTargetInfo> colorAttachments;
+        colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
+        colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = -1});
+
+        VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
+            
+        RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
+            
+        VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
+        RenderCommand::SetViewport(cmd, 1, viewPort);
+
+        VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
+        RenderCommand::SetScissor(cmd, 1, rect);
+            
+        RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
+        
+        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
+
+        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+        
+        RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
+            
+        RenderCommand::EndRendering(cmd);
+    }
+    
     void Renderer::DrawFrame()
     {
         ScopeTimer timer("Renderer::DrawFrame");
