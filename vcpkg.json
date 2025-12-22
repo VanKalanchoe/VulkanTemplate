@@ -1,6 +1,7 @@
 {
   "name": "vulkan-tutorial",
   "version": "1.0.0",
+  "builtin-baseline": "de46587b4beaa638743916fe5674825cecfb48b3",
   "dependencies": [
     { "name": "sdl3", "features": [ "vulkan" ] },
     "glm",
@@ -13,6 +14,7 @@
     "yaml-cpp",
     "box2d",
     "freetype",
-    "skia"
+    "skia",
+    "meshoptimizer"
   ]
 } 
