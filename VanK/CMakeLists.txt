@@ -23,6 +23,7 @@ find_package (xxhash REQUIRED)
 find_package (spdlog CONFIG REQUIRED)
 find_package (yaml-cpp CONFIG REQUIRED)
 find_package (box2d CONFIG REQUIRED)
+find_package(meshoptimizer CONFIG REQUIRED)
 
 include(FetchContent)
 
@@ -194,5 +195,5 @@ add_chapter(
     SHADER shaderIO.h QuadShader.slang DrawIndirectShader.slang
     MODELS viking_room.obj viking_room.glb
     TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg ../textures/viking_room2.ktx2 
-    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d
+    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer
 )
