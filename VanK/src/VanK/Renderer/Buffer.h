@@ -193,7 +193,8 @@ namespace VanK
         virtual void UnMapTransferBuffer() = 0;
 
         virtual void UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) = 0;
-
+        virtual void DownloadFromGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) = 0;
+        
         static TransferBuffer* Create(uint64_t size, VanKTransferBufferUsage usage);
     };
 

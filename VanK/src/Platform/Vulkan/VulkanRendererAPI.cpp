@@ -1541,14 +1541,13 @@ namespace  VanK
     {
         vk::PipelineLayout layout = VK_NULL_HANDLE;
         
-         vk::ShaderStageFlagBits flag = ConvertToVkShaderStageFlagBits(stageFlags);
+         vk::ShaderStageFlags flag = ConvertToVkShaderStageFlagBits(stageFlags);
         
-        if (flag == vk::ShaderStageFlagBits::eAllGraphics)
+        if (flag & (vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment))
         {
             layout = m_currentGraphicPipelineLayout;
         }
-        
-        if (flag == vk::ShaderStageFlagBits::eCompute)
+        else if (flag & vk::ShaderStageFlagBits::eCompute)
         {
             layout = m_currentComputePipelineLayout;
         }

@@ -367,6 +367,12 @@ namespace VanK
                 access |= src ? vk::AccessFlagBits2::eColorAttachmentRead : vk::AccessFlagBits2::eColorAttachmentWrite;
             if (stage & vk::PipelineStageFlagBits2::eAllCommands)
                 access |= vk::AccessFlagBits2::eMemoryWrite | vk::AccessFlagBits2::eMemoryRead;
+            if (stage & vk::PipelineStageFlagBits2::eTaskShaderEXT)
+                access |= src ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlagBits2::eShaderWrite;
+            if (stage & vk::PipelineStageFlagBits2::eMeshShaderEXT)
+                access |= src ? vk::AccessFlagBits2::eShaderRead : vk::AccessFlagBits2::eShaderWrite;
+            if (stage & vk::PipelineStageFlagBits2::eHost)
+                access |= src ? vk::AccessFlagBits2::eHostRead : vk::AccessFlagBits2::eHostWrite;
             ASSERT(access, "Missing stage implementation");
             return access;
         }
@@ -1372,12 +1378,13 @@ namespace VanK
         return vk::CompareOp::eLess;
     }
     
-    inline vk::ShaderStageFlagBits ConvertToVkShaderStageFlagBits(VanKShaderStageFlags flags)
+    inline vk::ShaderStageFlags ConvertToVkShaderStageFlagBits(VanKShaderStageFlags flags)
     {
         switch (flags)
         {
-        case VanKGraphics: return vk::ShaderStageFlagBits::eAllGraphics;
+        case VanKGraphics: return vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         case VanKCompute: return vk::ShaderStageFlagBits::eCompute;
+        case VanKMesh: return vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
         }
         return vk::ShaderStageFlagBits::eAll;
     }

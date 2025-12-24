@@ -202,6 +202,7 @@ namespace VanK
         
         RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst1);
         
+        /*
         shaderio::InstancedPBRData inst2;
         inst2.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 2.0f, 0.0f));
         inst2.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
@@ -216,7 +217,7 @@ namespace VanK
         inst3.textureIndex = vikingRoom->GetTextureIndex();
         inst3.EntityID = -1;
         
-        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst3);
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst3);*/
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)

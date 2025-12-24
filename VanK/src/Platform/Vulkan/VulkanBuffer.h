@@ -88,7 +88,7 @@ namespace VanK
         virtual void* MapTransferBuffer(uint64_t size, uint64_t alignment, uint64_t& outOffset) override;
         virtual void UnMapTransferBuffer() override;
         virtual void UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) override;
-
+        virtual void DownloadFromGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) override;
     private:
         utils::Buffer m_transferBuffer;
         VkDeviceSize m_currentOffset = 0;
