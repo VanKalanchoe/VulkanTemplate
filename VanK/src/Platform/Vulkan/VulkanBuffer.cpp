@@ -386,6 +386,11 @@ namespace VanK
     void VulkanStorageBuffer::Upload(const void* data, size_t size, size_t offset)
     {
     }
+    
+    void VulkanStorageBuffer::Fill(VanKCommandBuffer cmd, uint64_t dstOffset, uint64_t size, uint32_t data)
+    {
+        Unwrap(cmd).fillBuffer(m_storageBuffer.buffer, dstOffset, size, data);
+    }
 
     VulkanIndirectBuffer::VulkanIndirectBuffer(uint64_t size) : m_size(size)
     {

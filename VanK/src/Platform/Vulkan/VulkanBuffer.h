@@ -131,6 +131,7 @@ namespace VanK
         
         // Upload for initial setup
         virtual void Upload(const void* data, size_t size, size_t offset) override;
+        virtual void Fill(VanKCommandBuffer cmd, uint64_t dstOffset, uint64_t size, uint32_t data) override;
 
         const utils::Buffer& GetBuffer() const { return m_storageBuffer; }
 
