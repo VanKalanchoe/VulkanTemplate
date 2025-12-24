@@ -395,8 +395,8 @@ namespace  VanK
             vk::PhysicalDeviceVulkan11Features,
             vk::PhysicalDeviceVulkan12Features,
             vk::PhysicalDeviceVulkan13Features,
+            vk::PhysicalDeviceVulkan14Features,
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-            vk::PhysicalDeviceMaintenance5Features,
             vk::PhysicalDeviceMeshShaderFeaturesEXT
         >
         featureChain =
@@ -417,8 +417,8 @@ namespace  VanK
                 .bufferDeviceAddress = true
             },
             {.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
+            {.maintenance5 = true, .pushDescriptor = true},
             {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
-            {.maintenance5 = true},
             {.taskShader = true, .meshShader = true},
         };
         

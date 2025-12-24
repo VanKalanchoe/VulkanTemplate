@@ -711,7 +711,7 @@ namespace VanK
         
         DrawMeshShader();
      
-        /*DrawFrame();*/
+        DrawFrame();
         
         /*EndSubmit();*/
     }
