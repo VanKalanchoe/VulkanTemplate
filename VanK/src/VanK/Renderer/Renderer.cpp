@@ -512,6 +512,11 @@ namespace VanK
         {
             .VanKColorAttachmentFormats = { VanK_Format_B8G8R8A8Srgb, VanK_FORMAT_R32_SINT }
         };
+        
+        VanKPipelineLayoutCreateInfo PipelineLayoutCreateInfo
+        {
+            .PushConstants = { PushConstantRange{0, sizeof(uint32_t)} }
+        };
 
         VanKGraphicsPipelineSpecification GraphicsPipelineSpecification
         {
@@ -524,6 +529,7 @@ namespace VanK
             .MultisampleStateCreateInfo = MultisampleStateCreateInfo,
             .DepthStateInfo = DepthStencilStateCreateInfo,
             .RenderingCreateInfo = RenderingCreateInfo,
+            .PipelineLayoutInfo = PipelineLayoutCreateInfo,
         };
         
         m_GraphicsPBRPipelineSpecification = GraphicsPipelineSpecification;
@@ -872,14 +878,13 @@ namespace VanK
         
         uniformScene->Update(cmd, &s_Data.SceneData, sizeof(s_Data.SceneData));
         
-        RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
-        RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
-        
         {
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get(), m_IndirectBuffers, m_CountBuffers);
         
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
-            
+           
+            RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
+        
             RenderCommand::DispatchCompute(computePass, (meshCount + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
             RenderCommand::EndComputePass(computePass);
@@ -912,7 +917,9 @@ namespace VanK
                     cmd,
                     VanKPipelineBindPoint::Graphics,
                     pipelines[p]);
-
+                
+                RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
+                
                 RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
                 RenderCommand::DrawIndexedIndirectCount(

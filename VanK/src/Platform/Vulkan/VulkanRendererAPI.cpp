@@ -709,11 +709,11 @@ namespace  VanK
 
         vk::PipelineColorBlendStateCreateInfo colorBlending
         {
-             .logicOpEnable = vk::False, // No logic operation
-             .logicOp = vk::LogicOp::eCopy, // Don't care
-             .attachmentCount = uint32_t(colorBlendAttachments.size()),
-             .pAttachments = colorBlendAttachments.data()
-        };
+            .logicOpEnable = vk::False, // No logic operation
+            .logicOp = vk::LogicOp::eCopy, // Don't care
+            .attachmentCount = uint32_t(colorBlendAttachments.size()),
+            .pAttachments = colorBlendAttachments.data()
+       };
 
         std::vector dynamicStates =
         {
@@ -734,11 +734,20 @@ namespace  VanK
             *commonDescriptorSetLayout
         };
 
+        std::vector<vk::PushConstantRange> vkPushConstants;
+        vkPushConstants.reserve(pipelineSpecification.PipelineLayoutInfo.PushConstants.size());
+        vk::ShaderStageFlags stageFlags = (pipelineSpecification.PipelineType == VanK_Mesh) ? ConvertToVkShaderStageFlagBits(VanKMesh) : ConvertToVkShaderStageFlagBits(VanKGraphics);
+        for (const auto pushRange : pipelineSpecification.PipelineLayoutInfo.PushConstants)
+        {
+            vkPushConstants.push_back(vk::PushConstantRange{ stageFlags, pushRange.Offset, pushRange.Size});
+        }
+        
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo
         {
             .setLayoutCount = setLayouts.size(),
             .pSetLayouts = setLayouts.data(),
-            .pushConstantRangeCount = 0
+            .pushConstantRangeCount = static_cast<uint32_t>(vkPushConstants.size()),
+            .pPushConstantRanges = vkPushConstants.data()
         };
 
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);

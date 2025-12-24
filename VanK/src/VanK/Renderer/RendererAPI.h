@@ -277,6 +277,17 @@ namespace VanK
         VanK_Graphics,   // Vertex + Fragment
         VanK_Mesh        // Mesh (+ optional Task) + Fragment
     };
+    
+    struct PushConstantRange
+    {
+        uint32_t Offset;
+        uint32_t Size;
+    };
+    
+    struct VanKPipelineLayoutCreateInfo
+    {
+        std::vector<PushConstantRange> PushConstants;
+    };
 
     struct VanKGraphicsPipelineSpecification
     {
@@ -291,6 +302,7 @@ namespace VanK
         VanKPipelineMultisampleStateCreateInfo MultisampleStateCreateInfo;
         VanKPipelineDepthStencilStateCreateInfo DepthStateInfo;
         VanKPipelineRenderingCreateInfo RenderingCreateInfo;
+        VanKPipelineLayoutCreateInfo PipelineLayoutInfo;
     };
 
     struct VanKComputePipelineCreateInfo
@@ -314,13 +326,15 @@ namespace VanK
     enum class VanKPipelineBindPoint
     {
         Graphics,
-        Compute
+        Compute,
+        Mesh
     };
 
     enum VanKShaderStageFlags
     {
         VanKGraphics,
-        VanKCompute
+        VanKCompute,
+        VanKMesh
     };
 
     struct TextureSamplerBinding
