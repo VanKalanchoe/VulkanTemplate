@@ -1388,4 +1388,76 @@ namespace VanK
         }
         return vk::ShaderStageFlagBits::eAll;
     }
+    
+    inline vk::AttachmentLoadOp ConvertToVkLoadOp(VanKLoadOp op)
+    {
+        switch (op)
+        {
+        case VanK_LOADOP_LOAD: return vk::AttachmentLoadOp::eLoad;
+        case VanK_LOADOP_CLEAR: return vk::AttachmentLoadOp::eClear;
+        case VanK_LOADOP_DONT_CARE: return vk::AttachmentLoadOp::eDontCare;
+        default: return vk::AttachmentLoadOp::eDontCare; // safe fallback
+        }
+    }
+    
+    inline vk::AttachmentStoreOp ConvertToVkStoreOp(VanKStoreOp op)
+    {
+        switch (op)
+        {
+        case VanK_STOREOP_STORE:
+        case VanK_STOREOP_RESOLVE_AND_STORE: // best-effort mapping
+            return vk::AttachmentStoreOp::eStore;
+        case VanK_STOREOP_DONT_CARE:
+        case VanK_STOREOP_RESOLVE:
+            return vk::AttachmentStoreOp::eDontCare;
+        default:
+            return vk::AttachmentStoreOp::eNone;
+        }
+    }
+    
+    inline vk::ClearColorValue ConvertToVkClearColor(const VanK_FColor& color, vk::Format format)
+    {
+        vk::ClearColorValue clear = {};
+
+        switch (format)
+        {
+        case vk::Format::eR32Sint:
+        case vk::Format::eR32G32B32A32Sint:
+        case vk::Format::eR8G8B8A8Sint:
+            clear.int32[0] = color.i[0];
+            clear.int32[1] = color.i[1];
+            clear.int32[2] = color.i[2];
+            clear.int32[3] = color.i[3];
+            break;
+
+        case vk::Format::eR32Uint:
+        case vk::Format::eR32G32B32A32Uint:
+        case vk::Format::eR8G8B8A8Uint:
+            clear.uint32[0] = color.u[0];
+            clear.uint32[1] = color.u[1];
+            clear.uint32[2] = color.u[2];
+            clear.uint32[3] = color.u[3];
+            break;
+
+        default: // Assume float
+            clear.float32[0] = color.f[0];
+            clear.float32[1] = color.f[1];
+            clear.float32[2] = color.f[2];
+            clear.float32[3] = color.f[3];
+            break;
+        }
+
+        return clear;
+    }
+    
+    inline vk::Format ConvertToVkFormat(VanKFormat format)
+    {
+        switch (format)
+        {
+        case VanK_Format_B8G8R8A8Srgb: return vk::Format::eB8G8R8A8Srgb;
+        case VanK_FORMAT_R32_SINT: return vk::Format::eR32Sint;
+        case VanK_FORMAT_INVALID: return vk::Format::eUndefined;
+        default : return vk::Format::eUndefined;
+        }
+    }
 }

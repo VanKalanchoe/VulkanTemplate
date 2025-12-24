@@ -1377,16 +1377,7 @@ namespace  VanK
         vk::PipelineStageFlagBits2::eColorAttachmentOutput,
         vk::ImageAspectFlagBits::eColor
     );
-    
-        // First pass: render scene into MSAA color with resolve to single-sample sceneImage
-        // Use the caller-provided clear color
-        vk::ClearColorValue clearColor = vk::ClearColorValue
-        (
-            color_target_info[0].clearColor.f[0],
-            color_target_info[0].clearColor.f[1],
-            color_target_info[0].clearColor.f[2],
-            color_target_info[0].clearColor.f[3]
-        );
+        
         /*vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);*/
         // Use the caller-provided clear color
         vk::ClearColorValue clearDepth = vk::ClearColorValue
@@ -1398,27 +1389,6 @@ namespace  VanK
         );
         /*vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);*/
         
-        // Use the caller-provided clear color
-        vk::ClearColorValue clearEntity = vk::ClearColorValue
-        (
-            color_target_info[1].clearColor.i[0],
-            color_target_info[1].clearColor.i[1],
-            color_target_info[1].clearColor.i[2],
-            color_target_info[1].clearColor.i[3]
-        );
-
-        // Color attachment (multisampled) with resolve attachment
-        vk::RenderingAttachmentInfo colorAttachment =
-        {
-            .imageView = colorImageView,
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .resolveMode = vk::ResolveModeFlagBits::eAverage,
-            .resolveImageView = sceneImageView,
-            .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-            .clearValue = clearColor
-        };
 
         // Depth attachment
         vk::RenderingAttachmentInfo depthAttachment =
@@ -1430,30 +1400,31 @@ namespace  VanK
             .clearValue = clearDepth
         };
         
-        // Entity attachment
-        // Entity attachment (multisampled) with resolve to single-sampled entityImage
-        vk::RenderingAttachmentInfo entityAttachment =
-        {
-            .imageView = entityColorImageView,  // Use MSAA image view
-            .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .resolveMode = vk::ResolveModeFlagBits::eSampleZero,  // Add resolve mode
-            .resolveImageView = entityImageView,  // Resolve to single-sampled entityImage
-            .resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-            .clearValue = clearEntity
-        };
+        std::vector<vk::RenderingAttachmentInfo> colorAttachments;
+        colorAttachments.reserve(num_color_targets);
         
-        std::array<vk::RenderingAttachmentInfo, 2> colorAttachments = {
-            colorAttachment,  // MSAA with resolve to sceneImage
-            entityAttachment  // Single-sample offscreen
-        };
+        for (uint32_t i = 0; i < num_color_targets; i++)
+        {
+            const auto& colorAttachment = color_target_info[i];
+            
+            vk::RenderingAttachmentInfo attachment;
+            attachment.imageView = (i == 0) ? colorImageView : entityColorImageView;
+            attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            attachment.resolveMode = (colorAttachment.format == VanK_FORMAT_R32_SINT) ? vk::ResolveModeFlagBits::eSampleZero : vk::ResolveModeFlagBits::eAverage;
+            attachment.resolveImageView = (i == 0) ? sceneImageView : entityImageView;
+            attachment.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+            attachment.loadOp = ConvertToVkLoadOp(colorAttachment.loadOp);
+            attachment.storeOp = ConvertToVkStoreOp(colorAttachment.storeOp);
+            attachment.clearValue = ConvertToVkClearColor(colorAttachment.clearColor, ConvertToVkFormat(colorAttachment.format));
+            
+            colorAttachments.emplace_back(attachment);
+        }
         
         vk::RenderingInfo renderingInfo =
         {
             .renderArea = {.offset = {0, 0}, .extent = viewport},
             .layerCount = 1,
-            .colorAttachmentCount = colorAttachments.size(),
+            .colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size()),
             .pColorAttachments = colorAttachments.data(),
             .pDepthAttachment = &depthAttachment
         };
