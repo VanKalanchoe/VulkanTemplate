@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <unordered_map>
-#include "VanK/Renderer/RenderCommand.h"
 
 namespace VanK
 {
@@ -32,44 +31,17 @@ namespace VanK
     private:
         std::chrono::time_point<std::chrono::high_resolution_clock> m_Start;
     };
-    
-    struct ProfileResult
-    {
-        float cpuMs = 0.0f;
-        float gpuMs = 0.0f;
-    };
 
-    inline std::unordered_map<std::string, ProfileResult> g_ProfileResults;
+    inline std::unordered_map<std::string, float> g_ProfileResults;
 
     class ScopeTimer
     {
     public:
-        ScopeTimer(const std::string& name, bool enableGpuTimeStamp = false) : m_Name(name), m_EnableGpu(enableGpuTimeStamp)
-        {
-            m_Timer.Reset();
-            if (m_EnableGpu)
-            {
-               RenderCommand::setEnableTimeStamp(true);
-            }
-        }
-        
-        ~ScopeTimer()
-        {
-            float cpuTimeMs = m_Timer.ElapsedMillis();
-            g_ProfileResults[m_Name].cpuMs = cpuTimeMs;
-            
-            if (m_EnableGpu)
-            {
-                RenderCommand::setEnableTimeStamp(false);
-                auto gpuTimes = RenderCommand::getTimeStampPass();
-                // gpuTimes could be a struct { begin, end } in nanoseconds
-                g_ProfileResults[m_Name].gpuMs = (gpuTimes.end - gpuTimes.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f; // ms
-            }
-        }
+        ScopeTimer(const std::string& name) : m_Name(name) { m_Timer.Reset(); }
+        ~ScopeTimer() { g_ProfileResults[m_Name] = m_Timer.ElapsedMillis(); }
 
     private:
         std::string m_Name;
         Timer m_Timer;
-        bool m_EnableGpu = false;
     };
 }

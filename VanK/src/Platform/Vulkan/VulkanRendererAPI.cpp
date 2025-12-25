@@ -907,6 +907,10 @@ namespace  VanK
         commandBuffers[frameIndex].resetQueryPool(queryPoolStatistics, 0, 1);
         commandBuffers[frameIndex].beginQuery(queryPoolStatistics, 0);
         
+        //timestamp
+        commandBuffers[frameIndex].resetQueryPool(queryPoolTimeStep, 0, 2);
+        commandBuffers[frameIndex].writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, queryPoolTimeStep, 0);
+        
         auto cmd = new VanKCommandBuffer_T{&commandBuffers[frameIndex]};
         
         return cmd;
@@ -914,7 +918,12 @@ namespace  VanK
     
     void VulkanRendererAPI::EndCommandBuffer(VanKCommandBuffer cmd)
     {
+        //statistics
         Unwrap(cmd).endQuery(queryPoolStatistics, 0);
+        
+        //timestamp
+        Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eBottomOfPipe, queryPoolTimeStep, 1);
+        
         Unwrap(cmd).end();
     }
 
@@ -1023,6 +1032,8 @@ namespace  VanK
         
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
         /*downloadQueryStatisticsBuffer();*/
+        if (isTimeStapEnabled)
+            downloadQueryTimeStampBuffer();
     }
 
     VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers)
@@ -1310,12 +1321,6 @@ namespace  VanK
 
     void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0, VanKDepthStencilTargetInfo depth_stencil_target_info = {})
     {
-        if (isTimeStapEnabled)
-        {
-            Unwrap(cmd).resetQueryPool(queryPoolTimeStep, 0, 2);
-            Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, queryPoolTimeStep, 0);
-        }
-        
         DBG_VK_SCOPE(Unwrap(cmd));  // <-- Helps to debug in NSight
         
         // Before starting rendering, transition the images to the appropriate layouts
@@ -1620,13 +1625,6 @@ namespace  VanK
         entityImageInitialized = false;
         entityColorImageInitialized = false;
         m_hasActiveRenderPass = false;
-        
-        if (isTimeStapEnabled)
-        {
-            Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, queryPoolTimeStep, 1);
-        
-            downloadQueryTimeStampBuffer(cmd); 
-        }
     }
 
     void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd)
@@ -2491,9 +2489,13 @@ namespace  VanK
         }
     }
     
-    void VulkanRendererAPI::downloadQueryTimeStampBuffer(VanKCommandBuffer cmd) // todo use vankcommandbuffer because its in a pass anyway
+    void VulkanRendererAPI::downloadQueryTimeStampBuffer() // todo use vankcommandbuffer because its in a pass anyway
     {
-        Unwrap(cmd).copyQueryPoolResults(queryPoolTimeStep, 0, 2, queryTimeStepBuffer.buffer, 0, sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+        auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+        
+        cmd->copyQueryPoolResults(queryPoolTimeStep, 0, 2, queryTimeStepBuffer.buffer, 0, sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+        
+        utils::endSingleTimeCommands(*cmd, queue);
         
         // Map and copy data to the staging buffer
         try

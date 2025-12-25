@@ -1187,7 +1187,7 @@ namespace VanK
         
         void downloadQueryStatisticsBuffer();
         
-        void downloadQueryTimeStampBuffer(VanKCommandBuffer cmd);
+        void downloadQueryTimeStampBuffer();
 
         static uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
 

@@ -718,7 +718,7 @@ namespace VanK
         
         DrawMeshShader();
      
-        /*DrawFrame();*/
+        DrawFrame();
         
         /*EndSubmit();*/
     }
@@ -743,11 +743,11 @@ namespace VanK
             
         RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
         
-        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
+        /*RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
         RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
         
-        RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
+        RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);*/
             
         RenderCommand::EndRendering(cmd);
     }

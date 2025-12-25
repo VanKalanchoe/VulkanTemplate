@@ -19,6 +19,7 @@
 namespace VanK
 {
     static Ref<Font> s_Font;
+
     EditorLayer::EditorLayer() : Layer("EditorLayer"), m_CameraController(1280.0f / 720.0f)
     {
         s_Font = Font::GetDefault(); //cant use this ebcause static otherwise it dies last even last to renderer works again ebcasue i remove static in shutdown vulkanrenderapi
@@ -26,14 +27,14 @@ namespace VanK
         // pngs zu ktx konvertien mit meinem python program // enable all pngs back fix texture class something still messed
         //create texture still running inside vulanrendererapi
         m_IconPlay = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/PlayButton.ktx2", {.GenerateMips = false});
-        m_IconStop = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StopButton.ktx2", { .GenerateMips = false });
-        m_IconPause = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/PauseButton.ktx2", { .GenerateMips = false });
-        m_IconSimulate = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/SimulateButton.ktx2", { .GenerateMips = false });
-        m_IconStep = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StepButton.ktx2", { .GenerateMips = false });
-        
+        m_IconStop = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StopButton.ktx2", {.GenerateMips = false});
+        m_IconPause = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/PauseButton.ktx2", {.GenerateMips = false});
+        m_IconSimulate = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/SimulateButton.ktx2", {.GenerateMips = false});
+        m_IconStep = TextureImporter::LoadTexture2D("../build/VanK-Editor/Resources/Icons/StepButton.ktx2", {.GenerateMips = false});
+
         m_EditorScene = CreateRef<Scene>();
         m_ActiveScene = m_EditorScene;
-        
+
         auto commandLineArgs = Application::Get().GetSpecification().CommandLineArgs;
         if (commandLineArgs.Count > 1)
         {
@@ -55,7 +56,7 @@ namespace VanK
                 SDL_PushEvent(&event);
             }
         }
-        
+
         m_EditorCamera = EditorCamera(30.0f, 1.778f, 0.1f, 1000.0f);
         //setlinewidth maybe here ?
     }
@@ -68,12 +69,12 @@ namespace VanK
     void EditorLayer::OnEvent(VanK::Event& event)
     {
         //std::println("{}", event.ToString());
-        
+
         m_CameraController.OnEvent(event);
-        
+
         if (m_SceneState == SceneState::Edit)
             m_EditorCamera.OnEvent(event);
-        
+
         VanK::EventDispatcher dispatcher(event);
         dispatcher.Dispatch<VanK::KeyPressedEvent>([this](VanK::KeyPressedEvent& e) { return OnKeyPressed(e); });
         dispatcher.Dispatch<VanK::MouseButtonPressedEvent>([this](VanK::MouseButtonPressedEvent& e) { return OnMouseButtonPressed(e); });
@@ -86,30 +87,30 @@ namespace VanK
         {
             int width, height;
             SDL_GetWindowSize(Application::Get().getWindow()->getWindowHandle(), &width, &height);
-        
+
             m_ViewportSize =
             {
                 std::max(1u, static_cast<uint32_t>(width)),
                 std::max(1u, static_cast<uint32_t>(height))
             };
         }
-        
+
         m_ActiveScene->OnViewportResize((uint32_t)m_ViewportSize.x, (uint32_t)m_ViewportSize.y);
-        
+
         if (m_ViewportSize.x != lastViewportExtent.x || m_ViewportSize.y != lastViewportExtent.y)
         {
             std::cout << "Viewport size changed: " << m_ViewportSize.x << ", " << m_ViewportSize.y << std::endl;
-            
+
             lastViewportExtent.x = m_ViewportSize.x;
             lastViewportExtent.y = m_ViewportSize.y;
-            
+
             Renderer::SetViewportSize({m_ViewportSize.x, m_ViewportSize.y});
             m_CameraController.OnResize(m_ViewportSize.x, m_ViewportSize.y);
             m_EditorCamera.SetViewportSize(m_ViewportSize.x, m_ViewportSize.y);
         }
-        
+
         /*Renderer::ResetStats();*/
-        
+
         switch (m_SceneState)
         {
         case SceneState::Edit:
@@ -120,14 +121,14 @@ namespace VanK
                 }
 
                 m_EditorCamera.OnUpdate(ts);
-                
+
                 m_ActiveScene->OnUpdateEditor(ts, m_EditorCamera);
                 break;
             }
         case SceneState::Simulate:
             {
                 m_EditorCamera.OnUpdate(ts);
-            
+
                 m_ActiveScene->OnUpdateSimulation(ts, m_EditorCamera);
                 break;
             }
@@ -137,7 +138,7 @@ namespace VanK
                 break;
             }
         }
-        
+
         // Mouse Selection
         auto [mx, my] = ImGui::GetMousePos();
         mx -= m_ViewportBounds[0].x;
@@ -153,10 +154,10 @@ namespace VanK
             // Retrieve the pixel data (ID) from the calculated index
             // reading only 1 pixel right now but if multi select maybe i need full viewport ? 
             int pixelData = RenderCommand::ReadEntityIDAtPixel(mouseX, mouseY); // chnage this
-            
+
             m_HoveredEntity = pixelData == -1 ? Entity() : Entity((entt::entity)pixelData, m_ActiveScene.get());
         }
-        
+
         OnOverlayRender();
     }
 
@@ -231,7 +232,7 @@ namespace VanK
                 }
 
                 ImGui::Separator();
-                
+
                 if (ImGui::MenuItem("New Scene", "Ctrl+N"))
                 {
                     NewScene();
@@ -246,7 +247,7 @@ namespace VanK
                 {
                     SaveSceneAs();
                 }
-                
+
                 ImGui::Separator();
 
                 if (ImGui::MenuItem("Exit")) Application::Shutdown(); // idk maybe use bool or so
@@ -259,10 +260,10 @@ namespace VanK
                 {
                     /*ScriptEngine::ReloadAssembly();*/ // otherwise it thinkgs its exectuing endmenu if you dont use {}
                 }
-                
+
                 ImGui::EndMenu();
             }
-            
+
             ImGui::SameLine();
             static bool vsync = Renderer::GetVSync();
             if (ImGui::Checkbox("Vsync", &vsync))
@@ -278,10 +279,10 @@ namespace VanK
 
         m_SceneHierarchyPanel.OnImGuiRender();
         m_ContentBrowserPanel->OnImGuiRender();
-        
+
         // "Right" Window
         ImGui::Begin("Stats");
-        
+
         std::string name = "None";
         if (m_HoveredEntity && m_HoveredEntity.HasComponent<TagComponent>())
         {
@@ -290,7 +291,7 @@ namespace VanK
         ImGui::Text("Hovered Entity: %s", name.c_str());
 
         ImGui::Spacing();
-    
+
         /*auto stats3D = Renderer::GetStats();
         ImGui::Text("Renderer3D stats:");
         ImGui::Text("Draw Calls: %d", stats3D.DrawCalls);
@@ -301,9 +302,9 @@ namespace VanK
         ImGui::Text("MeshCount: %d", stats3D.MeshCount);
         ImGui::Text("MeshVertices: %d", stats3D.GetTotalMeshVertexCount());
         ImGui::Text("MeshIndices: %d", stats3D.GetTotalMeshIndexCount());*/
-        
+
         ImGui::Spacing();
-        
+
         /*auto stats = Renderer2D::GetStats();
         ImGui::Text("Renderer2D stats:");
         ImGui::Text("Draw Calls: %d", stats.DrawCalls);
@@ -312,52 +313,40 @@ namespace VanK
         ImGui::Text("Indices: %d", stats.GetTotalIndexCount());
         ImVec2 right = ImGui::GetWindowSize();
         ImGui::Text("Window Size: %.0fx%.0f", right.x, right.y);*/
-        
+
         ImGui::Text("ImGui ActiveID: %u", Application::Get().GetLayer<ImGuiLayer>()->GetActiveWidgetID());
         ImGui::End(); // End "right" Window
-        
+
         ImGui::Spacing();
-        
+
         ImGui::Begin("Renderer");
-        
         /*  VanKDeviceProperties properties = RenderCommand::GetDeviceProperties();
-           ImGui::Text("DeviceName: %s", properties.deviceName.c_str());
-           ImGui::Text("Nvidia Driver Version: %u.%u.%u", properties.driverMajor, properties.driverMinor, properties.driverPatch);
-           ImGui::Text("Vulkan API Version: %u.%u.%u", properties.apiMajor, properties.apiMinor, properties.apiPatch);
-       
-           ImGui::Spacing();
-       */
-        
-        // Get the available width inside the window
-        ImVec2 region = ImGui::GetContentRegionAvail();
-
-        // Define relative proportions for each column
-        float nameColumnWidth    = region.x * 0.6f; // 60% for pass name
-        float cpuColumnWidth     = region.x * 0.2f; // 20% for CPU
-        float gpuColumnWidth     = region.x * 0.2f; // 20% for GPU
-
-        ImGui::Columns(3, "ProfilingColumns", false);
-
-        // Set dynamic column widths
-        ImGui::SetColumnWidth(0, nameColumnWidth);
-        ImGui::SetColumnWidth(1, cpuColumnWidth);
-        ImGui::SetColumnWidth(2, gpuColumnWidth);
-
-        // Header
-        ImGui::Text("Pass"); ImGui::NextColumn();
-        ImGui::Text("CPU (ms)"); ImGui::NextColumn();
-        ImGui::Text("GPU (ms)"); ImGui::NextColumn();
-        ImGui::Separator();
-
-        // Rows
-        for (auto& [name, result] : VanK::g_ProfileResults)
+          ImGui::Text("DeviceName: %s", properties.deviceName.c_str());
+          ImGui::Text("Nvidia Driver Version: %u.%u.%u", properties.driverMajor, properties.driverMinor, properties.driverPatch);
+          ImGui::Text("Vulkan API Version: %u.%u.%u", properties.apiMajor, properties.apiMinor, properties.apiPatch);
+      
+          ImGui::Spacing();
+      */
+        // Toggle GPU profiling via RenderCommand
+        bool enabled = RenderCommand::getEnableTimeStamp();
+        if (ImGui::Checkbox("Enable GPU Profiling", &enabled))
         {
-            ImGui::Text("%s", name.c_str()); ImGui::NextColumn();
-            ImGui::Text("%.3f", result.cpuMs); ImGui::NextColumn();
-            ImGui::Text("%.3f", result.gpuMs); ImGui::NextColumn();
+            RenderCommand::setEnableTimeStamp(enabled);
         }
 
-        ImGui::Columns(1);
+        // Display GPU times next to checkbox
+        if (enabled)
+        {
+            ImGui::SameLine(); // Continue on the same line
+            auto gpu = RenderCommand::getTimeStampPass();
+            float gpuMs = (gpu.end - gpu.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f;
+            ImGui::Text("(GPU: %.3f ms)", gpuMs);
+        }
+
+        ImGui::Spacing();
+
+        for (auto& [name, time] : VanK::g_ProfileResults)
+            ImGui::Text("%s: %.3f ms", name.c_str(), time);
         ImGui::End();
 
         ImGui::Begin("Settings");
@@ -396,7 +385,7 @@ namespace VanK
 
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         m_ViewportSize = {viewportPanelSize.x, viewportPanelSize.y};
-        
+
         auto textureID = RenderCommand::getImTextureID(0);
         if (textureID)
         {
@@ -439,7 +428,7 @@ namespace VanK
 
             // Editor camera
             const glm::mat4& cameraProjection = m_EditorCamera.GetProjectionForImGuizmo();
-            
+
             glm::mat4 cameraView = m_EditorCamera.GetViewMatrix();
 
             // Entity transform
@@ -481,7 +470,7 @@ namespace VanK
 
         ImGui::End(); // End DockSpace
     }
-    
+
     void EditorLayer::UI_ToolBar()
     {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 2});
@@ -499,14 +488,14 @@ namespace VanK
 
         ImGui::Begin("##toolbar", nullptr,
                      ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse);
-        
+
         float size = ImGui::GetWindowHeight() - 4.0f;
         ImGui::SetCursorPosX((ImGui::GetWindowContentRegionMax().x * 0.5f) - (size * 0.5f));
 
         bool hasPlayButton = m_SceneState == SceneState::Edit || m_SceneState == SceneState::Play;
         bool hasSimulateButton = m_SceneState == SceneState::Edit || m_SceneState == SceneState::Simulate;
         bool hasPauseButton = m_SceneState != SceneState::Edit;
-        
+
         if (hasPlayButton)
         {
             {
@@ -576,7 +565,7 @@ namespace VanK
         ImGui::PopStyleColor(3);
         ImGui::End();
     }
-    
+
     bool EditorLayer::OnKeyPressed(KeyPressedEvent& e)
     {
         // Shortcuts
@@ -584,7 +573,7 @@ namespace VanK
         {
             return false;
         }
-        
+
         bool control = (Input::IsKeyPressed(SDL_SCANCODE_LCTRL) || Input::IsKeyPressed(SDL_SCANCODE_RCTRL));
         bool shift = (Input::IsKeyPressed(SDL_SCANCODE_LSHIFT) || Input::IsKeyPressed(SDL_SCANCODE_RSHIFT));
 
@@ -618,8 +607,8 @@ namespace VanK
                 break;
             }
 
-            // Scene Commands
-            case SDL_SCANCODE_D:
+        // Scene Commands
+        case SDL_SCANCODE_D:
             {
                 if (control)
                 {
@@ -628,7 +617,7 @@ namespace VanK
                 break;
             }
 
-            
+
         // Gizmos
         case SDL_SCANCODE_Q:
             m_GizmoType = -1;
@@ -665,7 +654,7 @@ namespace VanK
         default:
             break;
         }
-        
+
         return false;
     }
 
@@ -683,25 +672,25 @@ namespace VanK
                 m_SceneHierarchyPanel.SetSelectedEntity(m_HoveredEntity);
             }
         }
-        
+
         return false;
     }
-    
+
     void EditorLayer::OnOverlayRender()
     {
-       if (m_SceneState == SceneState::Play)
+        if (m_SceneState == SceneState::Play)
         {
             Entity camera = m_ActiveScene->GetPrimaryCameraEntity();
             if (!camera)
                 return;
-            
+
             Renderer::BeginScene(camera.GetComponent<CameraComponent>().Camera, camera.GetComponent<TransformComponent>().GetTransform());
         }
         else
         {
             Renderer::BeginScene(m_EditorCamera);
         }
-        
+
         if (m_ShowPhysicsColliders)
         {
             // Box Colliders
@@ -710,7 +699,7 @@ namespace VanK
                 for (auto entity : view)
                 {
                     auto [tc, bc2d] = view.get<TransformComponent, BoxCollider2DComponent>(entity);
-                    
+
                     glm::vec3 translation = tc.Translation + glm::vec3(bc2d.Offset, 0.001f);
                     glm::vec3 scale = tc.Scale * glm::vec3(bc2d.Size * 2.0f, 1.0f);
 
@@ -719,7 +708,7 @@ namespace VanK
                         * glm::rotate(glm::mat4(1.0f), tc.Rotation.z, glm::vec3(0.0f, 0.0f, 1.0f))
                         * glm::translate(glm::mat4(1.0f), glm::vec3(bc2d.Offset, 0.001f))
                         * glm::scale(glm::mat4(1.0f), scale * glm::vec3(bc2d.Size * 2.0f, 1.0f));
-                
+
                     Renderer::DrawRect(transform, glm::vec4(0, 1, 0, 1));
                 }
             }
@@ -729,7 +718,7 @@ namespace VanK
                 for (auto entity : view)
                 {
                     auto [tc, cc2d] = view.get<TransformComponent, CircleCollider2DComponent>(entity);
-                    
+
                     glm::vec3 translation = tc.Translation + glm::vec3(cc2d.Offset, 0.001f);
                     glm::vec3 scale = tc.Scale * glm::vec3(cc2d.Radius * 2.0f);
 
@@ -740,7 +729,7 @@ namespace VanK
                 }
             }
         }
-        
+
         // Draw selected entity outline
         if (Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity())
         {
@@ -749,23 +738,23 @@ namespace VanK
         }
         Renderer::EndScene();
     }
-    
+
     void EditorLayer::NewProject()
     {
         Project::New();
     }
-    
+
     bool EditorLayer::OpenProject()
     {
         std::string filepath = Utility::OpenFile("Vank Project *.vproj\0vproj\0");
-        
+
         if (filepath.empty())
             return false;
-        
+
         OpenProject(filepath);
         return true;
     }
-    
+
     void EditorLayer::OpenProject(const std::filesystem::path& path)
     {
         if (Project::Load(path))
@@ -775,26 +764,26 @@ namespace VanK
             AssetHandle startScene = Project::GetActive()->GetConfig().StartScene;
             if (startScene)
                 OpenScene(startScene);
-            
+
             m_ContentBrowserPanel = CreateScope<ContentBrowserPanel>(Project::GetActive());
         }
     }
-    
+
     void EditorLayer::SaveProject()
     {
         //Project::SaveActive();
     }
-    
+
     void EditorLayer::NewScene()
     {
         m_EditorScene = CreateRef<Scene>();
         m_ActiveScene = m_EditorScene;
-        
+
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
-        
+
         m_EditorScenePath = std::filesystem::path();
     }
-    
+
     void EditorLayer::OpenScene()
     {
         /*std::string filepath = Utility::OpenFile("Vank Scene *.vank\0vank\0");
@@ -804,37 +793,38 @@ namespace VanK
             OpenScene(filepath);
         }*/
     }
-    
+
     void EditorLayer::OpenScene(AssetHandle handle)
     {
         VK_CORE_ASSERT(handle);
-        
+
         if (m_SceneState != SceneState::Edit)
         {
             OnSceneStop();
         }
-        
+
         Ref<Scene> readOnlyScene = AssetManager::GetAsset<Scene>(handle);
         Ref<Scene> newScene = Scene::Copy(readOnlyScene);
-        
+
         m_EditorScene = newScene;
         m_SceneHierarchyPanel.SetContext(m_EditorScene);
 
         m_ActiveScene = m_EditorScene;
         m_EditorScenePath = Project::GetActive()->GetEditorAssetManager()->GetFilePath(handle);
     }
-    
+
     void EditorLayer::SaveScene()
     {
         if (!m_EditorScenePath.empty())
         {
             SerializeScene(m_ActiveScene, m_EditorScenePath);
-        }else
+        }
+        else
         {
             SaveSceneAs();
         }
     }
-    
+
     void EditorLayer::SaveSceneAs()
     {
         std::string filepath = Utility::SaveFile("Vank Scene *.vank\0vank\0");
@@ -844,17 +834,17 @@ namespace VanK
             m_EditorScenePath = filepath;
         }
     }
-    
+
     void EditorLayer::SerializeScene(Ref<Scene> scene, const std::filesystem::path& path)
     {
         SceneImporter::SaveScene(scene, path);
     }
-    
+
     void EditorLayer::OnScenePlay()
     {
         if (m_SceneState == SceneState::Simulate)
             OnSceneStop();
-            
+
         m_SceneState = SceneState::Play;
 
         m_ActiveScene = Scene::Copy(m_EditorScene);
@@ -862,12 +852,12 @@ namespace VanK
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
-    
+
     void EditorLayer::OnSceneSimulate()
     {
         if (m_SceneState == SceneState::Play)
             OnSceneStop();
-        
+
         m_SceneState = SceneState::Simulate;
 
         m_ActiveScene = Scene::Copy(m_EditorScene);
@@ -875,38 +865,38 @@ namespace VanK
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
-    
+
     void EditorLayer::OnSceneStop()
     {
         VK_CORE_ASSERT("OnSceneStop failed no sceneState match", m_SceneState == SceneState::Play || m_SceneState == SceneState::Simulate);
-        
+
         if (m_SceneState == SceneState::Play)
             m_ActiveScene->OnRuntimeStop();
         else if (m_SceneState == SceneState::Simulate)
             m_ActiveScene->OnSimulationStop();
 
         m_SceneState = SceneState::Edit;
-        
+
         m_ActiveScene = m_EditorScene;
 
         m_SceneHierarchyPanel.SetContext(m_ActiveScene);
     }
-    
+
     void EditorLayer::OnScenePause()
     {
         if (m_SceneState == SceneState::Edit)
             return;
-        
+
         m_ActiveScene->SetPaused(true);
     }
-    
+
     void EditorLayer::OnDuplicateEntity()
     {
         if (m_SceneState != SceneState::Edit)
         {
             return;
         }
-        
+
         Entity selectedEntity = m_SceneHierarchyPanel.GetSelectedEntity();
         if (selectedEntity)
         {
