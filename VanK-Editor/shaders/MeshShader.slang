@@ -4,6 +4,7 @@ struct VertexOutput
 {
     float4 position : SV_Position;
     float4 color : TEXCOORD0;
+    float2 texcoords : TEXCOORD1;
 };
 
 struct CulledData
@@ -29,7 +30,7 @@ struct PushConstant {
 const static int32_t TASK_SHADER_DISPATCH_X = 64;
 const static int32_t MESH_SHADER_DISPATCH_X = 32;
 const static uint MAX_VERTICES = 64;
-const static uint MAX_PRIMITIVES = 64;
+const static uint MAX_PRIMITIVES = 96;
 
 
 // Per https://developer.nvidia.com/blog/using-mesh-shaders-for-professional-graphics/
@@ -85,7 +86,7 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
             pushConstant.culledData.frustumCulled.add(1);
         }
 
-        // Backface cull from meshoptimizer.h
+      /*   // Backface cull from meshoptimizer.h
         // visible = dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius
         float3 worldConeAxis = normalize(mul((float3x3)pushConstant.modelMatrix, meshlet.coneAxis));
         float3 cameraToCenter = worldCenter - pushConstant.sceneData->frozenCameraWorldPos.xyz;
@@ -94,7 +95,7 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
         visible &= backfaceVisible;
         if (!backfaceVisible) {
             pushConstant.culledData.backfaceCulled.add(1);
-        }
+        } */
 
         // todo: send back to show how many culled from imgui
         if (visible) {
@@ -145,6 +146,7 @@ void meshMain(
 
         vertices[i].position = clipPos;
         vertices[i].color = float4(color, 1.0);
+        vertices[i].texcoords = v.texcoords;
     }
 
     for (uint i = instanceIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) {
@@ -158,8 +160,13 @@ void meshMain(
     }
 }
 
-[shader("fragment")]
+[[vk::binding(0, 0)]]
+Sampler2D texture[];
+
+[shader("pixel")]
 float4 fragmentMain(VertexOutput vertexInput)
 {
-    return float4(vertexInput.color.xyz, 1.0f);
+  float4 textureColor = texture[1].Sample(vertexInput.texcoords);
+  float4 hashColor = float4(vertexInput.color.xyz, 1.0f);
+  return /* textureColor * */ hashColor;
 }

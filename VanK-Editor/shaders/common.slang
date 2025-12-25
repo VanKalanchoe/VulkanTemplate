@@ -3,7 +3,7 @@ module common;
 public struct Vertex
 {
     public float3 position;
-    float pad;
+    public float2 texcoords;
 }
 
 public struct Meshlet

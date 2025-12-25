@@ -107,7 +107,7 @@ namespace VanK
         m_transferBuffer = instance.GetAllocator().createBuffer
         (
             size,
-            vk::BufferUsageFlagBits2::eTransferSrc,
+            vk::BufferUsageFlagBits2::eTransferSrc | vk::BufferUsageFlagBits2::eTransferDst,
             memoryUsage,
             vma::AllocationCreateFlagBits::eHostAccessSequentialWrite
         );

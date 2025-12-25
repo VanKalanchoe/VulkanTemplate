@@ -14,10 +14,6 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
-#include <fastgltf/core.hpp>
-#include <fastgltf/types.hpp>
-#include <fastgltf/tools.hpp>
-
 #include <meshoptimizer.h>
 
 #include "MSDFData.h"
@@ -31,7 +27,7 @@ namespace VanK
     bool IsShaderReloadFinished = false;
     std::string changedFile;
     Timer ReloadTimer;
-    
+
     struct Renderer3DData
     {
         MeshHandle vikingHandle;
@@ -40,15 +36,16 @@ namespace VanK
         MeshHandle circleHandle;
         MeshHandle textHandle;
         MeshHandle lineHandle;
-        
+
         shaderio::SceneInfo SceneData;
-        
+
         Ref<Texture2D> FontAtlasTexture;
     };
+
     static Renderer3DData s_Data;
-    
+
     const std::string MODEL_PATH = "../build/VanK/models/viking_room.glb";
-    
+
     void Renderer::loadModel()
     {
         // Use tinygltf to load the model instead of tinyobjloader
@@ -189,7 +186,7 @@ namespace VanK
         uint64_t meshletBuffer;
         uint32_t meshletCount;
     };
-    
+
     struct Transform
     {
         glm::vec3 translation{};
@@ -202,11 +199,11 @@ namespace VanK
     };
 
     inline const Transform Transform::Identity{
-            {0.0f, 0.0f, 0.0f},
-            {1.0f, 0.0f, 0.0f, 0.0f},
-            {1.0f, 1.0f, 1.0f}
+        {0.0f, 0.0f, 0.0f},
+        {1.0f, 0.0f, 0.0f, 0.0f},
+        {1.0f, 1.0f, 1.0f}
     };
-    
+
     struct Frustum
     {
         glm::vec4 planes[6];
@@ -215,7 +212,7 @@ namespace VanK
 
         explicit Frustum(const glm::mat4& viewProj);
     };
-    
+
     Frustum::Frustum(const glm::mat4& viewProj)
     {
         planes[0] = glm::vec4(
@@ -260,7 +257,8 @@ namespace VanK
             viewProj[3][3] - viewProj[3][2]
         );
 
-        for (auto& plane : planes) {
+        for (auto& plane : planes)
+        {
             float length = glm::length(glm::vec3(plane));
             plane /= length;
         }
@@ -287,21 +285,22 @@ namespace VanK
 
         float deltaTime{};
     };
-    
+
     std::vector<SceneDatas> scene;
     SceneDatas scenesData{};
     SceneDatas frozenSceneData{};
+
     struct CulledData
     {
         uint32_t frustumCulled{0};
         uint32_t backfaceCulled{0};
         uint32_t totalCulled{0};
     };
-    
+
     struct Vertex
     {
         glm::vec3 position{0.0f};
-        float pad{0.0f};
+        glm::vec2 texcoords;
     };
 
     struct Meshlet
@@ -330,7 +329,7 @@ namespace VanK
         glm::vec4 boundingSphere{};
     };
 
-    
+
     struct ExtractedMeshletModel
     {
         std::string name{};
@@ -344,212 +343,320 @@ namespace VanK
         MeshletPrimitive primitive{};
         Transform transform{};
     };
-    
+
     ExtractedMeshletModel LoadStanfordBunny()
-{
-    ExtractedMeshletModel meshletModel{};
-    fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
-    constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
-                                 | fastgltf::Options::AllowDouble
-                                 | fastgltf::Options::LoadExternalBuffers
-                                 | fastgltf::Options::LoadExternalImages;
-
-    const std::filesystem::path path = "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf";
-    auto gltfFile = fastgltf::MappedGltfFile::FromPath(path);
-    if (!static_cast<bool>(gltfFile)) {
-        fmt::println("[Error] Failed to open glTF file ({}): {}\n", path.filename().string(), getErrorMessage(gltfFile.error()));
-        exit(1);
-    }
-
-    auto load = parser.loadGltf(gltfFile.get(), path.parent_path(), gltfOptions);
-    if (!load) {
-        fmt::println("[Error] Failed to load glTF: {}\n", to_underlying(load.error()));
-        exit(1);
-    }
-
-    fastgltf::Asset gltf = std::move(load.get());
-    assert(gltf.meshes.size() == 1);
-    assert(gltf.meshes[0].primitives.size() == 1);
-    assert(gltf.nodes.size() == 1);
-
-    meshletModel.bSuccessfullyLoaded = true;
-    meshletModel.name = path.filename().string();
-
-    fastgltf::Primitive& bunnyPrimitive = gltf.meshes[0].primitives[0];
-    meshletModel.primitive.materialIndex = 0;
-
-
-    std::vector<Vertex> primitiveVertices{};
-    std::vector<uint32_t> primitiveIndices{};
-
-    // INDICES
-    const fastgltf::Accessor& indexAccessor = gltf.accessors[bunnyPrimitive.indicesAccessor.value()];
-    primitiveIndices.clear();
-    primitiveIndices.reserve(indexAccessor.count);
-
-    fastgltf::iterateAccessor<std::uint32_t>(gltf, indexAccessor, [&](const std::uint32_t idx) {
-        primitiveIndices.push_back(idx);
-    });
-
-    // POSITION (REQUIRED)
-    const fastgltf::Attribute* positionIt = bunnyPrimitive.findAttribute("POSITION");
-    const fastgltf::Accessor& posAccessor = gltf.accessors[positionIt->accessorIndex];
-    primitiveVertices.clear();
-    primitiveVertices.resize(posAccessor.count);
-
-    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
-        primitiveVertices[index] = {};
-        primitiveVertices[index].position = {v.x(), v.y(), v.z()};
-    });
-
-    const size_t maxVertices = 64;
-    const size_t maxTriangles = 64;
-
-    // build clusters (meshlets) out of the mesh
-    size_t maxMeshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
-    std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
-    std::vector<unsigned int> meshletVertices(primitiveIndices.size());
-    std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
-
-    std::vector<uint32_t> primitiveVertexPositions;
-    meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
-                                          primitiveIndices.data(), primitiveIndices.size(),
-                                          reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
-                                          maxVertices, maxTriangles, 0.f));
-
-    // Optimize each meshlet's micro index buffer/vertex layout individually
-    for (auto& meshlet : meshlets) {
-        meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
-    }
-
-    // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
     {
-        const meshopt_Meshlet& last = meshlets.back();
-        meshletVertices.resize(last.vertex_offset + last.vertex_count);
-        meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
-    }
+        ExtractedMeshletModel meshletModel{};
+        std::vector<Vertex> primitiveVertices{};
+        std::vector<uint32_t> primitiveIndices{};
 
-    auto generateBoundingSphere = [](const std::vector<Vertex>& vertices) {
-        glm::vec3 center = {0, 0, 0};
+        // Use tinygltf to load the model instead of tinyobjloader
+        tinygltf::Model model;
+        tinygltf::TinyGLTF loader;
+        std::string err;
+        std::string warn;
 
-        for (auto&& vertex : vertices) {
-            center += vertex.position;
+        //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
+        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
+        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
+        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
+        /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
+
+        if (!warn.empty())
+        {
+            std::cout << "glTF warning: " << warn << std::endl;
         }
-        center /= static_cast<float>(vertices.size());
 
-
-        float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
-        for (size_t i = 1; i < vertices.size(); ++i) {
-            radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
+        if (!err.empty())
+        {
+            std::cout << "glTF error: " << err << std::endl;
         }
-        radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
 
-        return glm::vec4(center, radius);
-    };
+        if (!ret)
+        {
+            throw std::runtime_error("Failed to load glTF model");
+        }
 
+        primitiveVertices.clear();
+        primitiveIndices.clear();
 
-    meshletModel.primitive.meshletOffset = meshletModel.meshlets.size();
-    meshletModel.primitive.meshletCount = meshlets.size();
-    meshletModel.primitive.boundingSphere = generateBoundingSphere(primitiveVertices);
+        // Process all meshes in the model
+        for (const auto& mesh : model.meshes)
+        {
+            for (const auto& primitive : mesh.primitives)
+            {
+                // Get indices
+                const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+                const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+                const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
 
-    uint32_t vertexOffset = meshletModel.vertices.size();
-    uint32_t meshletVertexOffset = meshletModel.meshletVertices.size();
-    uint32_t meshletTrianglesOffset = meshletModel.meshletTriangles.size();
+                // Get vertex positions
+                const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
+                const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+                const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
-    meshletModel.vertices.insert(meshletModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
-    meshletModel.meshletVertices.insert(meshletModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
-    meshletModel.meshletTriangles.insert(meshletModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
+                // Get texture coordinates if available
+                bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
+                const tinygltf::Accessor* texCoordAccessor = nullptr;
+                const tinygltf::BufferView* texCoordBufferView = nullptr;
+                const tinygltf::Buffer* texCoordBuffer = nullptr;
 
-    for (meshopt_Meshlet& meshlet : meshlets) {
-        meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-            &meshletVertices[meshlet.vertex_offset],
-            &meshletTriangles[meshlet.triangle_offset],
-            meshlet.triangle_count,
-            reinterpret_cast<const float*>(primitiveVertices.data()),
+                if (hasTexCoords)
+                {
+                    texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
+                    texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
+                    texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
+                }
+
+                uint32_t baseVertex = static_cast<uint32_t>(primitiveVertices.size());
+
+                for (size_t i = 0; i < posAccessor.count; i++)
+                {
+                    Vertex vertex{};
+
+                    const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor
+                        .byteOffset + i * 12]);
+                    vertex.position = {pos[0], pos[1], pos[2]};
+
+                    if (hasTexCoords)
+                    {
+                        const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->
+                            byteOffset + texCoordAccessor->byteOffset + i * 8]);
+                        vertex.texcoords = {texCoord[0], texCoord[1]};
+                    }
+                    else
+                    {
+                        vertex.texcoords = {0.0f, 0.0f};
+                    }
+
+                    /*vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};*/
+
+                    primitiveVertices.push_back(vertex);
+                }
+
+                const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+                size_t indexCount = indexAccessor.count;
+                size_t indexStride = 0;
+
+                // Determine index stride based on component type
+                if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                {
+                    indexStride = sizeof(uint16_t);
+                }
+                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+                {
+                    indexStride = sizeof(uint32_t);
+                }
+                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                {
+                    indexStride = sizeof(uint8_t);
+                }
+                else
+                {
+                    throw std::runtime_error("Unsupported index component type");
+                }
+
+                primitiveIndices.reserve(primitiveIndices.size() + indexCount);
+
+                for (size_t i = 0; i < indexCount; i++)
+                {
+                    uint32_t index = 0;
+
+                    if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                    {
+                        index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
+                    }
+                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+                    {
+                        index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
+                    }
+                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                    {
+                        index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
+                    }
+
+                    primitiveIndices.push_back(baseVertex + index);
+                }
+            }
+        }
+
+        std::vector<uint32_t> remap(primitiveIndices.size());
+        size_t vertexCount = meshopt_generateVertexRemap
+        (
+            remap.data(),
+            primitiveIndices.data(),
+            primitiveIndices.size(),
+            primitiveVertices.data(),
             primitiveVertices.size(),
             sizeof(Vertex)
         );
 
-        meshletModel.meshlets.push_back({
-            .meshletBoundingSphere = glm::vec4(
-                bounds.center[0], bounds.center[1], bounds.center[2],
-                bounds.radius
-            ),
-            .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
-            .coneCutoff = bounds.cone_cutoff,
+        std::vector<Vertex> remappedVertices(vertexCount);
+        meshopt_remapVertexBuffer(remappedVertices.data(), primitiveVertices.data(), primitiveVertices.size(), sizeof(Vertex), remap.data());
+        std::vector<uint32_t> remappedIndices(primitiveIndices.size());
+        meshopt_remapIndexBuffer(remappedIndices.data(), primitiveIndices.data(), primitiveIndices.size(), remap.data());
 
-            .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
-            .vertexOffset = vertexOffset,
+        meshopt_optimizeVertexCache(remappedIndices.data(), remappedIndices.data(), primitiveIndices.size(), vertexCount);
+        meshopt_optimizeVertexFetch(remappedVertices.data(), remappedIndices.data(), primitiveIndices.size(), remappedVertices.data(), vertexCount, sizeof(Vertex));
 
-            .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
-            .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
-            .meshletVerticesCount = meshlet.vertex_count,
-            .meshletTriangleCount = meshlet.triangle_count,
-        });
+        primitiveVertices = remappedVertices;
+        primitiveIndices = remappedIndices;
+
+        const size_t maxVertices = 64;
+        const size_t maxTriangles = 96;
+
+        // build clusters (meshlets) out of the mesh
+        size_t maxMeshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
+        std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
+        std::vector<unsigned int> meshletVertices(primitiveIndices.size());
+        std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
+
+        std::vector<uint32_t> primitiveVertexPositions;
+        meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
+                                              primitiveIndices.data(), primitiveIndices.size(),
+                                              reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
+                                              maxVertices, maxTriangles, 0.f));
+
+        // Optimize each meshlet's micro index buffer/vertex layout individually
+        for (auto& meshlet : meshlets)
+        {
+            meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+        }
+
+        // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
+        {
+            const meshopt_Meshlet& last = meshlets.back();
+            meshletVertices.resize(last.vertex_offset + last.vertex_count);
+            meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
+        }
+
+        auto generateBoundingSphere = [](const std::vector<Vertex>& vertices)
+        {
+            glm::vec3 center = {0, 0, 0};
+
+            for (auto&& vertex : vertices)
+            {
+                center += vertex.position;
+            }
+            center /= static_cast<float>(vertices.size());
+
+
+            float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
+            for (size_t i = 1; i < vertices.size(); ++i)
+            {
+                radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
+            }
+            radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
+
+            return glm::vec4(center, radius);
+        };
+
+
+        meshletModel.primitive.meshletOffset = meshletModel.meshlets.size();
+        meshletModel.primitive.meshletCount = meshlets.size();
+        meshletModel.primitive.boundingSphere = generateBoundingSphere(primitiveVertices);
+
+        uint32_t vertexOffset = meshletModel.vertices.size();
+        uint32_t meshletVertexOffset = meshletModel.meshletVertices.size();
+        uint32_t meshletTrianglesOffset = meshletModel.meshletTriangles.size();
+
+        meshletModel.vertices.insert(meshletModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
+        meshletModel.meshletVertices.insert(meshletModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
+        meshletModel.meshletTriangles.insert(meshletModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
+
+        for (meshopt_Meshlet& meshlet : meshlets)
+        {
+            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                &meshletVertices[meshlet.vertex_offset],
+                &meshletTriangles[meshlet.triangle_offset],
+                meshlet.triangle_count,
+                reinterpret_cast<const float*>(primitiveVertices.data()),
+                primitiveVertices.size(),
+                sizeof(Vertex)
+            );
+
+            meshletModel.meshlets.push_back({
+                .meshletBoundingSphere = glm::vec4(
+                    bounds.center[0], bounds.center[1], bounds.center[2],
+                    bounds.radius
+                ),
+                .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+                .coneCutoff = bounds.cone_cutoff,
+
+                .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+                .vertexOffset = vertexOffset,
+
+                .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
+                .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+                .meshletVerticesCount = meshlet.vertex_count,
+                .meshletTriangleCount = meshlet.triangle_count,
+            });
+        }
+
+
+        /*fastgltf::Node& node = gltf.nodes[0];
+        glm::vec3 localTranslation{};
+        glm::quat localRotation{};
+        glm::vec3 localScale{};
+        std::visit(
+            fastgltf::visitor{
+                [&](fastgltf::math::fmat4x4 matrix) {
+                    glm::mat4 glmMatrix;
+                    for (int i = 0; i < 4; ++i) {
+                        for (int j = 0; j < 4; ++j) {
+                            glmMatrix[i][j] = matrix[i][j];
+                        }
+                    }
+    
+                    localTranslation = glm::vec3(glmMatrix[3]);
+                    localRotation = glm::quat_cast(glmMatrix);
+                    localScale = glm::vec3(
+                        glm::length(glm::vec3(glmMatrix[0])),
+                        glm::length(glm::vec3(glmMatrix[1])),
+                        glm::length(glm::vec3(glmMatrix[2]))
+                    );
+                },
+                [&](fastgltf::TRS transform) {
+                    localTranslation = {transform.translation[0], transform.translation[1], transform.translation[2]};
+                    localRotation = {transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]};
+                    localScale = {transform.scale[0], transform.scale[1], transform.scale[2]};
+                }
+            }
+            , node.transform
+        );
+    
+        meshletModel.transform = {localTranslation, localRotation, localScale};*/
+
+        return meshletModel;
     }
 
-
-    fastgltf::Node& node = gltf.nodes[0];
-    glm::vec3 localTranslation{};
-    glm::quat localRotation{};
-    glm::vec3 localScale{};
-    std::visit(
-        fastgltf::visitor{
-            [&](fastgltf::math::fmat4x4 matrix) {
-                glm::mat4 glmMatrix;
-                for (int i = 0; i < 4; ++i) {
-                    for (int j = 0; j < 4; ++j) {
-                        glmMatrix[i][j] = matrix[i][j];
-                    }
-                }
-
-                localTranslation = glm::vec3(glmMatrix[3]);
-                localRotation = glm::quat_cast(glmMatrix);
-                localScale = glm::vec3(
-                    glm::length(glm::vec3(glmMatrix[0])),
-                    glm::length(glm::vec3(glmMatrix[1])),
-                    glm::length(glm::vec3(glmMatrix[2]))
-                );
-            },
-            [&](fastgltf::TRS transform) {
-                localTranslation = {transform.translation[0], transform.translation[1], transform.translation[2]};
-                localRotation = {transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]};
-                localScale = {transform.scale[0], transform.scale[1], transform.scale[2]};
-            }
-        }
-        , node.transform
-    );
-
-    meshletModel.transform = {localTranslation, localRotation, localScale};
-
-    return meshletModel;
-}
-    
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
         glm::mat4 View = glm::inverse(transform);
         glm::mat4 Proj = camera.GetProjection();
-        
+
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
     }
+
     bool frozen = false;
     bool frozenDone = false;
+
     void Renderer::BeginScene(const EditorCamera& camera)
     {
         glm::mat4 View = camera.GetViewMatrix();
         glm::mat4 Proj = camera.GetProjection();
-        
+
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
-        
+
         scenesData.view = camera.GetViewMatrix();
         scenesData.proj = camera.GetProjection();
         scenesData.viewProj = camera.GetViewProjection();
-        scenesData.cameraWorldPos  = {camera.GetPosition(), 0.0f};
+        scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};
         scenesData.frustum = Frustum(scenesData.viewProj);
-        
-        if (frozen) 
+
+        if (frozen)
         {
             if (!frozenDone)
             {
@@ -561,7 +668,9 @@ namespace VanK
             scenesData.frozenViewProj = frozenSceneData.viewProj;
             scenesData.frozenCameraWorldPos = frozenSceneData.cameraWorldPos;
             scenesData.frozenFrustum = frozenSceneData.frustum;
-        } else {
+        }
+        else
+        {
             scenesData.frozenView = scenesData.view;
             scenesData.frozenProj = scenesData.proj;
             scenesData.frozenViewProj = scenesData.viewProj;
@@ -574,14 +683,14 @@ namespace VanK
     {
         shaderio::InstancedPBRData inst1;
         glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f));
-        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(0,1,0)); // rotate around Y axis
+        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(0, 1, 0)); // rotate around Y axis
         inst1.Model = model;
         inst1.color = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
         inst1.textureIndex = vikingRoom->GetTextureIndex();
         inst1.EntityID = -1;
-        
+
         RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst1);
-        
+
         /*
         shaderio::InstancedPBRData inst2;
         inst2.Model = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 2.0f, 0.0f));
@@ -607,7 +716,7 @@ namespace VanK
         instance.color = color;
         instance.textureIndex = whiteTexture->GetTextureIndex();
         instance.EntityID = entityID;
-        
+
         RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);
     }
 
@@ -618,7 +727,7 @@ namespace VanK
         instance.color = tintColor;
         instance.textureIndex = texture->GetTextureIndex();
         instance.EntityID = entityID;
-        
+
         RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);
     }
 
@@ -643,7 +752,7 @@ namespace VanK
         instance.Thickness = thickness;
         instance.Fade = fade;
         instance.EntityID = entityID;
-        
+
         RegistryMesh::registerInstance(shaderio::PipelineType_Circle, s_Data.circleHandle, instance);
     }
 
@@ -652,28 +761,28 @@ namespace VanK
         const auto& fontGeometry = font->GetMSDFData()->FontGeometry;
         const auto& metrics = fontGeometry.getMetrics();
         Ref<Texture2D> fontAtlas = font->GetAtlasTexture();
-        
+
         s_Data.FontAtlasTexture = fontAtlas;
-        
+
         double x = 0.0;
         double fsScale = 1.0 / (metrics.ascenderY - metrics.descenderY);
         double y = 0.0;
-        
+
         const float spaceGlyphAdvance = fontGeometry.getGlyph(' ')->getAdvance();
-        
+
         for (size_t i = 0; i < string.size(); i++)
         {
             char character = string[i];
             if (character == '\r')
                 continue;
-            
+
             if (character == '\n')
             {
                 x = 0;
                 y -= fsScale * metrics.lineHeight * textParams.LineSpacing;
                 continue;
             }
-            
+
             if (character == ' ')
             {
                 float advance = spaceGlyphAdvance;
@@ -684,24 +793,24 @@ namespace VanK
                     fontGeometry.getAdvance(dAdvance, character, nextCharacter);
                     advance = (float)dAdvance;
                 }
-                
+
                 x += fsScale * advance + textParams.Kerning;
                 continue;
             }
-            
+
             if (character == '\t')
             {
                 // NOTE(Yan): is this right?
                 x += 4.0f * (fsScale * spaceGlyphAdvance + textParams.Kerning);
                 continue;
             }
-            
+
             auto glyph = fontGeometry.getGlyph(character);
             if (!glyph)
                 glyph = fontGeometry.getGlyph('?');
             if (!glyph)
                 return;
-            
+
             double al, ab, ar, at;
             glyph->getQuadAtlasBounds(al, ab, ar, at);
             glm::vec2 texCoordMin((float)al, (float)ab);
@@ -720,12 +829,12 @@ namespace VanK
             float texelHeight = 1.0f / fontAtlas->GetHeight();
             texCoordMin *= glm::vec2(texelWidth, texelHeight);
             texCoordMax *= glm::vec2(texelWidth, texelHeight);
-            
+
             // render here
             shaderio::InstancedTextData instance;
             instance.QuadMin = quadMin;
             instance.QuadMax = quadMax;
-            instance.Transform = transform;                // store transform per draw
+            instance.Transform = transform; // store transform per draw
             instance.TexMin = texCoordMin;
             instance.TexMax = texCoordMax;
             instance.Color = textParams.Color;
@@ -733,13 +842,13 @@ namespace VanK
             instance.EntityID = entityID;
 
             RegistryMesh::registerInstance(shaderio::PipelineType_Text, s_Data.textHandle, instance);
-            
+
             if (i < string.size() - 1)
             {
                 double advance = glyph->getAdvance();
                 char nextCharacter = string[i + 1];
                 fontGeometry.getAdvance(advance, character, nextCharacter);
-                
+
                 x += fsScale * advance + textParams.Kerning;
             }
         }
@@ -747,7 +856,7 @@ namespace VanK
 
     void Renderer::DrawString(const std::string& string, const glm::mat4& transform, const TextComponent& component, int entityID)
     {
-        DrawString(string, component.FontAsset, transform, { component.Color, component.Kerning, component.LineSpacing }, entityID);
+        DrawString(string, component.FontAsset, transform, {component.Color, component.Kerning, component.LineSpacing}, entityID);
     }
 
     void Renderer::DrawLine(const glm::vec3& p0, const glm::vec3& p1, const glm::vec4& color, int entityID)
@@ -757,7 +866,7 @@ namespace VanK
         instance.P1 = p1;
         instance.Color = color;
         instance.EntityID = entityID;
-        
+
         RegistryMesh::registerInstance(shaderio::PipelineType_Line, s_Data.lineHandle, instance);
     }
 
@@ -777,16 +886,18 @@ namespace VanK
     void Renderer::DrawRect(const glm::mat4& transform, const glm::vec4& color, int entityID)
     {
         glm::vec3 p0 = transform * glm::vec4(-0.5f, -0.5f, 0.0f, 1.0f);
-        glm::vec3 p1 = transform * glm::vec4( 0.5f, -0.5f, 0.0f, 1.0f);
-        glm::vec3 p2 = transform * glm::vec4( 0.5f,  0.5f, 0.0f, 1.0f);
-        glm::vec3 p3 = transform * glm::vec4(-0.5f,  0.5f, 0.0f, 1.0f);
+        glm::vec3 p1 = transform * glm::vec4(0.5f, -0.5f, 0.0f, 1.0f);
+        glm::vec3 p2 = transform * glm::vec4(0.5f, 0.5f, 0.0f, 1.0f);
+        glm::vec3 p3 = transform * glm::vec4(-0.5f, 0.5f, 0.0f, 1.0f);
 
         DrawLine(p0, p1, color, entityID);
         DrawLine(p1, p2, color, entityID);
         DrawLine(p2, p3, color, entityID);
         DrawLine(p3, p0, color, entityID);
     }
+
     ExtractedMeshletModel stanfordBunny;
+
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -803,7 +914,7 @@ namespace VanK
         auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
         auto LineShader = GetShaderLibrary().Load("LineShader", "LineShader.slang");
         auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
-        
+
         // Pipeline Creation
         uint32_t useTexture = true;
         std::vector<VanKSpecializationMapEntries> mapEntries
@@ -827,7 +938,7 @@ namespace VanK
             {ShaderDataType::Float3, "Color"},
             {ShaderDataType::Float2, "TexCoord"},
         };*/
-        
+
         VanKPipelineVertexInputStateCreateInfo VertexInputStateCreateInfo
         {
             .VanKBufferLayout = {}
@@ -865,7 +976,7 @@ namespace VanK
                 .dstAlphaBlendFactor = VanK_BLEND_FACTOR_ZERO,
                 .alphaBlendOp = VanK_BLEND_OP_ADD,
                 .colorWriteMask = VanK_COLOR_COMPONENT_R_BIT,
-            }, 
+            },
         };
 
         VanKPipelineColorBlendStateCreateInfo ColorBlendStateCreateInfo
@@ -891,12 +1002,12 @@ namespace VanK
 
         VanKPipelineRenderingCreateInfo RenderingCreateInfo
         {
-            .VanKColorAttachmentFormats = { VanK_Format_B8G8R8A8Srgb, VanK_FORMAT_R32_SINT }
+            .VanKColorAttachmentFormats = {VanK_Format_B8G8R8A8Srgb, VanK_FORMAT_R32_SINT}
         };
-        
+
         VanKPipelineLayoutCreateInfo PipelineLayoutCreateInfo
         {
-            .PushConstants = { PushConstantRange{0, sizeof(uint32_t)} }
+            .PushConstants = {PushConstantRange{0, sizeof(uint32_t)}}
         };
 
         VanKGraphicsPipelineSpecification GraphicsPipelineSpecification
@@ -912,7 +1023,7 @@ namespace VanK
             .RenderingCreateInfo = RenderingCreateInfo,
             .PipelineLayoutInfo = PipelineLayoutCreateInfo,
         };
-        
+
         m_GraphicsPBRPipelineSpecification = GraphicsPipelineSpecification;
         m_GraphicsPBRPipelineSpecification.ShaderStageCreateInfo.VanKShader = PBRShader;
         m_GraphicsPBRPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsPBRPipelineSpecification);
@@ -922,48 +1033,48 @@ namespace VanK
         m_GraphicsQuadPipelineSpecification.ShaderStageCreateInfo.VanKShader = QuadShader;
         m_GraphicsQuadPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsQuadPipelineSpecification);
         RegisterPipelineForShaderWatcher("QuadShader", "QuadShader.slang", &m_GraphicsQuadPipelineSpecification, nullptr, &m_GraphicsQuadPipeline, VanKGraphics);
-        
+
         m_GraphicsCirclePipelineSpecification = GraphicsPipelineSpecification;
         m_GraphicsCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = CircleShader;
         m_GraphicsCirclePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsCirclePipelineSpecification);
         RegisterPipelineForShaderWatcher("CircleShader", "CircleShader.slang", &m_GraphicsCirclePipelineSpecification, nullptr, &m_GraphicsCirclePipeline, VanKGraphics);
-        
+
         m_GraphicsTextPipelineSpecification = GraphicsPipelineSpecification;
         m_GraphicsTextPipelineSpecification.ShaderStageCreateInfo.VanKShader = TextShader;
         m_GraphicsTextPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsTextPipelineSpecification);
         RegisterPipelineForShaderWatcher("TextShader", "TextShader.slang", &m_GraphicsTextPipelineSpecification, nullptr, &m_GraphicsTextPipeline, VanKGraphics);
-        
+
         m_GraphicsLinePipelineSpecification = GraphicsPipelineSpecification;
         m_GraphicsLinePipelineSpecification.ShaderStageCreateInfo.VanKShader = LineShader;
         m_GraphicsLinePipelineSpecification.InputAssemblyStateCreateInfo.VanKPrimitive = VanK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         m_GraphicsLinePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsLinePipelineSpecification);
         RegisterPipelineForShaderWatcher("LineShader", "LineShader.slang", &m_GraphicsLinePipelineSpecification, nullptr, &m_GraphicsLinePipeline, VanKGraphics);
-        
+
         m_MeshPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshPipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshShader;
-        m_MeshPipelineSpecification.PipelineLayoutInfo.PushConstants = { PushConstantRange{0, sizeof(TaskMeshPipelinePushConstant)} };
+        m_MeshPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(TaskMeshPipelinePushConstant)}};
         m_MeshPipeline = RenderCommand::createGraphicsPipeline(m_MeshPipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshShader", "MeshShader.slang", &m_MeshPipelineSpecification, nullptr, &m_MeshPipeline, VanKGraphics);
-        
+
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
         {
             .VanKShader = DrawIndirectShader
         };
-        
+
         VanKComputePipelineSpecification computePipelineSpecification
         {
             .ComputePipelineCreateInfo = ComputePipelineCreateInfo
         };
-        
+
         m_ComputeDrawIndirectPipelineSpecification = computePipelineSpecification;
-        
+
         m_ComputeDrawIndirectPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawIndirectPipelineSpecification);
         RegisterPipelineForShaderWatcher("DrawIndirectShader", "DrawIndirectShader.slang", nullptr, &m_ComputeDrawIndirectPipelineSpecification, &m_ComputeDrawIndirectPipeline, VanKCompute);
-        
+
         WatchShaderFiles(); // has to be last after pipeline creation
-        
+
         pipelines =
         {
             m_GraphicsPBRPipeline,
@@ -977,54 +1088,55 @@ namespace VanK
 
         whiteTexture = TextureImporter::LoadTexture2D("");
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
+        std::cout << std::dec << "vik: " << vikingRoom->GetTextureIndex();
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
-        
+
         loadModel();
-        
+
         stanfordBunny = LoadStanfordBunny();
-        
+
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
-        
+
         uint64_t cullBuffersize = sizeof(CulledData);
         cullBuffer.reset(StorageBuffer::Create(cullBuffersize));
-        
+
         uint64_t m_TransferDownlaoadBuffersize = sizeof(CulledData);
         m_TransferDownlaoadBuffer.reset(TransferBuffer::Create(m_TransferDownlaoadBuffersize, VanKTransferBufferUsageDownload));
-        
+
         uint64_t vertexBuffersize = sizeof(Vertex) * stanfordBunny.vertices.size();
         vertexBuffer.reset(StorageBuffer::Create(vertexBuffersize));
-        
+
         uint64_t meshletVerticesBuffersize = sizeof(uint32_t) * stanfordBunny.meshletVertices.size();
         meshletVerticesBuffer.reset(StorageBuffer::Create(meshletVerticesBuffersize));
-        
+
         uint64_t meshletTrianglesBuffersize = sizeof(uint8_t) * stanfordBunny.meshletTriangles.size();
         meshletTrianglesBuffer.reset(StorageBuffer::Create(meshletTrianglesBuffersize));
-        
+
         uint64_t meshletBuffersize = sizeof(Meshlet) * stanfordBunny.meshlets.size();
         meshletBuffer.reset(StorageBuffer::Create(meshletBuffersize));
-        
+
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
-        
+
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
         s_Data.cubeHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, GeometryData::cubeVertices, GeometryData::cubeIndices);
         s_Data.quadHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Quad, GeometryData::quadVertices, GeometryData::quadIndices);
         s_Data.circleHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Circle, GeometryData::quadVertices, GeometryData::quadIndices);
         s_Data.textHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Text, GeometryData::quadVertices, GeometryData::quadIndices);
         s_Data.lineHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Line, GeometryData::lineVertices, GeometryData::lineIndices);
-        
+
         /*RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_PBR);
         RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_Quad);*/
-        
+
         // 4            4        156         152                   152
         //draw calls, meshes, instances, actualy instances, draws saved by instancing
         //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
     }
-    
+
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
     //maybe move to vulkanrenderapi backend ?
-    void Renderer::Shutdown() 
+    void Renderer::Shutdown()
     {
         RenderCommand::waitForGraphicsQueueIdle();
 
@@ -1035,91 +1147,88 @@ namespace VanK
         uniformScene.reset();
 
         m_TransferRingBuffer.reset();
-        
+
         for (auto& indirectBuffer : m_IndirectBuffers)
         {
             indirectBuffer.reset();
         }
-        
+
         for (auto& countBuffer : m_CountBuffers)
         {
             countBuffer.reset();
         }
 
         m_InstancedVertexBuffer.reset();
-        
+
         m_InstancedIndexBuffer.reset();
-        
+
         m_InstancedPBRBuffer.reset();
 
         m_InstancedQuadBuffer.reset();
-        
+
         m_InstancedCircleBuffer.reset();
-        
+
         m_InstancedTextBuffer.reset();
-        
+
         m_InstancedLineBuffer.reset();
-        
+
         m_MeshInfoBuffer.reset();
-        
+
         m_TransferBuffer.reset();
-       
+
         sceneBuffer.reset();
-      
+
         cullBuffer.reset();
-        
+
         m_TransferDownlaoadBuffer.reset();
-        
+
         vertexBuffer.reset();
- 
+
         meshletVerticesBuffer.reset();
-        
+
         meshletTrianglesBuffer.reset();
-        
+
         meshletBuffer.reset();
     }
-    
+
     void Renderer::CheckPendingVSyncChange()
     {
         if (!s_VSyncChangeRequested) return;
-        
+
         RenderCommand::RebuildSwapchain(vSync);
-        
-        s_VSyncChangeRequested = false;    // reset
+
+        s_VSyncChangeRequested = false; // reset
     };
     static bool s_FlushedThisFrame = false;
 
     void Renderer::BeginSubmit()
     {
         s_FlushedThisFrame = false;
-        
+
         if (isEditor)
             RenderCommand::BeginFrame(VanK_Render_ImGui);
         else
             RenderCommand::BeginFrame(VanK_Render_Swapchain);
-        
+
         cmd = RenderCommand::BeginCommandBuffer();
         if (!cmd)
             SDL_Log("AcquireGPUCommandBuffer failed: %s", SDL_GetError());
-        
+
         RegistryMesh::clearInstances();
     }
 
     void Renderer::EndSubmit()
     {
         RegistryMesh::rebuildAllInstances();
-        
+
         Flush();
-        
-        RenderCommand::SubmitRendering(cmd);
-        
         uint64_t offset = 0;
         void* mapPtr = m_TransferDownlaoadBuffer->MapTransferBuffer(sizeof(CulledData), 0, offset);
         m_TransferDownlaoadBuffer->DownloadFromGPUBuffer(cmd, {0}, {cullBuffer.get(), 0, sizeof(CulledData)});
         CulledData data;
         std::memcpy(&data, mapPtr, sizeof(CulledData));
         m_TransferDownlaoadBuffer->UnMapTransferBuffer();
-        
+        ImGui::Begin("Mesh");
         ImGui::SeparatorText("Culling Breakdown");
         ImGui::Text("Frustum culled: %u", data.frustumCulled);
         ImGui::Text("Backface culled: %u", data.backfaceCulled);
@@ -1129,21 +1238,24 @@ namespace VanK
         ImGui::Text("Rendered: %zu / %zu", stanfordBunny.meshlets.size() - data.totalCulled, stanfordBunny.meshlets.size());
         ImGui::Text("Total meshlets: %zu", stanfordBunny.meshlets.size());
         ImGui::End();
-        
+
+        RenderCommand::SubmitRendering(cmd);
+
+
         RenderCommand::EndCommandBuffer(cmd);
-        
+
         RenderCommand::EndFrame();
-        
+
         CheckPendingVSyncChange();
     }
-    
+
     void Renderer::Flush()
     {
         VK_CORE_ASSERT(!s_FlushedThisFrame, "Flush called more than once per frame");
         s_FlushedThisFrame = true;
-        
+
         /*BeginSubmit();*/
-        
+
         if (s_IsPipelineReloadFinished.exchange(false))
         {
             IsShaderReloadFinished = false;
@@ -1155,51 +1267,52 @@ namespace VanK
             BeginSubmit();
             return;
         }
-        
+
         DrawMeshShader();
-     
-        DrawFrame();
-        
+
+        /*DrawFrame();*/
+
         /*EndSubmit();*/
     }
-    
+
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
-        
+
         cullBuffer->Fill(cmd, 0, sizeof(CulledData), 0);
-        
+
         scene.emplace_back(scenesData);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, sceneBuffer, scene, SceneDatas, 0);
         scene.clear();
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, stanfordBunny.vertices, Vertex, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, stanfordBunny.meshletVertices, uint32_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, stanfordBunny.meshletTriangles, uint8_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, stanfordBunny.meshlets, Meshlet, 0);
-        
+
         std::vector<VanKColorTargetInfo> colorAttachments;
         colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
         colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
 
         VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
-            
+
         RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
-            
-        VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
+
+        VanKViewport viewPort = {0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1};
         RenderCommand::SetViewport(cmd, 1, viewPort);
 
-        VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
+        VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
         RenderCommand::SetScissor(cmd, 1, rect);
-            
-        RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
-        
+
+        RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
+
         RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
         RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-        
-        TaskMeshPipelinePushConstant pushData{
-            .modelMatrix = stanfordBunny.transform.GetMatrix(),
+
+        TaskMeshPipelinePushConstant pushData
+        {
+            .modelMatrix = glm::mat4(1.0f),
             .sceneData = sceneBuffer->GetBufferAddress(),
             .culledDataBuffer = cullBuffer->GetBufferAddress(),
             .vertexBuffer = vertexBuffer->GetBufferAddress(),
@@ -1208,20 +1321,20 @@ namespace VanK
             .meshletBuffer = meshletBuffer->GetBufferAddress(),
             .meshletCount = static_cast<uint32_t>(stanfordBunny.meshlets.size())
         };
-        
+
         RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
-        
+
         constexpr uint32_t taskDispatchX = 64;
         uint32_t xCount = (stanfordBunny.meshlets.size() + (taskDispatchX - 1)) / taskDispatchX;
         RenderCommand::DrawMeshTasks(cmd, xCount, 1, 1);
-            
+
         RenderCommand::EndRendering(cmd);
     }
-    
+
     void Renderer::DrawFrame()
     {
         ScopeTimer timer("Renderer::DrawFrame");
-        
+
         if (!RegistryMesh::hasDraws())
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
@@ -1229,108 +1342,108 @@ namespace VanK
             colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
 
             VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
-            
+
             RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
-            
-            VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
+
+            VanKViewport viewPort = {0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1};
             RenderCommand::SetViewport(cmd, 1, viewPort);
 
-            VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
+            VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
             RenderCommand::SetScissor(cmd, 1, rect);
-            
+
             RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
-            
+
             RenderCommand::EndRendering(cmd);
             return;
         }
-        
+
         auto& globalVertices = RegistryMesh::getVertices();
         uint64_t vertexSize = sizeof(shaderio::InstancedVertexData) * std::max(1ull, globalVertices.size());
         if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexSize)
             m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexSize));
-        
+
         auto& globalIndices = RegistryMesh::getIndices();
         uint64_t indexSize = sizeof(uint32_t) * std::max(1ull, globalIndices.size());
         if (!m_InstancedIndexBuffer || m_InstancedIndexBuffer->GetSize() < indexSize)
             m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexSize));
-        
+
         auto pbrInstances = RegistryMesh::getInstances<shaderio::InstancedPBRData>(shaderio::PipelineType_PBR);
         uint64_t pbrSize = sizeof(shaderio::InstancedPBRData) * std::max(1ull, pbrInstances.size());
         if (!m_InstancedPBRBuffer || m_InstancedPBRBuffer->GetSize() < pbrSize)
             m_InstancedPBRBuffer.reset(StorageBuffer::Create(pbrSize));
-        
+
         auto quadInstances = RegistryMesh::getInstances<shaderio::InstancedQuadData>(shaderio::PipelineType_Quad);
         uint64_t quadSize = sizeof(shaderio::InstancedQuadData) * std::max(1ull, quadInstances.size());
         if (!m_InstancedQuadBuffer || m_InstancedQuadBuffer->GetSize() < quadSize)
             m_InstancedQuadBuffer.reset(StorageBuffer::Create(quadSize));
-        
+
         auto circleInstances = RegistryMesh::getInstances<shaderio::InstancedCircleData>(shaderio::PipelineType_Circle);
         uint64_t circleSize = sizeof(shaderio::InstancedCircleData) * std::max(1ull, circleInstances.size());
         if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < circleSize)
             m_InstancedCircleBuffer.reset(StorageBuffer::Create(circleSize));
-        
+
         auto textInstances = RegistryMesh::getInstances<shaderio::InstancedTextData>(shaderio::PipelineType_Text);
         uint64_t textSize = sizeof(shaderio::InstancedTextData) * std::max(1ull, textInstances.size());
         if (!m_InstancedTextBuffer || m_InstancedTextBuffer->GetSize() < textSize)
             m_InstancedTextBuffer.reset(StorageBuffer::Create(textSize));
-        
+
         auto lineInstances = RegistryMesh::getInstances<shaderio::InstancedLineData>(shaderio::PipelineType_Line);
         uint64_t lineSize = sizeof(shaderio::InstancedLineData) * std::max(1ull, lineInstances.size());
         if (!m_InstancedLineBuffer || m_InstancedLineBuffer->GetSize() < lineSize)
             m_InstancedLineBuffer.reset(StorageBuffer::Create(lineSize));
-        
+
         std::vector<shaderio::MeshInfo> allMeshInfos;
         size_t countBuffersSize = sizeof(uint32_t) * (size_t)shaderio::PipelineType_Count;
         for (uint32_t p = 0; p < static_cast<uint32_t>(shaderio::PipelineType_Count); ++p)
         {
             auto& meshes = RegistryMesh::getMeshInfo(static_cast<shaderio::PipelineType>(p));
             allMeshInfos.insert(allMeshInfos.end(), meshes.begin(), meshes.end());
-            
+
             if (!m_CountBuffers[p] || m_CountBuffers[p]->GetSize() < sizeof(uint32_t))
                 m_CountBuffers[p].reset(IndirectBuffer::Create(sizeof(uint32_t)));
         }
         uint64_t meshSize = sizeof(shaderio::MeshInfo) * std::max(1ull, allMeshInfos.size());
         if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshSize)
             m_MeshInfoBuffer.reset(StorageBuffer::Create(meshSize));
-        
+
         uint64_t transferSize = vertexSize + indexSize + pbrSize + quadSize + circleSize + textSize + lineSize + countBuffersSize + meshSize;
         if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
             m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, globalVertices, shaderio::InstancedVertexData, 0);
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, globalIndices, uint32_t, 0);
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedPBRBuffer, pbrInstances, shaderio::InstancedPBRData, 0);
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedQuadBuffer, quadInstances, shaderio::InstancedQuadData, 0);
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, circleInstances, shaderio::InstancedCircleData, 0);
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedTextBuffer, textInstances, shaderio::InstancedTextData, 0);
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedLineBuffer, lineInstances, shaderio::InstancedLineData, 0);
-        
+
         UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, allMeshInfos, shaderio::MeshInfo, 0);
-        
-        static const std::vector<uint32_t> resetValue = { 0 };
-        
+
+        static const std::vector<uint32_t> resetValue = {0};
+
         for (uint32_t p = 0; p < static_cast<uint32_t>(shaderio::PipelineType_Count); p++)
         {
             uint64_t totalDraws = sizeof(shaderio::DrawIndexedIndirectCommand) * std::max(1ull, allMeshInfos.size());
-            
+
             if (!m_IndirectBuffers[p] || m_IndirectBuffers[p]->GetSize() < totalDraws)
                 m_IndirectBuffers[p].reset(IndirectBuffer::Create(totalDraws));
-            
+
             UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_CountBuffers[p], resetValue, uint32_t, 0);
-            
+
             s_Data.SceneData.indirectAddresses[p] =
                 m_IndirectBuffers[p]->GetBufferAddress();
 
             s_Data.SceneData.countAddresses[p] =
                 m_CountBuffers[p]->GetBufferAddress();
         }
-        
+
         s_Data.SceneData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
         s_Data.SceneData.pbrAddress = m_InstancedPBRBuffer->GetBufferAddress();
         s_Data.SceneData.quadAddress = m_InstancedQuadBuffer->GetBufferAddress();
@@ -1343,51 +1456,51 @@ namespace VanK
             meshCount += static_cast<uint32_t>(RegistryMesh::getMeshInfo(static_cast<shaderio::PipelineType>(p)).size());
 
         s_Data.SceneData.numMeshes = meshCount;
-        
+
         uniformScene->Update(cmd, &s_Data.SceneData, sizeof(s_Data.SceneData));
-        
+
         {
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get(), m_IndirectBuffers, m_CountBuffers);
-        
+
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
-           
+
             RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
-        
+
             RenderCommand::DispatchCompute(computePass, (meshCount + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
             RenderCommand::EndComputePass(computePass);
         }
-        
+
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
             colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
 
             VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
-            
+
             RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
-            
-            VanKViewport viewPort = { 0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1 };
+
+            VanKViewport viewPort = {0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1};
             RenderCommand::SetViewport(cmd, 1, viewPort);
 
-            VankRect rect = { 0, 0, m_ViewportSize.width, m_ViewportSize.height };
+            VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
             RenderCommand::SetScissor(cmd, 1, rect);
-            
+
             RenderCommand::SetLineWidth(cmd, m_LineWidth);
-            
+
             RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
-            
+
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
-            
+
             for (uint32_t p = 0; p < shaderio::PipelineType::PipelineType_Count; p++)
             {
                 RenderCommand::BindPipeline(
                     cmd,
                     VanKPipelineBindPoint::Graphics,
                     pipelines[p]);
-                
+
                 RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
-                
+
                 RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
                 RenderCommand::DrawIndexedIndirectCount(
@@ -1399,7 +1512,7 @@ namespace VanK
                     meshCount,
                     sizeof(shaderio::DrawIndexedIndirectCommand));
             }
-            
+
             RenderCommand::EndRendering(cmd);
         }
     }
@@ -1413,7 +1526,7 @@ namespace VanK
         std::string FileName; // e.g., "GraphicsCubeShader.slang"
         VanKShaderStageFlags flag;
     };
-    
+
     inline static std::vector<PipelineReloadEntry> s_PipelineReloadEntries;
 
     void Renderer::RegisterPipelineForShaderWatcher
@@ -1426,7 +1539,7 @@ namespace VanK
         VanKShaderStageFlags flag
     )
     {
-        s_PipelineReloadEntries.push_back({ pipeline, graphicsSpec, computeSpec, shaderKey, fileName, flag });
+        s_PipelineReloadEntries.push_back({pipeline, graphicsSpec, computeSpec, shaderKey, fileName, flag});
     }
 
     void Renderer::WatchShaderFiles()
@@ -1434,25 +1547,25 @@ namespace VanK
         for (const std::string& path : GetShaderLibrary().GetAllShaderPaths())
         {
             s_ShaderWatcher.emplace_back(std::make_unique<filewatch::FileWatch<std::string>>(path,
-                [](const std::string& file, const filewatch::Event change_type)
-                {
-                    if (!IsShaderReloadFinished && change_type == filewatch::Event::modified)
-                    {
-                        std::cout << "[FileWatcher] Shader file changed: " << file << '\n';
+                                                                                             [](const std::string& file, const filewatch::Event change_type)
+                                                                                             {
+                                                                                                 if (!IsShaderReloadFinished && change_type == filewatch::Event::modified)
+                                                                                                 {
+                                                                                                     std::cout << "[FileWatcher] Shader file changed: " << file << '\n';
 
-                        IsShaderReloadFinished = true;
+                                                                                                     IsShaderReloadFinished = true;
 
-                        changedFile = file;
+                                                                                                     changedFile = file;
 
-                        ReloadTimer = Timer();
-                    
-                        Application::Get().SubmitToMainThread([]()
-                        {
-                            s_ShaderWatcher.clear();
-                            s_IsPipelineReloadFinished = true;
-                        });
-                    }
-                }));
+                                                                                                     ReloadTimer = Timer();
+
+                                                                                                     Application::Get().SubmitToMainThread([]()
+                                                                                                     {
+                                                                                                         s_ShaderWatcher.clear();
+                                                                                                         s_IsPipelineReloadFinished = true;
+                                                                                                     });
+                                                                                                 }
+                                                                                             }));
         }
     }
 
@@ -1466,11 +1579,11 @@ namespace VanK
                 continue;
 
             RenderCommand::waitForGraphicsQueueIdle();
-            
+
             RenderCommand::DestroyPipeline(*entry.Pipeline);
-            
+
             GetShaderLibrary().Remove(entry.ShaderKey);
-            
+
             auto Shader = GetShaderLibrary().Load(entry.ShaderKey, changedFile);
 
             if (entry.flag == VanKGraphics)
@@ -1481,7 +1594,7 @@ namespace VanK
             else
             {
                 entry.computeSpec->ComputePipelineCreateInfo.VanKShader = Shader;
-                *entry.Pipeline = RenderCommand::createComputeShaderPipeline(*entry.computeSpec); 
+                *entry.Pipeline = RenderCommand::createComputeShaderPipeline(*entry.computeSpec);
             }
         }
     }

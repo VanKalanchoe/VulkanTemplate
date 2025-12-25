@@ -409,6 +409,7 @@ namespace  VanK
             {.shaderDrawParameters = true},
             {
                 .drawIndirectCount = true,
+                .shaderInt8 = true,
                 .descriptorIndexing = true, 
                 .shaderSampledImageArrayNonUniformIndexing = true,
                 .descriptorBindingSampledImageUpdateAfterBind = true,
