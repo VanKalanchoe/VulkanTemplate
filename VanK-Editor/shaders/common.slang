@@ -67,13 +67,13 @@ public struct Frustum
 
 public struct SceneData
 {
-    public float4x4 view;
-    public float4x4 proj;
-    public float4x4 viewProj;
+    public column_major float4x4 view;
+    public column_major float4x4 proj;
+    public column_major float4x4 viewProj;
 
-    public float4x4 frozenView;
-    public float4x4 frozenProj;
-    public float4x4 frozenViewProj;
+    public column_major float4x4 frozenView;
+    public column_major float4x4 frozenProj;
+    public column_major float4x4 frozenViewProj;
 
     public float4 cameraWorldPos;
     public float4 frozenCameraWorldPos;

@@ -14,6 +14,12 @@
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <tiny_gltf.h>
 
+#include <fastgltf/core.hpp>
+#include <fastgltf/types.hpp>
+#include <fastgltf/tools.hpp>
+
+#include <meshoptimizer.h>
+
 #include "MSDFData.h"
 #include "RegistryMesh.h"
 #include "VanK/Asset/AssetManager.h"
@@ -171,6 +177,353 @@ namespace VanK
             }
         }
     }
+
+    struct TaskMeshPipelinePushConstant
+    {
+        glm::mat4 modelMatrix;
+        uint64_t sceneData;
+        uint64_t culledDataBuffer;
+        uint64_t vertexBuffer;
+        uint64_t meshletVerticesBuffer;
+        uint64_t meshletTrianglesBuffer;
+        uint64_t meshletBuffer;
+        uint32_t meshletCount;
+    };
+    
+    struct Transform
+    {
+        glm::vec3 translation{};
+        glm::quat rotation{};
+        glm::vec3 scale{};
+
+        [[nodiscard]] glm::mat4 GetMatrix() const { return glm::translate(glm::mat4(1.0f), translation) * mat4_cast(rotation) * glm::scale(glm::mat4(1.0f), scale); }
+
+        static const Transform Identity;
+    };
+
+    inline const Transform Transform::Identity{
+            {0.0f, 0.0f, 0.0f},
+            {1.0f, 0.0f, 0.0f, 0.0f},
+            {1.0f, 1.0f, 1.0f}
+    };
+    
+    struct Frustum
+    {
+        glm::vec4 planes[6];
+
+        Frustum() = default;
+
+        explicit Frustum(const glm::mat4& viewProj);
+    };
+    
+    Frustum::Frustum(const glm::mat4& viewProj)
+    {
+        planes[0] = glm::vec4(
+            viewProj[0][3] + viewProj[0][0],
+            viewProj[1][3] + viewProj[1][0],
+            viewProj[2][3] + viewProj[2][0],
+            viewProj[3][3] + viewProj[3][0]
+        );
+
+        planes[1] = glm::vec4(
+            viewProj[0][3] - viewProj[0][0],
+            viewProj[1][3] - viewProj[1][0],
+            viewProj[2][3] - viewProj[2][0],
+            viewProj[3][3] - viewProj[3][0]
+        );
+
+        planes[2] = glm::vec4(
+            viewProj[0][3] + viewProj[0][1],
+            viewProj[1][3] + viewProj[1][1],
+            viewProj[2][3] + viewProj[2][1],
+            viewProj[3][3] + viewProj[3][1]
+        );
+
+        planes[3] = glm::vec4(
+            viewProj[0][3] - viewProj[0][1],
+            viewProj[1][3] - viewProj[1][1],
+            viewProj[2][3] - viewProj[2][1],
+            viewProj[3][3] - viewProj[3][1]
+        );
+
+        planes[4] = glm::vec4(
+            viewProj[0][3] + viewProj[0][2],
+            viewProj[1][3] + viewProj[1][2],
+            viewProj[2][3] + viewProj[2][2],
+            viewProj[3][3] + viewProj[3][2]
+        );
+
+        planes[5] = glm::vec4(
+            viewProj[0][3] - viewProj[0][2],
+            viewProj[1][3] - viewProj[1][2],
+            viewProj[2][3] - viewProj[2][2],
+            viewProj[3][3] - viewProj[3][2]
+        );
+
+        for (auto& plane : planes) {
+            float length = glm::length(glm::vec3(plane));
+            plane /= length;
+        }
+    }
+
+    struct SceneDatas
+    {
+        glm::mat4 view{1.0f};
+        glm::mat4 proj{1.0f};
+        glm::mat4 viewProj{1.0f};
+
+        glm::mat4 frozenView{1.0f};
+        glm::mat4 frozenProj{1.0f};
+        glm::mat4 frozenViewProj{1.0f};
+
+        glm::vec4 cameraWorldPos{0.0f};
+        glm::vec4 frozenCameraWorldPos{0.0f};
+
+        Frustum frustum{};
+        Frustum frozenFrustum{};
+
+        glm::vec2 renderTargetSize{};
+        glm::vec2 texelSize{};
+
+        float deltaTime{};
+    };
+    
+    std::vector<SceneDatas> scene;
+    SceneDatas scenesData{};
+    SceneDatas frozenSceneData{};
+    struct CulledData
+    {
+        uint32_t frustumCulled{0};
+        uint32_t backfaceCulled{0};
+        uint32_t totalCulled{0};
+    };
+    
+    struct Vertex
+    {
+        glm::vec3 position{0.0f};
+        float pad{0.0f};
+    };
+
+    struct Meshlet
+    {
+        glm::vec4 meshletBoundingSphere;
+
+        glm::vec3 coneApex;
+        float coneCutoff;
+
+        glm::vec3 coneAxis;
+        uint32_t vertexOffset;
+
+        uint32_t meshletVerticesOffset;
+        uint32_t meshletTriangleOffset;
+        uint32_t meshletVerticesCount;
+        uint32_t meshletTriangleCount;
+    };
+
+    struct MeshletPrimitive
+    {
+        uint32_t meshletOffset{0};
+        uint32_t meshletCount{0};
+        uint32_t materialIndex{0};
+        uint32_t padding1{0};
+        // {3} center, {1} radius
+        glm::vec4 boundingSphere{};
+    };
+
+    
+    struct ExtractedMeshletModel
+    {
+        std::string name{};
+        bool bSuccessfullyLoaded{false};
+
+        std::vector<Vertex> vertices{};
+        std::vector<uint32_t> meshletVertices{};
+        std::vector<uint8_t> meshletTriangles{};
+        std::vector<Meshlet> meshlets{};
+
+        MeshletPrimitive primitive{};
+        Transform transform{};
+    };
+    
+    ExtractedMeshletModel LoadStanfordBunny()
+{
+    ExtractedMeshletModel meshletModel{};
+    fastgltf::Parser parser{fastgltf::Extensions::KHR_texture_basisu | fastgltf::Extensions::KHR_mesh_quantization | fastgltf::Extensions::KHR_texture_transform};
+    constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember
+                                 | fastgltf::Options::AllowDouble
+                                 | fastgltf::Options::LoadExternalBuffers
+                                 | fastgltf::Options::LoadExternalImages;
+
+    const std::filesystem::path path = "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf";
+    auto gltfFile = fastgltf::MappedGltfFile::FromPath(path);
+    if (!static_cast<bool>(gltfFile)) {
+        fmt::println("[Error] Failed to open glTF file ({}): {}\n", path.filename().string(), getErrorMessage(gltfFile.error()));
+        exit(1);
+    }
+
+    auto load = parser.loadGltf(gltfFile.get(), path.parent_path(), gltfOptions);
+    if (!load) {
+        fmt::println("[Error] Failed to load glTF: {}\n", to_underlying(load.error()));
+        exit(1);
+    }
+
+    fastgltf::Asset gltf = std::move(load.get());
+    assert(gltf.meshes.size() == 1);
+    assert(gltf.meshes[0].primitives.size() == 1);
+    assert(gltf.nodes.size() == 1);
+
+    meshletModel.bSuccessfullyLoaded = true;
+    meshletModel.name = path.filename().string();
+
+    fastgltf::Primitive& bunnyPrimitive = gltf.meshes[0].primitives[0];
+    meshletModel.primitive.materialIndex = 0;
+
+
+    std::vector<Vertex> primitiveVertices{};
+    std::vector<uint32_t> primitiveIndices{};
+
+    // INDICES
+    const fastgltf::Accessor& indexAccessor = gltf.accessors[bunnyPrimitive.indicesAccessor.value()];
+    primitiveIndices.clear();
+    primitiveIndices.reserve(indexAccessor.count);
+
+    fastgltf::iterateAccessor<std::uint32_t>(gltf, indexAccessor, [&](const std::uint32_t idx) {
+        primitiveIndices.push_back(idx);
+    });
+
+    // POSITION (REQUIRED)
+    const fastgltf::Attribute* positionIt = bunnyPrimitive.findAttribute("POSITION");
+    const fastgltf::Accessor& posAccessor = gltf.accessors[positionIt->accessorIndex];
+    primitiveVertices.clear();
+    primitiveVertices.resize(posAccessor.count);
+
+    fastgltf::iterateAccessorWithIndex<fastgltf::math::fvec3>(gltf, posAccessor, [&](fastgltf::math::fvec3 v, const size_t index) {
+        primitiveVertices[index] = {};
+        primitiveVertices[index].position = {v.x(), v.y(), v.z()};
+    });
+
+    const size_t maxVertices = 64;
+    const size_t maxTriangles = 64;
+
+    // build clusters (meshlets) out of the mesh
+    size_t maxMeshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
+    std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
+    std::vector<unsigned int> meshletVertices(primitiveIndices.size());
+    std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
+
+    std::vector<uint32_t> primitiveVertexPositions;
+    meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
+                                          primitiveIndices.data(), primitiveIndices.size(),
+                                          reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
+                                          maxVertices, maxTriangles, 0.f));
+
+    // Optimize each meshlet's micro index buffer/vertex layout individually
+    for (auto& meshlet : meshlets) {
+        meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+    }
+
+    // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
+    {
+        const meshopt_Meshlet& last = meshlets.back();
+        meshletVertices.resize(last.vertex_offset + last.vertex_count);
+        meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
+    }
+
+    auto generateBoundingSphere = [](const std::vector<Vertex>& vertices) {
+        glm::vec3 center = {0, 0, 0};
+
+        for (auto&& vertex : vertices) {
+            center += vertex.position;
+        }
+        center /= static_cast<float>(vertices.size());
+
+
+        float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
+        for (size_t i = 1; i < vertices.size(); ++i) {
+            radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
+        }
+        radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
+
+        return glm::vec4(center, radius);
+    };
+
+
+    meshletModel.primitive.meshletOffset = meshletModel.meshlets.size();
+    meshletModel.primitive.meshletCount = meshlets.size();
+    meshletModel.primitive.boundingSphere = generateBoundingSphere(primitiveVertices);
+
+    uint32_t vertexOffset = meshletModel.vertices.size();
+    uint32_t meshletVertexOffset = meshletModel.meshletVertices.size();
+    uint32_t meshletTrianglesOffset = meshletModel.meshletTriangles.size();
+
+    meshletModel.vertices.insert(meshletModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
+    meshletModel.meshletVertices.insert(meshletModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
+    meshletModel.meshletTriangles.insert(meshletModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
+
+    for (meshopt_Meshlet& meshlet : meshlets) {
+        meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+            &meshletVertices[meshlet.vertex_offset],
+            &meshletTriangles[meshlet.triangle_offset],
+            meshlet.triangle_count,
+            reinterpret_cast<const float*>(primitiveVertices.data()),
+            primitiveVertices.size(),
+            sizeof(Vertex)
+        );
+
+        meshletModel.meshlets.push_back({
+            .meshletBoundingSphere = glm::vec4(
+                bounds.center[0], bounds.center[1], bounds.center[2],
+                bounds.radius
+            ),
+            .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+            .coneCutoff = bounds.cone_cutoff,
+
+            .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+            .vertexOffset = vertexOffset,
+
+            .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
+            .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+            .meshletVerticesCount = meshlet.vertex_count,
+            .meshletTriangleCount = meshlet.triangle_count,
+        });
+    }
+
+
+    fastgltf::Node& node = gltf.nodes[0];
+    glm::vec3 localTranslation{};
+    glm::quat localRotation{};
+    glm::vec3 localScale{};
+    std::visit(
+        fastgltf::visitor{
+            [&](fastgltf::math::fmat4x4 matrix) {
+                glm::mat4 glmMatrix;
+                for (int i = 0; i < 4; ++i) {
+                    for (int j = 0; j < 4; ++j) {
+                        glmMatrix[i][j] = matrix[i][j];
+                    }
+                }
+
+                localTranslation = glm::vec3(glmMatrix[3]);
+                localRotation = glm::quat_cast(glmMatrix);
+                localScale = glm::vec3(
+                    glm::length(glm::vec3(glmMatrix[0])),
+                    glm::length(glm::vec3(glmMatrix[1])),
+                    glm::length(glm::vec3(glmMatrix[2]))
+                );
+            },
+            [&](fastgltf::TRS transform) {
+                localTranslation = {transform.translation[0], transform.translation[1], transform.translation[2]};
+                localRotation = {transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]};
+                localScale = {transform.scale[0], transform.scale[1], transform.scale[2]};
+            }
+        }
+        , node.transform
+    );
+
+    meshletModel.transform = {localTranslation, localRotation, localScale};
+
+    return meshletModel;
+}
     
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
@@ -180,7 +533,8 @@ namespace VanK
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
     }
-    
+    bool frozen = false;
+    bool frozenDone = false;
     void Renderer::BeginScene(const EditorCamera& camera)
     {
         glm::mat4 View = camera.GetViewMatrix();
@@ -188,6 +542,32 @@ namespace VanK
         
         s_Data.SceneData.view = View;
         s_Data.SceneData.proj = Proj;
+        
+        scenesData.view = camera.GetViewMatrix();
+        scenesData.proj = camera.GetProjection();
+        scenesData.viewProj = camera.GetViewProjection();
+        scenesData.cameraWorldPos  = {camera.GetPosition(), 0.0f};
+        scenesData.frustum = Frustum(scenesData.viewProj);
+        
+        if (frozen) 
+        {
+            if (!frozenDone)
+            {
+                frozenSceneData = scenesData;
+                frozenDone = true;
+            }
+            scenesData.frozenView = frozenSceneData.view;
+            scenesData.frozenProj = frozenSceneData.proj;
+            scenesData.frozenViewProj = frozenSceneData.viewProj;
+            scenesData.frozenCameraWorldPos = frozenSceneData.cameraWorldPos;
+            scenesData.frozenFrustum = frozenSceneData.frustum;
+        } else {
+            scenesData.frozenView = scenesData.view;
+            scenesData.frozenProj = scenesData.proj;
+            scenesData.frozenViewProj = scenesData.viewProj;
+            scenesData.frozenCameraWorldPos = scenesData.cameraWorldPos;
+            scenesData.frozenFrustum = scenesData.frustum;
+        }
     }
 
     void Renderer::EndScene()
@@ -406,7 +786,7 @@ namespace VanK
         DrawLine(p2, p3, color, entityID);
         DrawLine(p3, p0, color, entityID);
     }
-
+    ExtractedMeshletModel stanfordBunny;
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -562,6 +942,7 @@ namespace VanK
         m_MeshPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshPipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshShader;
+        m_MeshPipelineSpecification.PipelineLayoutInfo.PushConstants = { PushConstantRange{0, sizeof(TaskMeshPipelinePushConstant)} };
         m_MeshPipeline = RenderCommand::createGraphicsPipeline(m_MeshPipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshShader", "MeshShader.slang", &m_MeshPipelineSpecification, nullptr, &m_MeshPipeline, VanKGraphics);
         
@@ -599,6 +980,32 @@ namespace VanK
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
         
         loadModel();
+        
+        stanfordBunny = LoadStanfordBunny();
+        
+        uint64_t sceneBuffersize = sizeof(SceneDatas);
+        sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
+        
+        uint64_t cullBuffersize = sizeof(CulledData);
+        cullBuffer.reset(StorageBuffer::Create(cullBuffersize));
+        
+        uint64_t m_TransferDownlaoadBuffersize = sizeof(CulledData);
+        m_TransferDownlaoadBuffer.reset(TransferBuffer::Create(m_TransferDownlaoadBuffersize, VanKTransferBufferUsageDownload));
+        
+        uint64_t vertexBuffersize = sizeof(Vertex) * stanfordBunny.vertices.size();
+        vertexBuffer.reset(StorageBuffer::Create(vertexBuffersize));
+        
+        uint64_t meshletVerticesBuffersize = sizeof(uint32_t) * stanfordBunny.meshletVertices.size();
+        meshletVerticesBuffer.reset(StorageBuffer::Create(meshletVerticesBuffersize));
+        
+        uint64_t meshletTrianglesBuffersize = sizeof(uint8_t) * stanfordBunny.meshletTriangles.size();
+        meshletTrianglesBuffer.reset(StorageBuffer::Create(meshletTrianglesBuffersize));
+        
+        uint64_t meshletBuffersize = sizeof(Meshlet) * stanfordBunny.meshlets.size();
+        meshletBuffer.reset(StorageBuffer::Create(meshletBuffersize));
+        
+        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize;
+        m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
         
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
         s_Data.cubeHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, GeometryData::cubeVertices, GeometryData::cubeIndices);
@@ -654,6 +1061,22 @@ namespace VanK
         m_InstancedLineBuffer.reset();
         
         m_MeshInfoBuffer.reset();
+        
+        m_TransferBuffer.reset();
+       
+        sceneBuffer.reset();
+      
+        cullBuffer.reset();
+        
+        m_TransferDownlaoadBuffer.reset();
+        
+        vertexBuffer.reset();
+ 
+        meshletVerticesBuffer.reset();
+        
+        meshletTrianglesBuffer.reset();
+        
+        meshletBuffer.reset();
     }
     
     void Renderer::CheckPendingVSyncChange()
@@ -689,6 +1112,23 @@ namespace VanK
         Flush();
         
         RenderCommand::SubmitRendering(cmd);
+        
+        uint64_t offset = 0;
+        void* mapPtr = m_TransferDownlaoadBuffer->MapTransferBuffer(sizeof(CulledData), 0, offset);
+        m_TransferDownlaoadBuffer->DownloadFromGPUBuffer(cmd, {0}, {cullBuffer.get(), 0, sizeof(CulledData)});
+        CulledData data;
+        std::memcpy(&data, mapPtr, sizeof(CulledData));
+        m_TransferDownlaoadBuffer->UnMapTransferBuffer();
+        
+        ImGui::SeparatorText("Culling Breakdown");
+        ImGui::Text("Frustum culled: %u", data.frustumCulled);
+        ImGui::Text("Backface culled: %u", data.backfaceCulled);
+
+        ImGui::SeparatorText("Effective Results");
+        ImGui::Text("Total culled: %u", data.totalCulled);
+        ImGui::Text("Rendered: %zu / %zu", stanfordBunny.meshlets.size() - data.totalCulled, stanfordBunny.meshlets.size());
+        ImGui::Text("Total meshlets: %zu", stanfordBunny.meshlets.size());
+        ImGui::End();
         
         RenderCommand::EndCommandBuffer(cmd);
         
@@ -727,6 +1167,17 @@ namespace VanK
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
         
+        cullBuffer->Fill(cmd, 0, sizeof(CulledData), 0);
+        
+        scene.emplace_back(scenesData);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, sceneBuffer, scene, SceneDatas, 0);
+        scene.clear();
+        
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, stanfordBunny.vertices, Vertex, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, stanfordBunny.meshletVertices, uint32_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, stanfordBunny.meshletTriangles, uint8_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, stanfordBunny.meshlets, Meshlet, 0);
+        
         std::vector<VanKColorTargetInfo> colorAttachments;
         colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
         colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
@@ -743,11 +1194,26 @@ namespace VanK
             
         RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
         
-        /*RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
+        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
         RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
         
-        RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);*/
+        TaskMeshPipelinePushConstant pushData{
+            .modelMatrix = stanfordBunny.transform.GetMatrix(),
+            .sceneData = sceneBuffer->GetBufferAddress(),
+            .culledDataBuffer = cullBuffer->GetBufferAddress(),
+            .vertexBuffer = vertexBuffer->GetBufferAddress(),
+            .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
+            .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
+            .meshletBuffer = meshletBuffer->GetBufferAddress(),
+            .meshletCount = static_cast<uint32_t>(stanfordBunny.meshlets.size())
+        };
+        
+        RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
+        
+        constexpr uint32_t taskDispatchX = 64;
+        uint32_t xCount = (stanfordBunny.meshlets.size() + (taskDispatchX - 1)) / taskDispatchX;
+        RenderCommand::DrawMeshTasks(cmd, xCount, 1, 1);
             
         RenderCommand::EndRendering(cmd);
     }

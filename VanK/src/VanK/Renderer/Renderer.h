@@ -140,6 +140,15 @@ namespace VanK
 
         inline static std::array<Ref<IndirectBuffer>, 5> m_CountBuffers;
         
+        inline static Ref<TransferBuffer> m_TransferBuffer;
+        inline static Ref<StorageBuffer> sceneBuffer ;
+        inline static Ref<StorageBuffer> cullBuffer ;
+        inline static Ref<TransferBuffer> m_TransferDownlaoadBuffer;
+        inline static Ref<StorageBuffer> vertexBuffer ;
+        inline static Ref<StorageBuffer> meshletVerticesBuffer ;
+        inline static Ref<StorageBuffer> meshletTrianglesBuffer ;
+        inline static Ref<StorageBuffer> meshletBuffer ;
+        
         inline static Ref<Texture2D> whiteTexture, vikingRoom, ChernoLogo;
     };
 }
