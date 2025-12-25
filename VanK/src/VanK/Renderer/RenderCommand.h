@@ -219,6 +219,26 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->waitForGraphicsQueueIdle();
         }
         
+        static void setEnableTimeStamp(bool temp)
+        {
+            if (s_RendererAPI) s_RendererAPI->setEnableTimeStamp(temp);
+        }
+        
+        static bool getEnableTimeStamp()
+        {
+            return s_RendererAPI ? s_RendererAPI->getEnableTimeStamp() : false;
+        }
+        
+        static TimestampPass getTimeStampPass()
+        {
+            return s_RendererAPI ? s_RendererAPI->getTimeStampPass() : TimestampPass();
+        }
+        
+        static float getTimeStampPeriod()
+        {
+            return s_RendererAPI ? s_RendererAPI->getTimeStampPeriod() : 0.0f;
+        }
+        
         static void SetConfig(const RendererAPI::Config& cfg)
         {
             s_Config = cfg;

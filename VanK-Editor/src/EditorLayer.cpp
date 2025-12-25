@@ -319,15 +319,45 @@ namespace VanK
         ImGui::Spacing();
         
         ImGui::Begin("Renderer");
-          /*  VanKDeviceProperties properties = RenderCommand::GetDeviceProperties();
-            ImGui::Text("DeviceName: %s", properties.deviceName.c_str());
-            ImGui::Text("Nvidia Driver Version: %u.%u.%u", properties.driverMajor, properties.driverMinor, properties.driverPatch);
-            ImGui::Text("Vulkan API Version: %u.%u.%u", properties.apiMajor, properties.apiMinor, properties.apiPatch);
         
-            ImGui::Spacing();
-        */
-            for (auto& [name, time] : VanK::g_ProfileResults)
-                ImGui::Text("%s: %.3f ms", name.c_str(), time);
+        /*  VanKDeviceProperties properties = RenderCommand::GetDeviceProperties();
+           ImGui::Text("DeviceName: %s", properties.deviceName.c_str());
+           ImGui::Text("Nvidia Driver Version: %u.%u.%u", properties.driverMajor, properties.driverMinor, properties.driverPatch);
+           ImGui::Text("Vulkan API Version: %u.%u.%u", properties.apiMajor, properties.apiMinor, properties.apiPatch);
+       
+           ImGui::Spacing();
+       */
+        
+        // Get the available width inside the window
+        ImVec2 region = ImGui::GetContentRegionAvail();
+
+        // Define relative proportions for each column
+        float nameColumnWidth    = region.x * 0.6f; // 60% for pass name
+        float cpuColumnWidth     = region.x * 0.2f; // 20% for CPU
+        float gpuColumnWidth     = region.x * 0.2f; // 20% for GPU
+
+        ImGui::Columns(3, "ProfilingColumns", false);
+
+        // Set dynamic column widths
+        ImGui::SetColumnWidth(0, nameColumnWidth);
+        ImGui::SetColumnWidth(1, cpuColumnWidth);
+        ImGui::SetColumnWidth(2, gpuColumnWidth);
+
+        // Header
+        ImGui::Text("Pass"); ImGui::NextColumn();
+        ImGui::Text("CPU (ms)"); ImGui::NextColumn();
+        ImGui::Text("GPU (ms)"); ImGui::NextColumn();
+        ImGui::Separator();
+
+        // Rows
+        for (auto& [name, result] : VanK::g_ProfileResults)
+        {
+            ImGui::Text("%s", name.c_str()); ImGui::NextColumn();
+            ImGui::Text("%.3f", result.cpuMs); ImGui::NextColumn();
+            ImGui::Text("%.3f", result.gpuMs); ImGui::NextColumn();
+        }
+
+        ImGui::Columns(1);
         ImGui::End();
 
         ImGui::Begin("Settings");

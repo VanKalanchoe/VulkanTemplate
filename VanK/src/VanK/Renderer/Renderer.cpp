@@ -718,10 +718,11 @@ namespace VanK
         
         DrawMeshShader();
      
-        DrawFrame();
+        /*DrawFrame();*/
         
         /*EndSubmit();*/
     }
+    
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");

@@ -1001,6 +1001,10 @@ namespace VanK
         static bool IsInitialized() { return s_instance != nullptr; }
         int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) override;
         uint32_t GetCurrentFrameIndex() override { return frameIndex; }
+        void setEnableTimeStamp(bool temp) { isTimeStapEnabled = temp; }
+        bool getEnableTimeStamp() override { return isTimeStapEnabled; }
+        TimestampPass getTimeStampPass() override { return timestamp; }
+        float getTimeStampPeriod() const override { return physicalDevice.getProperties2().properties.limits.timestampPeriod; };
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -1080,8 +1084,14 @@ namespace VanK
         bool m_hasActiveRenderPass = false;
 
         //statistic
-        vk::raii::QueryPool queryPool = nullptr;
-        utils::Buffer queryBuffer;
+        vk::raii::QueryPool queryPoolStatistics = nullptr;
+        utils::Buffer queryStatisticsBuffer;
+        
+        //timestep
+        vk::raii::QueryPool queryPoolTimeStep = nullptr;
+        utils::Buffer queryTimeStepBuffer;
+        bool isTimeStapEnabled = false;
+        TimestampPass timestamp;
 
         std::vector<const char*> requiredDeviceExtension =
         {
@@ -1175,7 +1185,9 @@ namespace VanK
         
         void createQueryBuffer();
         
-        void downloadQueryBuffer();
+        void downloadQueryStatisticsBuffer();
+        
+        void downloadQueryTimeStampBuffer(VanKCommandBuffer cmd);
 
         static uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
 

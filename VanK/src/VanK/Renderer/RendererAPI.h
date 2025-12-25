@@ -16,6 +16,12 @@ namespace VanK
     struct VanKCommandBuffer_T;
     using VanKCommandBuffer = VanKCommandBuffer_T*;
     
+    struct TimestampPass 
+    {
+        uint64_t begin;         // GPU timestamp for start
+        uint64_t end;           // GPU timestamp for end
+    };
+    
     struct VanKPipeLine_T;
     using VanKPipeLine = VanKPipeLine_T*;
 
@@ -467,6 +473,10 @@ namespace VanK
         virtual void EndComputePass(VanKComputePass* computePass) = 0;
         virtual int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;
+        virtual void setEnableTimeStamp(bool temp) = 0;
+        virtual bool getEnableTimeStamp() = 0;
+        virtual TimestampPass getTimeStampPass() = 0;
+        virtual float getTimeStampPeriod() const = 0;
         //---------
         
         static RenderAPIType GetAPI() { return s_API; }

@@ -176,7 +176,11 @@ namespace  VanK
         entityReadbackBuffer.buffer.clear();  // Add this line
         
         m_samplerPool.deinit();
-        queryBuffer.buffer.clear(); // statistics
+        
+        queryStatisticsBuffer.buffer.clear(); // statistics
+        
+        queryTimeStepBuffer.buffer.clear(); // timestamp
+        
         m_allocator.deinit();
     }
 
@@ -900,8 +904,8 @@ namespace  VanK
         commandBuffers[frameIndex].begin({});
 
         //statistics
-        commandBuffers[frameIndex].resetQueryPool(queryPool, 0, 1);
-        commandBuffers[frameIndex].beginQuery(queryPool, 0);
+        commandBuffers[frameIndex].resetQueryPool(queryPoolStatistics, 0, 1);
+        commandBuffers[frameIndex].beginQuery(queryPoolStatistics, 0);
         
         auto cmd = new VanKCommandBuffer_T{&commandBuffers[frameIndex]};
         
@@ -910,7 +914,7 @@ namespace  VanK
     
     void VulkanRendererAPI::EndCommandBuffer(VanKCommandBuffer cmd)
     {
-        Unwrap(cmd).endQuery(queryPool, 0);
+        Unwrap(cmd).endQuery(queryPoolStatistics, 0);
         Unwrap(cmd).end();
     }
 
@@ -1018,7 +1022,7 @@ namespace  VanK
         }
         
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
-        /*downloadQueryBuffer();*/
+        /*downloadQueryStatisticsBuffer();*/
     }
 
     VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers)
@@ -1306,6 +1310,12 @@ namespace  VanK
 
     void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0, VanKDepthStencilTargetInfo depth_stencil_target_info = {})
     {
+        if (isTimeStapEnabled)
+        {
+            Unwrap(cmd).resetQueryPool(queryPoolTimeStep, 0, 2);
+            Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, queryPoolTimeStep, 0);
+        }
+        
         DBG_VK_SCOPE(Unwrap(cmd));  // <-- Helps to debug in NSight
         
         // Before starting rendering, transition the images to the appropriate layouts
@@ -1610,6 +1620,13 @@ namespace  VanK
         entityImageInitialized = false;
         entityColorImageInitialized = false;
         m_hasActiveRenderPass = false;
+        
+        if (isTimeStapEnabled)
+        {
+            Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, queryPoolTimeStep, 1);
+        
+            downloadQueryTimeStampBuffer(cmd); 
+        }
     }
 
     void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd)
@@ -2398,42 +2415,60 @@ namespace  VanK
 
     void VulkanRendererAPI::createQueryPool()
     {
-        vk::QueryPoolCreateInfo poolInfo
+        // stastistics
         {
-            .queryType = vk::QueryType::ePipelineStatistics,
-            .queryCount = 1,
-            .pipelineStatistics =
-                vk::QueryPipelineStatisticFlagBits::eInputAssemblyVertices |
-                vk::QueryPipelineStatisticFlagBits::eInputAssemblyPrimitives |
-                vk::QueryPipelineStatisticFlagBits::eVertexShaderInvocations |
-                vk::QueryPipelineStatisticFlagBits::eFragmentShaderInvocations |
-                vk::QueryPipelineStatisticFlagBits::eComputeShaderInvocations |
-                vk::QueryPipelineStatisticFlagBits::eClippingInvocations |
-                vk::QueryPipelineStatisticFlagBits::eClippingPrimitives
-        };
+            vk::QueryPoolCreateInfo poolInfo
+            {
+                .queryType = vk::QueryType::ePipelineStatistics,
+                .queryCount = 1,
+                .pipelineStatistics =
+                    vk::QueryPipelineStatisticFlagBits::eInputAssemblyVertices |
+                    vk::QueryPipelineStatisticFlagBits::eInputAssemblyPrimitives |
+                    vk::QueryPipelineStatisticFlagBits::eVertexShaderInvocations |
+                    vk::QueryPipelineStatisticFlagBits::eFragmentShaderInvocations |
+                    vk::QueryPipelineStatisticFlagBits::eComputeShaderInvocations |
+                    vk::QueryPipelineStatisticFlagBits::eClippingInvocations |
+                    vk::QueryPipelineStatisticFlagBits::eClippingPrimitives
+            };
 
-        queryPool = vk::raii::QueryPool(device, poolInfo);
-        DBG_VK_NAME(*queryPool);
+            queryPoolStatistics = vk::raii::QueryPool(device, poolInfo);
+            DBG_VK_NAME(*queryPoolStatistics);
+        }
+        
+        // timestamp
+        {
+            vk::QueryPoolCreateInfo poolInfo
+           {
+               .queryType = vk::QueryType::eTimestamp,
+               .queryCount = 2,
+           };
+
+            queryPoolTimeStep = vk::raii::QueryPool(device, poolInfo);
+            DBG_VK_NAME(*queryPoolTimeStep);
+        }
     }
 
     void VulkanRendererAPI::createQueryBuffer()
     {
         // 7 pipelineStatistics, 1 querycount
-        queryBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
+        queryStatisticsBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
+        
+        // timestamp, 2 quercount
+        queryTimeStepBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 1 * 2, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
     }
 
-    void VulkanRendererAPI::downloadQueryBuffer()
+    void VulkanRendererAPI::downloadQueryStatisticsBuffer()
     {
         auto cmd = utils::beginSingleTimeCommands(device, commandPool);
         
-        cmd->copyQueryPoolResults(queryPool, 0, 1, queryBuffer.buffer, 0, 0, vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+        cmd->copyQueryPoolResults(queryPoolStatistics, 0, 1, queryStatisticsBuffer.buffer, 0, 0, vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
 
         utils::endSingleTimeCommands(*cmd, queue);
         
         // Map and copy data to the staging buffer
         try
         {
-            void* mappedData = queryBuffer.buffer.getAllocation().map();
+            void* mappedData = queryStatisticsBuffer.buffer.getAllocation().map();
             // No need to explicitly unmap; vma::raii::Allocation unmaps on destruction
             
             uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
@@ -2447,7 +2482,31 @@ namespace  VanK
             std::cout << "Fragment shader invocations: "    << stats[5] << "\n";
             std::cout << "Compute shader invocations: "     << stats[6] << "\n";
 
-            queryBuffer.buffer.getAllocation().unmap();
+            queryStatisticsBuffer.buffer.getAllocation().unmap();
+        }
+        catch ([[maybe_unused]] const vk::SystemError& err)
+        {
+            VK_CORE_ERROR("Failed to map staging buffer memory!");
+            // You could throw or handle the error here
+        }
+    }
+    
+    void VulkanRendererAPI::downloadQueryTimeStampBuffer(VanKCommandBuffer cmd) // todo use vankcommandbuffer because its in a pass anyway
+    {
+        Unwrap(cmd).copyQueryPoolResults(queryPoolTimeStep, 0, 2, queryTimeStepBuffer.buffer, 0, sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+        
+        // Map and copy data to the staging buffer
+        try
+        {
+            void* mappedData = queryTimeStepBuffer.buffer.getAllocation().map();
+            // No need to explicitly unmap; vma::raii::Allocation unmaps on destruction
+            
+            uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
+            
+            timestamp.begin = stats[0];
+            timestamp.end = stats[1];
+
+            queryTimeStepBuffer.buffer.getAllocation().unmap();
         }
         catch ([[maybe_unused]] const vk::SystemError& err)
         {

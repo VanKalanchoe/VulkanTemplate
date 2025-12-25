@@ -76,7 +76,6 @@ namespace VanK
         static bool isWindowMinimized() { return windowMinimized; }
         static void SetLineWidth(float lineWidth) { m_LineWidth = lineWidth; }
         static float GetLineWidth() { return m_LineWidth; }
-        
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
