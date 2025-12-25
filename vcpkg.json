@@ -15,6 +15,7 @@
     "box2d",
     "freetype",
     "skia",
-    "meshoptimizer"
+    "meshoptimizer",
+    "fastgltf"
   ]
 } 
