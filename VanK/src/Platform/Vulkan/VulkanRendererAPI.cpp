@@ -1614,10 +1614,29 @@ namespace  VanK
         Unwrap(cmd).drawMeshTasksEXT(groupCountX, groupCountY, groupCountZ);
     }
     
-    /*void VulkanRendererAPI::DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+    void VulkanRendererAPI::DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
-        Unwrap(cmd).drawMeshTasksEXT();
-    }*/
+        if (stride < sizeof(vk::DrawIndexedIndirectCommand))
+            throw std::runtime_error("drawMeshTasksIndirectCount: stride too small");
+        
+        // Cast to VulkanVertexBuffer
+        const VulkanIndirectBuffer* vulkanIB = dynamic_cast<const VulkanIndirectBuffer*>(&indirectBuffer);
+        if (!vulkanIB)
+            throw std::runtime_error("drawMeshTasksIndirectCount: indirectBuffer is not a VulkanIndirectBuffer");
+
+        const utils::Buffer& vkBuffer = vulkanIB->GetBuffer();
+        vk::Buffer bufferIndirect = vkBuffer.buffer; // The actual VkBuffer
+
+        // Cast to VulkanVertexBuffer
+        const VulkanIndirectBuffer* vulkanCB = dynamic_cast<const VulkanIndirectBuffer*>(&countBuffer);
+        if (!vulkanCB)
+            throw std::runtime_error("drawMeshTasksIndirectCount: countBuffer is not a VulkanIndirectBuffer");
+
+        const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
+        vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
+        
+        Unwrap(cmd).drawMeshTasksIndirectCountEXT(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
+    }
 
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
     {
