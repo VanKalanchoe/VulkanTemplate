@@ -814,12 +814,6 @@ namespace  VanK
         auto& compute = specShader->GetShaderModule(vk::ShaderStageFlagBits::eCompute);
 
         // Create the pipeline layout used by the compute shader
-        /*
-        const std::array<VkPushConstantRange, 1> pushRanges =
-        {
-            {{.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT, .offset = 0, .size = sizeof(shaderio::PushConstantCompute)}}
-        };
-        */
 
         vk::PipelineShaderStageCreateInfo computeShaderStageInfo
         {
@@ -833,15 +827,24 @@ namespace  VanK
             descriptorSetLayout,
             commonDescriptorSetLayout // <-- This is your new, shared layout
         };
+        
+        std::vector<vk::PushConstantRange> vkPushConstants;
+        vkPushConstants.reserve(computePipelineSpecification.ComputePipelineLayoutInfo.PushConstants.size());
+        vk::ShaderStageFlags stageFlags = ConvertToVkShaderStageFlagBits(VanKCompute);
+        for (const auto pushRange : computePipelineSpecification.ComputePipelineLayoutInfo.PushConstants)
+        {
+            vkPushConstants.push_back(vk::PushConstantRange{ stageFlags, pushRange.Offset, pushRange.Size});
+        }
 
         // The pipeline layout is used to pass data to the pipeline, anything with "layout" in the shader
         const vk::PipelineLayoutCreateInfo pipelineLayoutInfo
         {
-            .setLayoutCount = uint32_t(computeDescriptorSetLayouts.size()),
+            .setLayoutCount = computeDescriptorSetLayouts.size(),
             .pSetLayouts = computeDescriptorSetLayouts.data(),
-            /*.pushConstantRangeCount = uint32_t(pushRanges.size()),
-            .pPushConstantRanges = pushRanges.data(),*/
+            .pushConstantRangeCount = static_cast<uint32_t>(vkPushConstants.size()),
+            .pPushConstantRanges = vkPushConstants.data(),
         };
+        
         tempPipelineLayout = vk::raii::PipelineLayout( device, pipelineLayoutInfo );
         DBG_VK_NAME(*tempPipelineLayout);
 
@@ -1616,7 +1619,7 @@ namespace  VanK
     
     void VulkanRendererAPI::DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
-        if (stride < sizeof(vk::DrawIndexedIndirectCommand))
+        if (stride < sizeof(vk::DrawMeshTasksIndirectCommandEXT))
             throw std::runtime_error("drawMeshTasksIndirectCount: stride too small");
         
         // Cast to VulkanVertexBuffer

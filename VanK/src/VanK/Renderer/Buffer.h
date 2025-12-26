@@ -246,6 +246,7 @@ namespace VanK
 
         // Upload - for initial setup (creates its own command buffer)
         virtual void Upload(const void* data, size_t size, size_t offset) = 0;
+        virtual void Fill(VanKCommandBuffer cmd, uint64_t dstOffset, uint64_t size, uint32_t data) = 0;
 
         static IndirectBuffer* Create(uint64_t size);
     };
