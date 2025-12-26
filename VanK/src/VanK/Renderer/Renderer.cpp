@@ -1077,10 +1077,16 @@ namespace VanK
         {
             .VanKShader = DrawIndirectShader
         };
+        
+        VanKComputePipelineLayoutCreateInfo ComputePipelineLayoutCreateInfo
+       {
+           .PushConstants = {PushConstantRange{0, sizeof(TaskMeshPipelinePushConstant)}}
+       };
 
         VanKComputePipelineSpecification computePipelineSpecification
         {
-            .ComputePipelineCreateInfo = ComputePipelineCreateInfo
+            .ComputePipelineCreateInfo = ComputePipelineCreateInfo,
+            .ComputePipelineLayoutInfo = ComputePipelineLayoutCreateInfo
         };
 
         m_ComputeDrawIndirectPipelineSpecification = computePipelineSpecification;

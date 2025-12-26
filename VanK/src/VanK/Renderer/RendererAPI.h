@@ -316,9 +316,15 @@ namespace VanK
         Shader* VanKShader;
     };
 
+    struct VanKComputePipelineLayoutCreateInfo
+    {
+        std::vector<PushConstantRange> PushConstants;
+    };
+    
     struct VanKComputePipelineSpecification
     {
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo;
+        VanKComputePipelineLayoutCreateInfo ComputePipelineLayoutInfo;
     };
 
     struct VanKComputePass
