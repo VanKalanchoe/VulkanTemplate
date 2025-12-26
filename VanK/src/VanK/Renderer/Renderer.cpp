@@ -356,12 +356,14 @@ namespace VanK
         std::string err;
         std::string warn;
 
-        bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
+        /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
        // bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
         /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
-
+        /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/kitten/Untitled.gltf");*/
+        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        
         if (!warn.empty())
         {
             std::cout << "glTF warning: " << warn << std::endl;
@@ -1325,7 +1327,7 @@ namespace VanK
 
         TaskMeshPipelinePushConstant pushData
         {
-            .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-2.5f, 0.0f, 0.0f)) * glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/,
             .sceneData = sceneBuffer->GetBufferAddress(),
             .culledDataBuffer = cullBuffer->GetBufferAddress(),
             .vertexBuffer = vertexBuffer->GetBufferAddress(),
