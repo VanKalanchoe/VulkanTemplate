@@ -356,9 +356,9 @@ namespace VanK
         std::string err;
         std::string warn;
 
-        //bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
+        bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
-        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
+       // bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
         /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
 
@@ -530,39 +530,53 @@ namespace VanK
             meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
         }
 
-        auto generateBoundingSphere = [](const std::vector<Vertex>& vertices)
-        {
-            glm::vec3 center = {0, 0, 0};
+        // ------------------------------------------------------------
+        // Primitive (whole-mesh) bounding sphere using meshoptimizer
+        // ------------------------------------------------------------
+        meshopt_Bounds primitiveBounds = meshopt_computeSphereBounds(
+            reinterpret_cast<const float*>(primitiveVertices.data()), // float3 position at offset 0
+            primitiveVertices.size(),                                  // vertex count
+            sizeof(Vertex),                                            // vertex stride
+            nullptr,                                                   // no per-vertex radii
+            0
+        );
 
-            for (auto&& vertex : vertices)
-            {
-                center += vertex.position;
-            }
-            center /= static_cast<float>(vertices.size());
+        meshletModel.primitive.meshletOffset = static_cast<uint32_t>(meshletModel.meshlets.size());
+        meshletModel.primitive.meshletCount  = static_cast<uint32_t>(meshlets.size());
+        meshletModel.primitive.boundingSphere = glm::vec4(
+            primitiveBounds.center[0],
+            primitiveBounds.center[1],
+            primitiveBounds.center[2],
+            primitiveBounds.radius
+        );
 
+        // ------------------------------------------------------------
+        // Offsets into global buffers
+        // ------------------------------------------------------------
+        uint32_t vertexOffset           = static_cast<uint32_t>(meshletModel.vertices.size());
+        uint32_t meshletVertexOffset    = static_cast<uint32_t>(meshletModel.meshletVertices.size());
+        uint32_t meshletTrianglesOffset = static_cast<uint32_t>(meshletModel.meshletTriangles.size());
 
-            float radius = glm::dot(vertices[0].position - center, vertices[0].position - center);
-            for (size_t i = 1; i < vertices.size(); ++i)
-            {
-                radius = std::max(radius, glm::dot(vertices[i].position - center, vertices[i].position - center));
-            }
-            radius = std::nextafter(sqrtf(radius), std::numeric_limits<float>::max());
+        // ------------------------------------------------------------
+        // Append primitive data to model buffers
+        // ------------------------------------------------------------
+        meshletModel.vertices.insert(
+            meshletModel.vertices.end(),
+            primitiveVertices.begin(),
+            primitiveVertices.end()
+        );
 
-            return glm::vec4(center, radius);
-        };
+        meshletModel.meshletVertices.insert(
+            meshletModel.meshletVertices.end(),
+            meshletVertices.begin(),
+            meshletVertices.end()
+        );
 
-
-        meshletModel.primitive.meshletOffset = meshletModel.meshlets.size();
-        meshletModel.primitive.meshletCount = meshlets.size();
-        meshletModel.primitive.boundingSphere = generateBoundingSphere(primitiveVertices);
-
-        uint32_t vertexOffset = meshletModel.vertices.size();
-        uint32_t meshletVertexOffset = meshletModel.meshletVertices.size();
-        uint32_t meshletTrianglesOffset = meshletModel.meshletTriangles.size();
-
-        meshletModel.vertices.insert(meshletModel.vertices.end(), primitiveVertices.begin(), primitiveVertices.end());
-        meshletModel.meshletVertices.insert(meshletModel.meshletVertices.end(), meshletVertices.begin(), meshletVertices.end());
-        meshletModel.meshletTriangles.insert(meshletModel.meshletTriangles.end(), meshletTriangles.begin(), meshletTriangles.end());
+        meshletModel.meshletTriangles.insert(
+            meshletModel.meshletTriangles.end(),
+            meshletTriangles.begin(),
+            meshletTriangles.end()
+        );
 
         for (meshopt_Meshlet& meshlet : meshlets)
         {
@@ -639,8 +653,7 @@ namespace VanK
         s_Data.SceneData.proj = Proj;
     }
 
-    bool frozen = false;
-    bool frozenDone = false;
+    
 
     void Renderer::BeginScene(const EditorCamera& camera)
     {
@@ -1312,7 +1325,7 @@ namespace VanK
 
         TaskMeshPipelinePushConstant pushData
         {
-            .modelMatrix = glm::mat4(1.0f),
+            .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-2.5f, 0.0f, 0.0f)) * glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
             .sceneData = sceneBuffer->GetBufferAddress(),
             .culledDataBuffer = cullBuffer->GetBufferAddress(),
             .vertexBuffer = vertexBuffer->GetBufferAddress(),

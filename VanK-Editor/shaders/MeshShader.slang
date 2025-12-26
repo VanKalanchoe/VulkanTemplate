@@ -86,7 +86,9 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
             pushConstant.culledData.frustumCulled.add(1);
         }
 
-      /*   // Backface cull from meshoptimizer.h
+        
+/* 
+        // Backface cull from meshoptimizer.h
         // visible = dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius
         float3 worldConeAxis = normalize(mul((float3x3)pushConstant.modelMatrix, meshlet.coneAxis));
         float3 cameraToCenter = worldCenter - pushConstant.sceneData->frozenCameraWorldPos.xyz;
@@ -95,8 +97,8 @@ void taskMain(uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
         visible &= backfaceVisible;
         if (!backfaceVisible) {
             pushConstant.culledData.backfaceCulled.add(1);
-        } */
-
+        }
+ */
         // todo: send back to show how many culled from imgui
         if (visible) {
             uint index = visibleMeshletCount.add(1);

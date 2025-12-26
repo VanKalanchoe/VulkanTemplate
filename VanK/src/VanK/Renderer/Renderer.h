@@ -140,6 +140,10 @@ namespace VanK
 
         inline static std::array<Ref<IndirectBuffer>, 5> m_CountBuffers;
         
+    public:
+        inline static bool frozen = false;
+        inline static bool frozenDone = false;
+    private:
         inline static Ref<TransferBuffer> m_TransferBuffer;
         inline static Ref<StorageBuffer> sceneBuffer ;
         inline static Ref<StorageBuffer> cullBuffer ;

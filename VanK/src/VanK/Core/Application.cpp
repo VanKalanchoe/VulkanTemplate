@@ -231,6 +231,14 @@ namespace VanK
                         return SDL_APP_SUCCESS;
                     }
                     
+                    if (sdlEvent->key.scancode == SDL_SCANCODE_F)
+                    {
+                        Renderer::frozen = !Renderer::frozen;
+                        if (!Renderer::frozen)
+                            Renderer::frozenDone = false;
+                        return SDL_APP_CONTINUE;
+                    }
+                    
                     if (!applicationState->app->m_BlockEvents)
                     {
                         SDL_Scancode scan = sdlEvent->key.scancode; // maybe keycode better ?
