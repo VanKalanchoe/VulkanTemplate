@@ -1453,20 +1453,20 @@ namespace  VanK
 
     void VulkanRendererAPI::SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport vanKViewports)
     {
-        vk::Viewport vkViewport{ vanKViewports.x, vanKViewports.y, static_cast<float>(vanKViewports.width), static_cast<float>(vanKViewports.height), vanKViewports.minDepth, vanKViewports.maxDepth };
+        vk::Viewport vk_viewport{ vanKViewports.x, vanKViewports.y, static_cast<float>(vanKViewports.width), static_cast<float>(vanKViewports.height), vanKViewports.minDepth, vanKViewports.maxDepth };
 
         // Wrap the single viewport in an ArrayProxy (RAII-friendly)
-        std::vector viewports(viewportCount, vkViewport);
+        std::vector viewports(viewportCount, vk_viewport);
         
         Unwrap(cmd).setViewportWithCount(viewports);
     }
 
     void VulkanRendererAPI::SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor)
     {
-        vk::Rect2D vkScissor( vk::Offset2D(scissor.x, scissor.y), {scissor.width, scissor.height} );
+        vk::Rect2D vk_scissor{ vk::Offset2D(scissor.x, scissor.y), {scissor.width, scissor.height} };
 
         // Wrap the single scissor in an ArrayProxy (RAII-friendly)
-        std::vector<vk::Rect2D> scissors(scissorCount, vkScissor);
+        std::vector scissors(scissorCount, vk_scissor);
         
         Unwrap(cmd).setScissorWithCount(scissors);
     }
