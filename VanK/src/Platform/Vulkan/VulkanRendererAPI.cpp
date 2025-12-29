@@ -1451,12 +1451,12 @@ namespace  VanK
         Unwrap(cmd).beginRendering(renderingInfo);
     }
 
-    void VulkanRendererAPI::SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport)
+    void VulkanRendererAPI::SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport vanKViewports)
     {
-        vk::Viewport vkViewport{ viewport.x, viewport.y, (float)viewport.width, (float)viewport.height, viewport.minDepth, viewport.maxDepth };
+        vk::Viewport vkViewport{ vanKViewports.x, vanKViewports.y, static_cast<float>(vanKViewports.width), static_cast<float>(vanKViewports.height), vanKViewports.minDepth, vanKViewports.maxDepth };
 
         // Wrap the single viewport in an ArrayProxy (RAII-friendly)
-        std::vector<vk::Viewport> viewports(viewportCount, vkViewport);
+        std::vector viewports(viewportCount, vkViewport);
         
         Unwrap(cmd).setViewportWithCount(viewports);
     }
