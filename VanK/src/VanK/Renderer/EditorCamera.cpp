@@ -6,10 +6,20 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
-namespace VanK {
+namespace VanK 
+{
+	glm::mat4 perspectiveProjection(float fovY, float aspectWbyH, float zNear)
+	{
+		float f = 1.0f / tanf(fovY / 2.0f);
+		return glm::mat4(
+			f / aspectWbyH, 0.0f, 0.0f, 0.0f,
+			0.0f, f, 0.0f, 0.0f,
+			0.0f, 0.0f, 0.0f, 1.0f,
+			0.0f, 0.0f, zNear, 0.0f);
+	}
 
 	EditorCamera::EditorCamera(float fov, float aspectRatio, float nearClip, float farClip)
-		: m_FOV(fov), m_AspectRatio(aspectRatio), m_NearClip(nearClip), m_FarClip(farClip), Camera(glm::perspective(glm::radians(fov), aspectRatio, nearClip, farClip))
+		: m_FOV(fov), m_AspectRatio(aspectRatio), m_NearClip(nearClip), m_FarClip(farClip), Camera(perspectiveProjection(glm::radians(fov), aspectRatio, nearClip))
 	{
 		UpdateView();
 	}
@@ -17,18 +27,22 @@ namespace VanK {
 	void EditorCamera::UpdateProjection()
 	{
 		m_AspectRatio = m_ViewportWidth / m_ViewportHeight;
-		m_Projection = glm::perspective(glm::radians(m_FOV), m_AspectRatio, m_NearClip, m_FarClip);
-		m_Projection[1][1] *= -1;
+		m_Projection = perspectiveProjection(glm::radians(m_FOV), m_AspectRatio, m_NearClip);
 	}
 
 	void EditorCamera::UpdateView()
 	{
 		// m_Yaw = m_Pitch = 0.0f; // Lock the camera's rotation
 		m_Position = CalculatePosition();
-
 		glm::quat orientation = GetOrientation();
-		m_ViewMatrix = glm::translate(glm::mat4(1.0f), m_Position) * glm::toMat4(orientation);
-		m_ViewMatrix = glm::inverse(m_ViewMatrix);
+
+		// Build the view matrix
+		glm::mat4 view = glm::mat4_cast(orientation);
+		view[3] = glm::vec4(m_Position, 1.0f);
+		view = glm::inverse(view);
+
+		// Flip Z to account for negative viewport
+		m_ViewMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * view;
 	}
 
 	std::pair<float, float> EditorCamera::PanSpeed() const

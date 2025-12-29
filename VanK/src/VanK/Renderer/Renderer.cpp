@@ -358,7 +358,7 @@ namespace VanK
 
         /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
-       // bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
+        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
         /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
         /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/kitten/Untitled.gltf");*/
@@ -1012,7 +1012,7 @@ namespace VanK
         {
             .depthTestEnable = true,
             .depthWriteEnable = true,
-            .VanKdepthCompareOp = VanK_COMPARE_OP_LESS_OR_EQUAL
+            .VanKdepthCompareOp = VanK_COMPARE_OP_GREATER
         };
 
         VanKPipelineRenderingCreateInfo RenderingCreateInfo
@@ -1315,11 +1315,11 @@ namespace VanK
         colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
         colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
 
-        VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
+        VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
 
         RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
 
-        VanKViewport viewPort = {0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1};
+        VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
         RenderCommand::SetViewport(cmd, 1, viewPort);
 
         VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
@@ -1362,17 +1362,17 @@ namespace VanK
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
             colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
 
-            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
+            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
 
             RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
 
-            VanKViewport viewPort = {0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1};
+            VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
             RenderCommand::SetViewport(cmd, 1, viewPort);
 
             VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
             RenderCommand::SetScissor(cmd, 1, rect);
 
-            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
+            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
 
             RenderCommand::EndRendering(cmd);
             return;
@@ -1497,11 +1497,11 @@ namespace VanK
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
             colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
 
-            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {1.0f, 0}}};
+            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
 
             RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
 
-            VanKViewport viewPort = {0, 0, m_ViewportSize.width, m_ViewportSize.height, 0, 1};
+            VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
             RenderCommand::SetViewport(cmd, 1, viewPort);
 
             VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
@@ -1509,7 +1509,7 @@ namespace VanK
 
             RenderCommand::SetLineWidth(cmd, m_LineWidth);
 
-            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_NONE);
+            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
 
             RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
 

@@ -1453,7 +1453,7 @@ namespace  VanK
 
     void VulkanRendererAPI::SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport vanKViewports)
     {
-        vk::Viewport vk_viewport{ vanKViewports.x, vanKViewports.y, static_cast<float>(vanKViewports.width), static_cast<float>(vanKViewports.height), vanKViewports.minDepth, vanKViewports.maxDepth };
+        vk::Viewport vk_viewport{ vanKViewports.x, vanKViewports.y, vanKViewports.width, vanKViewports.height, vanKViewports.minDepth, vanKViewports.maxDepth };
 
         // Wrap the single viewport in an ArrayProxy (RAII-friendly)
         std::vector viewports(viewportCount, vk_viewport);

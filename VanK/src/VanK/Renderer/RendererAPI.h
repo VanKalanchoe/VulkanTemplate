@@ -414,8 +414,8 @@ namespace VanK
     {
         float x = 0.0f;
         float y = 0.0f;
-        uint32_t width = 0.0f;
-        uint32_t height = 0.0f;
+        float width = 0.0f;
+        float height = 0.0f;
         float minDepth = 0.0f;
         float maxDepth = 1.0f;
     };
