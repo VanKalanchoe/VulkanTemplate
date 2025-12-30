@@ -121,6 +121,9 @@ namespace VanK
         inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};
         inline static VanKComputePipelineSpecification m_ComputeDrawIndirectPipelineSpecification = {};
         
+        inline static VanKPipeLine m_ComputeDrawMeshTaskCommandPipeline = {};
+        inline static VanKComputePipelineSpecification m_ComputeDrawMeshTaskCommandPipelineSpecification = {};
+        
         inline static Ref<UniformBuffer> uniformScene;
         
         inline static Ref<IndexBuffer> m_InstancedIndexBuffer;

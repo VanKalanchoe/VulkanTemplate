@@ -929,6 +929,7 @@ namespace VanK
         auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
         auto LineShader = GetShaderLibrary().Load("LineShader", "LineShader.slang");
         auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
+        auto MeshTaskSubmit = GetShaderLibrary().Load("MeshTaskSubmit", "MeshTaskSubmit.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -1090,12 +1091,16 @@ namespace VanK
         };
 
         m_ComputeDrawIndirectPipelineSpecification = computePipelineSpecification;
-
         m_ComputeDrawIndirectPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawIndirectPipelineSpecification);
         RegisterPipelineForShaderWatcher("DrawIndirectShader", "DrawIndirectShader.slang", nullptr, &m_ComputeDrawIndirectPipelineSpecification, &m_ComputeDrawIndirectPipeline, VanKCompute);
 
+        m_ComputeDrawMeshTaskCommandPipelineSpecification = computePipelineSpecification;
+        m_ComputeDrawMeshTaskCommandPipelineSpecification.ComputePipelineCreateInfo.VanKShader = MeshTaskSubmit;
+        m_ComputeDrawMeshTaskCommandPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawMeshTaskCommandPipelineSpecification);
+        RegisterPipelineForShaderWatcher("MeshTaskSubmit", "MeshTaskSubmit.slang", nullptr, &m_ComputeDrawMeshTaskCommandPipelineSpecification, &m_ComputeDrawMeshTaskCommandPipeline, VanKCompute);
+        
         WatchShaderFiles(); // has to be last after pipeline creation
-
+        
         pipelines =
         {
             m_GraphicsPBRPipeline,
@@ -1291,7 +1296,7 @@ namespace VanK
 
         DrawMeshShader();
 
-        DrawFrame();
+        /*DrawFrame();*/
 
         /*EndSubmit();*/
     }
@@ -1310,6 +1315,16 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, stanfordBunny.meshletVertices, uint32_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, stanfordBunny.meshletTriangles, uint8_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, stanfordBunny.meshlets, Meshlet, 0);
+        
+        {
+            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd);
+
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
+            
+            RenderCommand::DispatchCompute(computePass, (1 + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
+
+            RenderCommand::EndComputePass(computePass);
+        }
 
         std::vector<VanKColorTargetInfo> colorAttachments;
         colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
@@ -1348,7 +1363,7 @@ namespace VanK
         constexpr uint32_t taskDispatchX = 64;
         uint32_t xCount = (stanfordBunny.meshlets.size() + (taskDispatchX - 1)) / taskDispatchX;
         RenderCommand::DrawMeshTasks(cmd, xCount, 1, 1);
-
+        
         RenderCommand::EndRendering(cmd);
     }
 
