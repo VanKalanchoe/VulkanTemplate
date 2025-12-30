@@ -343,6 +343,19 @@ namespace VanK
         MeshletPrimitive primitive{};
         Transform transform{};
     };
+    
+    struct VanKDrawMeshTasksIndirectCommand 
+    {
+        uint32_t    groupCountX;
+        uint32_t    groupCountY;
+        uint32_t    groupCountZ;
+    };
+    
+    struct meshTasksSubmitPushConstant
+    {
+        uint64_t meshTasksIndirectBufferAddress;
+        uint64_t localMeshTasksIndirectBufferAddress;
+    };
 
     ExtractedMeshletModel LoadStanfordBunny()
     {
@@ -1081,7 +1094,7 @@ namespace VanK
         
         VanKComputePipelineLayoutCreateInfo ComputePipelineLayoutCreateInfo
        {
-           .PushConstants = {PushConstantRange{0, sizeof(TaskMeshPipelinePushConstant)}}
+           .PushConstants = {PushConstantRange{0, sizeof(meshTasksSubmitPushConstant)}}
        };
 
         VanKComputePipelineSpecification computePipelineSpecification
@@ -1141,8 +1154,14 @@ namespace VanK
 
         uint64_t meshletBuffersize = sizeof(Meshlet) * stanfordBunny.meshlets.size();
         meshletBuffer.reset(StorageBuffer::Create(meshletBuffersize));
+        
+        uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
+        localMeshTaskSubmitBuffer.reset(StorageBuffer::Create(localMeshTaskSubmitBuffersize));
+        
+        uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
+        meshTaskSubmitBuffer.reset(IndirectBuffer::Create(meshTaskSubmitBuffersize));
 
-        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize;
+        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + localMeshTaskSubmitBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
 
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
@@ -1215,6 +1234,10 @@ namespace VanK
         meshletTrianglesBuffer.reset();
 
         meshletBuffer.reset();
+        
+        localMeshTaskSubmitBuffer.reset();
+        
+        meshTaskSubmitBuffer.reset();
     }
 
     void Renderer::CheckPendingVSyncChange()
@@ -1267,7 +1290,6 @@ namespace VanK
 
         RenderCommand::SubmitRendering(cmd);
 
-
         RenderCommand::EndCommandBuffer(cmd);
 
         RenderCommand::EndFrame();
@@ -1316,55 +1338,75 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, stanfordBunny.meshletTriangles, uint8_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, stanfordBunny.meshlets, Meshlet, 0);
         
+        std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{static_cast<unsigned int>((stanfordBunny.meshlets.size() + 64 - 1) / 64), 1, 1});
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{static_cast<unsigned int>((stanfordBunny.meshlets.size() + 64 - 1) / 64), 1, 1});
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
+        
         {
-            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd);
+            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
 
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
             
-            RenderCommand::DispatchCompute(computePass, (1 + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
+            meshTasksSubmitPushConstant pushData
+            {
+                .meshTasksIndirectBufferAddress = meshTaskSubmitBuffer->GetBufferAddress(),
+                .localMeshTasksIndirectBufferAddress = localMeshTaskSubmitBuffer->GetBufferAddress(),
+            };
+            
+            RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
+            
+            RenderCommand::DispatchCompute(computePass, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
             RenderCommand::EndComputePass(computePass);
         }
-
-        std::vector<VanKColorTargetInfo> colorAttachments;
-        colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
-        colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
-
-        VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
-
-        RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
-
-        VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
-        RenderCommand::SetViewport(cmd, 1, viewPort);
-
-        VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
-        RenderCommand::SetScissor(cmd, 1, rect);
-
-        RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
-
-        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
-
-        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-        TaskMeshPipelinePushConstant pushData
-        {
-            .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/,
-            .sceneData = sceneBuffer->GetBufferAddress(),
-            .culledDataBuffer = cullBuffer->GetBufferAddress(),
-            .vertexBuffer = vertexBuffer->GetBufferAddress(),
-            .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
-            .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
-            .meshletBuffer = meshletBuffer->GetBufferAddress(),
-            .meshletCount = static_cast<uint32_t>(stanfordBunny.meshlets.size())
-        };
-
-        RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
-
-        constexpr uint32_t taskDispatchX = 64;
-        uint32_t xCount = (stanfordBunny.meshlets.size() + (taskDispatchX - 1)) / taskDispatchX;
-        RenderCommand::DrawMeshTasks(cmd, xCount, 1, 1);
         
-        RenderCommand::EndRendering(cmd);
+        {
+            std::vector<VanKColorTargetInfo> colorAttachments;
+            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
+            colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
+
+            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
+
+            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
+
+            VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
+            RenderCommand::SetViewport(cmd, 1, viewPort);
+
+            VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
+            RenderCommand::SetScissor(cmd, 1, rect);
+
+            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
+
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
+
+            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+
+            TaskMeshPipelinePushConstant pushData
+            {
+                .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/,
+                .sceneData = sceneBuffer->GetBufferAddress(),
+                .culledDataBuffer = cullBuffer->GetBufferAddress(),
+                .vertexBuffer = vertexBuffer->GetBufferAddress(),
+                .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
+                .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
+                .meshletBuffer = meshletBuffer->GetBufferAddress(),
+                .meshletCount = static_cast<uint32_t>(stanfordBunny.meshlets.size())
+            };
+
+            RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
+
+            /*constexpr uint32_t taskDispatchX = 64;
+            uint32_t xCount = (stanfordBunny.meshlets.size() + (taskDispatchX - 1)) / taskDispatchX;
+            RenderCommand::DrawMeshTasks(cmd, xCount, 1, 1);
+            */
+        
+            RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+        
+            RenderCommand::EndRendering(cmd);
+        }
+        
+        meshTasks.clear();
     }
 
     void Renderer::DrawFrame()
