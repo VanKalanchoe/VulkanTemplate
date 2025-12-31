@@ -178,6 +178,7 @@ namespace VanK
     struct TaskMeshPipelinePushConstant
     {
         glm::mat4 modelMatrix;
+        glm::mat4 modelMatrix2;
         uint64_t sceneData;
         uint64_t culledDataBuffer;
         uint64_t vertexBuffer;
@@ -328,8 +329,7 @@ namespace VanK
         // {3} center, {1} radius
         glm::vec4 boundingSphere{};
     };
-
-
+    
     struct ExtractedMeshletModel
     {
         std::string name{};
@@ -1385,6 +1385,7 @@ namespace VanK
             TaskMeshPipelinePushConstant pushData
             {
                 .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/,
+                .modelMatrix2 = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/,
                 .sceneData = sceneBuffer->GetBufferAddress(),
                 .culledDataBuffer = cullBuffer->GetBufferAddress(),
                 .vertexBuffer = vertexBuffer->GetBufferAddress(),
