@@ -155,6 +155,8 @@ namespace VanK
         inline static Ref<StorageBuffer> meshletVerticesBuffer ;
         inline static Ref<StorageBuffer> meshletTrianglesBuffer ;
         inline static Ref<StorageBuffer> meshletBuffer ;
+        inline static Ref<StorageBuffer> meshletPrimitiveBuffer ;
+        inline static Ref<StorageBuffer> meshDrawBuffer ;
         
         inline static Ref<StorageBuffer> localMeshTaskSubmitBuffer;
         inline static Ref<IndirectBuffer> meshTaskSubmitBuffer;

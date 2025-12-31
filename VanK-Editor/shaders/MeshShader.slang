@@ -14,17 +14,16 @@ struct CulledData
     Atomic<uint32_t> totalCulled;
 }
 
-struct PushConstant {
-    column_major float4x4 modelMatrix;
-column_major float4x4 modelMatrix2;
+struct PushConstant 
+{
     SceneData* sceneData;
     CulledData* culledData;
     VertexData* vertexBuffer;
     MeshletVerticesData* meshletVerticesBuffer;
     MeshletTrianglesData* meshletTrianglesBuffer;
     MeshletData* meshletBuffer;
-
-    uint32_t meshletCount;
+    MeshletPrimitiveData* meshletPrimitive;
+    MeshDrawData* meshDrawBuffer;
 };
 
 const static int32_t TASK_SHADER_DISPATCH_X = 64;
@@ -50,9 +49,8 @@ groupshared Atomic<uint32_t> visibleMeshletCount;
 void taskMain( uint3 drawID : SV_DrawIndex, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform PushConstant pushConstant)
 {
-    if(drawID.x == 0){
     uint32_t groupMeshletOffset = (gid.x * TASK_SHADER_DISPATCH_X);
-    uint32_t totalMeshlets = pushConstant.meshletCount;
+    uint32_t totalMeshlets = pushConstant.meshletPrimitive->primitives[drawID.x].meshletCount; // currently Drawn meshletCount
 
     // thread 0 populates shared information for mesh shader
     if (gtid.x == 0) {
@@ -67,11 +65,11 @@ void taskMain( uint3 drawID : SV_DrawIndex, uint3 gid : SV_GroupID, uint3 gtid :
     uint groupMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - groupMeshletOffset);
 
     if (threadMeshletOffset < groupMeshletCount) {
-        uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset;
+        uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset + pushConstant.meshletPrimitive->primitives[drawID.x].meshletOffset; // offset to the previous one in the global buffer
         Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIndex];
 
         // Transform to world space
-        float3 worldCenter = mul(pushConstant.modelMatrix, float4(meshlet.meshletBoundingSphere.xyz, 1.0)).xyz;
+        float3 worldCenter = mul(pushConstant.meshDrawBuffer->meshDraw[drawID.x].modelMatrix, float4(meshlet.meshletBoundingSphere.xyz, 1.0)).xyz;
         float4 worldBounds = float4(worldCenter, meshlet.meshletBoundingSphere.w);
 
         bool visible = true;
@@ -115,73 +113,6 @@ void taskMain( uint3 drawID : SV_DrawIndex, uint3 gid : SV_GroupID, uint3 gtid :
         uint count = visibleMeshletCount.load();
         DispatchMesh(count, 1, 1, sharedPayload);
     }
-}
-else {
-    uint32_t groupMeshletOffset = (gid.x * TASK_SHADER_DISPATCH_X);
-    uint32_t totalMeshlets = pushConstant.meshletCount;
-
-    // thread 0 populates shared information for mesh shader
-    if (gtid.x == 0) {
-        visibleMeshletCount.store(0);
-        sharedPayload.groupMeshletOffset = groupMeshletOffset;
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    // group thread count is only 64, will never exceed uint8
-    uint8_t threadMeshletOffset = (uint8_t)gtid.x;
-    uint groupMeshletCount = min(TASK_SHADER_DISPATCH_X, totalMeshlets - groupMeshletOffset);
-
-    if (threadMeshletOffset < groupMeshletCount) {
-        uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset;
-        Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIndex];
-
-        // Transform to world space
-        float3 worldCenter = mul(pushConstant.modelMatrix2, float4(meshlet.meshletBoundingSphere.xyz, 1.0)).xyz;
-        float4 worldBounds = float4(worldCenter, meshlet.meshletBoundingSphere.w);
-
-        bool visible = true;
-
-        // Frustum Cull
-        bool frustumVisible = true;
-        for (uint i = 0; i < 6; i++) {
-            float dist = dot(pushConstant.sceneData.frozenFrustum.planes[i].xyz, worldBounds.xyz) + pushConstant.sceneData.frozenFrustum.planes[i].w;
-            frustumVisible &= (dist >= -worldBounds.w);
-        }
-        visible &= frustumVisible;
-        if (!frustumVisible) {
-            pushConstant.culledData.frustumCulled.add(1);
-        }
-
-        
-/* 
-        // Backface cull from meshoptimizer.h
-        // visible = dot(center - camera_position, cone_axis) >= cone_cutoff * length(center - camera_position) + radius
-        float3 worldConeAxis = normalize(mul((float3x3)pushConstant.modelMatrix, meshlet.coneAxis));
-        float3 cameraToCenter = worldCenter - pushConstant.sceneData->frozenCameraWorldPos.xyz;
-        float centerDist = length(cameraToCenter);
-        bool backfaceVisible = dot(cameraToCenter, worldConeAxis) < meshlet.coneCutoff * centerDist + meshlet.meshletBoundingSphere.w;
-        visible &= backfaceVisible;
-        if (!backfaceVisible) {
-            pushConstant.culledData.backfaceCulled.add(1);
-        }
- */
-        // todo: send back to show how many culled from imgui
-        if (visible) {
-            uint index = visibleMeshletCount.add(1);
-            sharedPayload.meshletIndices[index] = threadMeshletOffset;
-        } else {
-            pushConstant.culledData->totalCulled.add(1);
-        }
-    }
-
-    GroupMemoryBarrierWithGroupSync();
-
-    if (gtid.x == 0) {
-        uint count = visibleMeshletCount.load();
-        DispatchMesh(count, 1, 1, sharedPayload);
-    }
-}
 }
 
 [shader("mesh")]
@@ -193,7 +124,8 @@ void meshMain(
     uint3 drawID : SV_DrawIndex, uint3 groupId : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform PushConstant pushConstant)
 {
-    uint meshletIdx = sharedPayload.groupMeshletOffset + sharedPayload.meshletIndices[groupId.x];
+    uint baseOffset = pushConstant.meshletPrimitive->primitives[drawID.x].meshletOffset;
+    uint meshletIdx = baseOffset + sharedPayload.groupMeshletOffset + sharedPayload.meshletIndices[groupId.x];
     Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIdx];
     float4x4 viewProj = pushConstant.sceneData->viewProj;
 
@@ -210,12 +142,8 @@ void meshMain(
     for (uint i = instanceIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) {
         uint localVertexIndex = pushConstant.meshletVerticesBuffer->meshletVertices[meshlet.meshletVerticesOffset + i].vertexIndex;
         Vertex v = pushConstant.vertexBuffer->vertices[meshlet.vertexOffset + localVertexIndex];
-        float4 worldPos;
-        if(drawID.x == 0){
-         worldPos = mul(pushConstant.modelMatrix, float4(v.position, 1.0));
-        }else{
-             worldPos = mul(pushConstant.modelMatrix2, float4(v.position, 1.0));
-        }
+        
+        float4 worldPos = mul(pushConstant.meshDrawBuffer->meshDraw[drawID.x].modelMatrix, float4(v.position, 1.0));
         float4 clipPos = mul(viewProj, worldPos);
 
         vertices[i].position = clipPos;

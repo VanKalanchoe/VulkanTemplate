@@ -177,15 +177,14 @@ namespace VanK
 
     struct TaskMeshPipelinePushConstant
     {
-        glm::mat4 modelMatrix;
-        glm::mat4 modelMatrix2;
         uint64_t sceneData;
         uint64_t culledDataBuffer;
         uint64_t vertexBuffer;
         uint64_t meshletVerticesBuffer;
         uint64_t meshletTrianglesBuffer;
         uint64_t meshletBuffer;
-        uint32_t meshletCount;
+        uint64_t meshletPrimitives;
+        uint64_t meshDraws;
     };
 
     struct Transform
@@ -335,12 +334,12 @@ namespace VanK
         std::string name{};
         bool bSuccessfullyLoaded{false};
 
-        std::vector<Vertex> vertices{};
+        /*std::vector<Vertex> vertices{};
         std::vector<uint32_t> meshletVertices{};
         std::vector<uint8_t> meshletTriangles{};
-        std::vector<Meshlet> meshlets{};
+        std::vector<Meshlet> meshlets{};*/
 
-        MeshletPrimitive primitive{};
+        /*MeshletPrimitive primitive{};*/
         Transform transform{};
     };
     
@@ -356,10 +355,27 @@ namespace VanK
         uint64_t meshTasksIndirectBufferAddress;
         uint64_t localMeshTasksIndirectBufferAddress;
     };
-
-    ExtractedMeshletModel LoadStanfordBunny()
+    
+    struct MeshDraw
     {
-        ExtractedMeshletModel meshletModel{};
+        // because this can change every frame needs to be uploaded every frame
+        glm::mat4 modelMatrix;
+    };
+    
+    struct Geometry
+    {
+        // only needs to be updated once a new model is added so no need for upload every frame
+        std::vector<Vertex> vertices{};
+        std::vector<uint32_t> meshletVertices{};
+        std::vector<uint8_t> meshletTriangles{};
+        std::vector<Meshlet> meshlets{};
+        std::vector<MeshletPrimitive> primitives{}; 
+    };
+    Geometry geometry;
+
+    size_t LoadMeshModel(std::string path)
+    {
+        size_t primitiveId = geometry.primitives.size();
         std::vector<Vertex> primitiveVertices{};
         std::vector<uint32_t> primitiveIndices{};
 
@@ -369,13 +385,7 @@ namespace VanK
         std::string err;
         std::string warn;
 
-        /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
-        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
-        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
-        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
-        /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
-        /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/kitten/Untitled.gltf");*/
-        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
         
         if (!warn.empty())
         {
@@ -556,39 +566,42 @@ namespace VanK
             0
         );
 
-        meshletModel.primitive.meshletOffset = static_cast<uint32_t>(meshletModel.meshlets.size());
-        meshletModel.primitive.meshletCount  = static_cast<uint32_t>(meshlets.size());
-        meshletModel.primitive.boundingSphere = glm::vec4(
+        MeshletPrimitive primitive{};
+        primitive.meshletOffset = static_cast<uint32_t>(geometry.meshlets.size());
+        primitive.meshletCount  = static_cast<uint32_t>(meshlets.size());
+        primitive.boundingSphere = glm::vec4(
             primitiveBounds.center[0],
             primitiveBounds.center[1],
             primitiveBounds.center[2],
             primitiveBounds.radius
         );
+        
+        geometry.primitives.emplace_back(primitive);
 
         // ------------------------------------------------------------
         // Offsets into global buffers
         // ------------------------------------------------------------
-        uint32_t vertexOffset           = static_cast<uint32_t>(meshletModel.vertices.size());
-        uint32_t meshletVertexOffset    = static_cast<uint32_t>(meshletModel.meshletVertices.size());
-        uint32_t meshletTrianglesOffset = static_cast<uint32_t>(meshletModel.meshletTriangles.size());
+        uint32_t vertexOffset           = static_cast<uint32_t>(geometry.vertices.size());
+        uint32_t meshletVertexOffset    = static_cast<uint32_t>(geometry.meshletVertices.size());
+        uint32_t meshletTrianglesOffset = static_cast<uint32_t>(geometry.meshletTriangles.size());
 
         // ------------------------------------------------------------
         // Append primitive data to model buffers
         // ------------------------------------------------------------
-        meshletModel.vertices.insert(
-            meshletModel.vertices.end(),
+        geometry.vertices.insert(
+            geometry.vertices.end(),
             primitiveVertices.begin(),
             primitiveVertices.end()
         );
 
-        meshletModel.meshletVertices.insert(
-            meshletModel.meshletVertices.end(),
+        geometry.meshletVertices.insert(
+            geometry.meshletVertices.end(),
             meshletVertices.begin(),
             meshletVertices.end()
         );
 
-        meshletModel.meshletTriangles.insert(
-            meshletModel.meshletTriangles.end(),
+        geometry.meshletTriangles.insert(
+            geometry.meshletTriangles.end(),
             meshletTriangles.begin(),
             meshletTriangles.end()
         );
@@ -604,7 +617,7 @@ namespace VanK
                 sizeof(Vertex)
             );
 
-            meshletModel.meshlets.push_back({
+            geometry.meshlets.push_back({
                 .meshletBoundingSphere = glm::vec4(
                     bounds.center[0], bounds.center[1], bounds.center[2],
                     bounds.radius
@@ -656,7 +669,7 @@ namespace VanK
     
         meshletModel.transform = {localTranslation, localRotation, localScale};*/
 
-        return meshletModel;
+        return primitiveId;
     }
 
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
@@ -924,8 +937,6 @@ namespace VanK
         DrawLine(p3, p0, color, entityID);
     }
 
-    ExtractedMeshletModel stanfordBunny;
-
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -1132,7 +1143,22 @@ namespace VanK
 
         loadModel();
 
-        stanfordBunny = LoadStanfordBunny();
+        /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
+        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
+        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
+        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
+        /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
+        /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/kitten/kitten.gltf");*/
+        //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        
+        
+        auto vikingRoom2 = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        auto bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
+        
+        std::cout << std::dec << "geo1: " << geometry.primitives[vikingRoom2].meshletOffset << std::endl;
+        std::cout << std::dec << "geo2: " << geometry.primitives[bunny].meshletOffset << std::endl;
+        std::cout << std::dec << "geo1: " << geometry.primitives[vikingRoom2].meshletCount << std::endl;
+        std::cout << std::dec << "geo2: " << geometry.primitives[bunny].meshletCount << std::endl;
 
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
@@ -1143,16 +1169,16 @@ namespace VanK
         uint64_t m_TransferDownlaoadBuffersize = sizeof(CulledData);
         m_TransferDownlaoadBuffer.reset(TransferBuffer::Create(m_TransferDownlaoadBuffersize, VanKTransferBufferUsageDownload));
 
-        uint64_t vertexBuffersize = sizeof(Vertex) * stanfordBunny.vertices.size();
+        uint64_t vertexBuffersize = sizeof(Vertex) * geometry.vertices.size();
         vertexBuffer.reset(StorageBuffer::Create(vertexBuffersize));
 
-        uint64_t meshletVerticesBuffersize = sizeof(uint32_t) * stanfordBunny.meshletVertices.size();
+        uint64_t meshletVerticesBuffersize = sizeof(uint32_t) * geometry.meshletVertices.size();
         meshletVerticesBuffer.reset(StorageBuffer::Create(meshletVerticesBuffersize));
 
-        uint64_t meshletTrianglesBuffersize = sizeof(uint8_t) * stanfordBunny.meshletTriangles.size();
+        uint64_t meshletTrianglesBuffersize = sizeof(uint8_t) * geometry.meshletTriangles.size();
         meshletTrianglesBuffer.reset(StorageBuffer::Create(meshletTrianglesBuffersize));
 
-        uint64_t meshletBuffersize = sizeof(Meshlet) * stanfordBunny.meshlets.size();
+        uint64_t meshletBuffersize = sizeof(Meshlet) * geometry.meshlets.size();
         meshletBuffer.reset(StorageBuffer::Create(meshletBuffersize));
         
         uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
@@ -1160,8 +1186,14 @@ namespace VanK
         
         uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
         meshTaskSubmitBuffer.reset(IndirectBuffer::Create(meshTaskSubmitBuffersize));
+        
+        uint64_t meshletPrimitiveBuffersize = sizeof(MeshletPrimitive) * 10;
+        meshletPrimitiveBuffer.reset(StorageBuffer::Create(meshletPrimitiveBuffersize));
+        
+        uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10;
+        meshDrawBuffer.reset(StorageBuffer::Create(meshDrawBuffersize));
 
-        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + localMeshTaskSubmitBuffersize;
+        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
 
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
@@ -1238,6 +1270,10 @@ namespace VanK
         localMeshTaskSubmitBuffer.reset();
         
         meshTaskSubmitBuffer.reset();
+        
+        meshDrawBuffer.reset();
+        
+        meshletPrimitiveBuffer.reset();
     }
 
     void Renderer::CheckPendingVSyncChange()
@@ -1284,8 +1320,8 @@ namespace VanK
 
         ImGui::SeparatorText("Effective Results");
         ImGui::Text("Total culled: %u", data.totalCulled);
-        ImGui::Text("Rendered: %zu / %zu", stanfordBunny.meshlets.size() - data.totalCulled, stanfordBunny.meshlets.size());
-        ImGui::Text("Total meshlets: %zu", stanfordBunny.meshlets.size());
+        ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data.totalCulled, geometry.meshlets.size());
+        ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
         ImGui::End();
 
         RenderCommand::SubmitRendering(cmd);
@@ -1333,15 +1369,23 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, sceneBuffer, scene, SceneDatas, 0);
         scene.clear();
 
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, stanfordBunny.vertices, Vertex, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, stanfordBunny.meshletVertices, uint32_t, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, stanfordBunny.meshletTriangles, uint8_t, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, stanfordBunny.meshlets, Meshlet, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, geometry.vertices, Vertex, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, geometry.meshletVertices, uint32_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, geometry.meshletTriangles, uint8_t, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, geometry.meshlets, Meshlet, 0);
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletPrimitiveBuffer, geometry.primitives, MeshletPrimitive, 0);
         
+        //multiple meshes
+        std::vector<MeshDraw> meshDraws;
+        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f))});
+        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f))});
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
+        meshDraws.clear();
         std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{static_cast<unsigned int>((stanfordBunny.meshlets.size() + 64 - 1) / 64), 1, 1});
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{static_cast<unsigned int>((stanfordBunny.meshlets.size() + 64 - 1) / 64), 1, 1});
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[0].meshletCount + 64 - 1) / 64, 1, 1});
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
+        //----------
         
         {
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
@@ -1384,15 +1428,14 @@ namespace VanK
 
             TaskMeshPipelinePushConstant pushData
             {
-                .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/,
-                .modelMatrix2 = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/,
                 .sceneData = sceneBuffer->GetBufferAddress(),
                 .culledDataBuffer = cullBuffer->GetBufferAddress(),
                 .vertexBuffer = vertexBuffer->GetBufferAddress(),
                 .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
                 .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
                 .meshletBuffer = meshletBuffer->GetBufferAddress(),
-                .meshletCount = static_cast<uint32_t>(stanfordBunny.meshlets.size())
+                .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
+                .meshDraws = meshDrawBuffer->GetBufferAddress()
             };
 
             RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));

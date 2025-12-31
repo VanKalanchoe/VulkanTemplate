@@ -31,6 +31,11 @@ public struct MeshletPrimitive
     public float4 boundingSphere;
 };
 
+public struct MeshDraw
+{
+    public column_major float4x4 modelMatrix;
+};
+
 public struct MeshletVertexIndex {
     public uint32_t vertexIndex;
 }
@@ -45,6 +50,10 @@ public struct VertexData {
 
 public struct MeshletPrimitiveData {
     public MeshletPrimitive[] primitives;
+}
+
+public struct MeshDrawData {
+    public MeshDraw[] meshDraw;
 }
 
 public struct MeshletData {
