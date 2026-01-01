@@ -58,7 +58,6 @@ namespace VanK
         }
 
         m_EditorCamera = EditorCamera(30.0f, 1.778f, 0.1f, 1000.0f);
-        //setlinewidth maybe here ?
     }
 
     EditorLayer::~EditorLayer()
@@ -355,6 +354,18 @@ namespace VanK
         if (ImGui::SliderInt("Line Width", &lineWidth, 1.0f, 10.0f))
         {
             Renderer::SetLineWidth(static_cast<float>(lineWidth));
+        }
+        const char* cullModes[] = { "None", "Back", "Front" };
+        static int currentCull = Renderer::GetCullMode(); // 0=None, 1=Back, 2=Front
+
+        if (ImGui::Combo("Cull Mode", &currentCull, cullModes, IM_ARRAYSIZE(cullModes)))
+        {
+            switch (currentCull)
+            {
+            case 0 : Renderer::SetCullMode(VanK_CULL_MODE_NONE); break;
+            case 1 : Renderer::SetCullMode(VanK_CULL_MODE_FRONT_BIT); break;
+            case 2 : Renderer::SetCullMode(VanK_CULL_MODE_BACK_BIT); break;
+            }
         }
         ImGui::Image(s_Font->GetAtlasTexture()->getImTextureID(), {512, 512}, ImVec2(0, 1), ImVec2(1, 0));
         ImGui::End(); // End Settings

@@ -952,6 +952,12 @@ namespace VanK
         DrawLine(p3, p0, color, entityID);
     }
 
+    struct PushConstant2D
+    {
+        glm::mat4 modelMatrix;
+        uint64_t sceneData;
+    };
+    
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -967,8 +973,9 @@ namespace VanK
         auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");
         auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
         auto LineShader = GetShaderLibrary().Load("LineShader", "LineShader.slang");
-        auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
         auto MeshTaskSubmit = GetShaderLibrary().Load("MeshTaskSubmit", "MeshTaskSubmit.slang");
+        auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
+        auto MeshQuad = GetShaderLibrary().Load("MeshQuad", "MeshQuad.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -1104,7 +1111,7 @@ namespace VanK
         m_GraphicsLinePipelineSpecification.InputAssemblyStateCreateInfo.VanKPrimitive = VanK_PRIMITIVE_TOPOLOGY_LINE_LIST;
         m_GraphicsLinePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsLinePipelineSpecification);
         RegisterPipelineForShaderWatcher("LineShader", "LineShader.slang", &m_GraphicsLinePipelineSpecification, nullptr, &m_GraphicsLinePipeline, VanKGraphics);
-
+        
         m_MeshPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshPipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshShader;
@@ -1112,6 +1119,13 @@ namespace VanK
         m_MeshPipeline = RenderCommand::createGraphicsPipeline(m_MeshPipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshShader", "MeshShader.slang", &m_MeshPipelineSpecification, nullptr, &m_MeshPipeline, VanKGraphics);
 
+        m_MeshQuadPipelineSpecification = GraphicsPipelineSpecification;
+        m_MeshQuadPipelineSpecification.PipelineType = VanK_Mesh;
+        m_MeshQuadPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshQuad;
+        m_MeshQuadPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
+        m_MeshQuadPipeline = RenderCommand::createGraphicsPipeline(m_MeshQuadPipelineSpecification);
+        RegisterPipelineForShaderWatcher("MeshQuad", "MeshQuad.slang", &m_MeshQuadPipelineSpecification, nullptr, &m_MeshQuadPipeline, VanKGraphics);
+        
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
         {
@@ -1443,7 +1457,7 @@ namespace VanK
             VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
             RenderCommand::SetScissor(cmd, 1, rect);
 
-            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
+            RenderCommand::SetCullMode(cmd, cullMode);
 
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
@@ -1465,11 +1479,25 @@ namespace VanK
 
             //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
             RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
-
+            
+            meshTasks.clear();
+            
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshQuadPipeline);
+            
+            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+            
+            PushConstant2D push2D
+            {
+                .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)),
+                .sceneData = sceneBuffer->GetBufferAddress(),
+            };
+            
+            RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+            
+            RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
+            
             RenderCommand::EndRendering(cmd);
         }
-
-        meshTasks.clear();
     }
 
     void Renderer::DrawFrame()

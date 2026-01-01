@@ -76,6 +76,8 @@ namespace VanK
         static bool isWindowMinimized() { return windowMinimized; }
         static void SetLineWidth(float lineWidth) { m_LineWidth = lineWidth; }
         static float GetLineWidth() { return m_LineWidth; }
+        static void SetCullMode(VanKCullModeFlags flag) { cullMode = flag; }
+        static VanKCullModeFlags GetCullMode() { return cullMode; }
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
@@ -93,6 +95,7 @@ namespace VanK
         inline static Extent2D m_ViewportSize  = {640, 480}; // selber gemacht muss mit editorlayer verknüpft werden
         inline static Extent2D lastViewportExtent = {0, 0};
         inline static float m_LineWidth = 1.0f;
+        inline static VanKCullModeFlags cullMode = VanK_CULL_MODE_BACK_BIT;
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
         
@@ -116,6 +119,9 @@ namespace VanK
         
         inline static VanKPipeLine m_MeshPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_MeshPipelineSpecification = {};
+        
+        inline static VanKPipeLine m_MeshQuadPipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_MeshQuadPipelineSpecification = {};
         
         // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};
