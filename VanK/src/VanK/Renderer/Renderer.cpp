@@ -958,11 +958,19 @@ namespace VanK
         glm::vec4 color;
         uint32_t materialIndex;
     };
+    
+    struct CircleData
+    {
+        glm::mat4 WorldPosition;
+        glm::vec4 Color;
+        float Thickness;
+        float Fade;
+    };
 
     struct PushConstant2D
     {
-        uint64_t numOfQuads;
-        uint64_t quadBuffer;
+        uint64_t numOfElements;
+        uint64_t bufferAddress;
         uint64_t sceneData;
     };
     
@@ -984,7 +992,8 @@ namespace VanK
         auto MeshTaskSubmit = GetShaderLibrary().Load("MeshTaskSubmit", "MeshTaskSubmit.slang");
         auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
         auto MeshQuad = GetShaderLibrary().Load("MeshQuad", "MeshQuad.slang");
-
+        auto MeshCircle = GetShaderLibrary().Load("MeshCircle", "MeshCircle.slang");
+        
         // Pipeline Creation
         uint32_t useTexture = true;
         std::vector<VanKSpecializationMapEntries> mapEntries
@@ -1134,6 +1143,13 @@ namespace VanK
         m_MeshQuadPipeline = RenderCommand::createGraphicsPipeline(m_MeshQuadPipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshQuad", "MeshQuad.slang", &m_MeshQuadPipelineSpecification, nullptr, &m_MeshQuadPipeline, VanKGraphics);
         
+        m_MeshCirclePipelineSpecification = GraphicsPipelineSpecification;
+        m_MeshCirclePipelineSpecification.PipelineType = VanK_Mesh;
+        m_MeshCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshCircle;
+        m_MeshCirclePipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
+        m_MeshCirclePipeline = RenderCommand::createGraphicsPipeline(m_MeshCirclePipelineSpecification);
+        RegisterPipelineForShaderWatcher("MeshCircle", "MeshCircle.slang", &m_MeshCirclePipelineSpecification, nullptr, &m_MeshCirclePipeline, VanKGraphics);
+        
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
         {
@@ -1188,14 +1204,16 @@ namespace VanK
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
 
         // this makes no sense anway for 2d i want to use different shader anyway so i can build the quad in mesh shader directly no ?
-        std::vector<Vertex> quadVertices = {
+        std::vector<Vertex> quadVertices = 
+        {
             {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
             {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}},
             {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}},
             {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}
         };
 
-        std::vector<uint32_t> quadIndices = {
+        std::vector<uint32_t> quadIndices = 
+        {
             0, 1, 2, // first triangle
             0, 2, 3 // second triangle
         };
@@ -1238,9 +1256,12 @@ namespace VanK
         
         uint64_t quadBuffersize = sizeof(QuadData) * 10;
         quadBuffer.reset(StorageBuffer::Create(quadBuffersize));
+        
+        uint64_t circleBuffersize = sizeof(CircleData) * 10;
+        circleBuffer.reset(StorageBuffer::Create(circleBuffersize));
 
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + 
-            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + quadBuffersize;
+            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + quadBuffersize + circleBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
 
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
@@ -1323,6 +1344,8 @@ namespace VanK
         meshletPrimitiveBuffer.reset();
         
         quadBuffer.reset();
+        
+        circleBuffer.reset();
     }
 
     void Renderer::CheckPendingVSyncChange()
@@ -1444,6 +1467,13 @@ namespace VanK
         quads.emplace_back(QuadData{glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), vikingRoom->GetTextureIndex()});
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, quadBuffer, quads, QuadData, 0);
         //-----------
+        
+        //circle
+        std::vector<CircleData> circles;
+        circles.emplace_back(CircleData{glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 2.0f, 0.0f)), glm::vec4(0.0f, 1.0f, 0.0f, 1.0f), 1.0f, 0.005f});
+        circles.emplace_back(CircleData{glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 2.0f, 0.0f)), glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),1.0f, 0.005f});
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, circleBuffer, circles, CircleData, 0);
+        //-----------
 
         {
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
@@ -1501,7 +1531,7 @@ namespace VanK
             RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
 
             //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
-            //RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+            RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
             
             meshTasks.clear();
             
@@ -1513,8 +1543,8 @@ namespace VanK
             
                 PushConstant2D push2D
                 {
-                    .numOfQuads = quads.size(),
-                    .quadBuffer = quadBuffer->GetBufferAddress(),
+                    .numOfElements = quads.size(),
+                    .bufferAddress = quadBuffer->GetBufferAddress(),
                     .sceneData = sceneBuffer->GetBufferAddress(),
                 };
             
@@ -1522,6 +1552,24 @@ namespace VanK
             
                 RenderCommand::DrawMeshTasks(cmd, quads.size(), 1, 1);
                 quads.clear();
+            }
+            
+            {
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshCirclePipeline);
+            
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+            
+                PushConstant2D push2D
+                {
+                    .numOfElements = circles.size(),
+                    .bufferAddress = circleBuffer->GetBufferAddress(),
+                    .sceneData = sceneBuffer->GetBufferAddress(),
+                };
+            
+                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+            
+                RenderCommand::DrawMeshTasks(cmd, circles.size(), 1, 1);
+                circles.clear();
             }
             
             RenderCommand::EndRendering(cmd);

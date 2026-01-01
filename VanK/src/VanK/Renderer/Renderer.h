@@ -123,6 +123,9 @@ namespace VanK
         inline static VanKPipeLine m_MeshQuadPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_MeshQuadPipelineSpecification = {};
         
+        inline static VanKPipeLine m_MeshCirclePipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_MeshCirclePipelineSpecification = {};
+        
         // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};
         inline static VanKComputePipelineSpecification m_ComputeDrawIndirectPipelineSpecification = {};
@@ -166,6 +169,7 @@ namespace VanK
         
         //2d quads, circle, text, line dont need meshlets 1 thread means 1 instance of it
         inline static Ref<StorageBuffer> quadBuffer ;
+        inline static Ref<StorageBuffer> circleBuffer ;
         //--
         
         inline static Ref<StorageBuffer> localMeshTaskSubmitBuffer;

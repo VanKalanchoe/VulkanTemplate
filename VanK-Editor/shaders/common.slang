@@ -88,6 +88,19 @@ public struct QuadData
     public Quads[] quads;
 }
 
+public struct Circles
+{
+    public column_major float4x4 worldPosition;
+    public float4 color;
+    public float thickness;
+    public float fade;
+};
+
+public struct CircleData
+{
+    public Circles[] circles;
+}
+
 public struct Frustum
 {
     public float4 planes[6];
