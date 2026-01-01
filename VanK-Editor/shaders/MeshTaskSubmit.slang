@@ -1,14 +1,10 @@
 #include "shaderIO.h"
 
-//------------------------------------------------------------------------------
-// Resource Bindings
-//------------------------------------------------------------------------------
-
 struct VanKDrawMeshTasksIndirectCommand 
 {
-    uint32_t    groupCountX;
-    uint32_t    groupCountY;
-    uint32_t    groupCountZ;
+    uint    groupCountX;
+    uint    groupCountY;
+    uint    groupCountZ;
 };
 
 struct meshTasksSubmitPushConstant
@@ -30,5 +26,7 @@ void compMain
     VanKDrawMeshTasksIndirectCommand* localPtr = (VanKDrawMeshTasksIndirectCommand*)pushConstant.localMeshTasksIndirectBufferAddress;
     VanKDrawMeshTasksIndirectCommand* indirectPtr = (VanKDrawMeshTasksIndirectCommand*)pushConstant.meshTasksIndirectBufferAddress;
 
-    indirectPtr[idx] = localPtr[idx]; // safe copy
+    indirectPtr[idx].groupCountX = localPtr[idx].groupCountX;
+    indirectPtr[idx].groupCountY = localPtr[idx].groupCountY;
+    indirectPtr[idx].groupCountZ = localPtr[idx].groupCountZ;
 }

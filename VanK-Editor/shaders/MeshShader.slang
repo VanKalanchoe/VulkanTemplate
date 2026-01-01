@@ -38,6 +38,7 @@ const static uint MAX_PRIMITIVES = 96;
 // 4 + 64 = 68
 struct MeshletPayload 
 {
+    uint drawID;
     uint32_t groupMeshletOffset;
 
     uint8_t meshletIndices[TASK_SHADER_DISPATCH_X];
@@ -50,12 +51,12 @@ groupshared Atomic<uint32_t> visibleMeshletCount;
 [numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
 void taskMain
 (
-    uint3 drawID : SV_DrawIndex, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
+    uint drawID : SV_DrawIndex, uint3 gid : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform PushConstant pushConstant
 )
 {
     uint32_t groupMeshletOffset = (gid.x * TASK_SHADER_DISPATCH_X);
-    uint32_t totalMeshlets = pushConstant.meshletPrimitive->primitives[drawID.x].meshletCount; // currently Drawn meshletCount
+    uint32_t totalMeshlets = pushConstant.meshletPrimitive->primitives[drawID].meshletCount; // currently Drawn meshletCount
 
     // thread 0 populates shared information for mesh shader
     if (gtid.x == 0) 
@@ -73,11 +74,11 @@ void taskMain
 
     if (threadMeshletOffset < groupMeshletCount) 
     {
-        uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset + pushConstant.meshletPrimitive->primitives[drawID.x].meshletOffset; // offset to the previous one in the global buffer
+        uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset + pushConstant.meshletPrimitive->primitives[drawID].meshletOffset; // offset to the previous one in the global buffer
         Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIndex];
 
         // Transform to world space
-        float3 worldCenter = mul(pushConstant.meshDrawBuffer->meshDraw[drawID.x].modelMatrix, float4(meshlet.meshletBoundingSphere.xyz, 1.0)).xyz;
+        float3 worldCenter = mul(pushConstant.meshDrawBuffer->meshDraw[drawID].modelMatrix, float4(meshlet.meshletBoundingSphere.xyz, 1.0)).xyz;
         float4 worldBounds = float4(worldCenter, meshlet.meshletBoundingSphere.w);
 
         bool visible = true;
@@ -100,6 +101,7 @@ void taskMain
         {
             uint index = visibleMeshletCount.add(1);
             sharedPayload.meshletIndices[index] = threadMeshletOffset;
+            sharedPayload.drawID = drawID;
         } 
         else 
         {
@@ -123,11 +125,12 @@ void meshMain
 (
     in payload MeshletPayload sharedPayload,
     out indices uint3 triangles[MAX_PRIMITIVES], out vertices VertexOutput vertices[MAX_VERTICES],
-    uint3 drawID : SV_DrawIndex, uint3 groupId : SV_GroupID, uint3 gtid : SV_GroupThreadID,
+    uint3 groupId : SV_GroupID, uint3 gtid : SV_GroupThreadID,
     uniform PushConstant pushConstant
 )
 {
-    uint baseOffset = pushConstant.meshletPrimitive->primitives[drawID.x].meshletOffset;
+    uint drawID = sharedPayload.drawID;
+    uint baseOffset = pushConstant.meshletPrimitive->primitives[drawID].meshletOffset;
     uint meshletIdx = baseOffset + sharedPayload.groupMeshletOffset + sharedPayload.meshletIndices[groupId.x];
     Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIdx];
     float4x4 viewProj = pushConstant.sceneData->viewProj;
@@ -148,13 +151,13 @@ void meshMain
         uint localVertexIndex = pushConstant.meshletVerticesBuffer->meshletVertices[meshlet.meshletVerticesOffset + i].vertexIndex;
         Vertex v = pushConstant.vertexBuffer->vertices[meshlet.vertexOffset + localVertexIndex];
         
-        float4 worldPos = mul(pushConstant.meshDrawBuffer->meshDraw[drawID.x].modelMatrix, float4(v.position, 1.0));
+        float4 worldPos = mul(pushConstant.meshDrawBuffer->meshDraw[drawID].modelMatrix, float4(v.position, 1.0));
         float4 clipPos = mul(viewProj, worldPos);
 
         vertices[i].position = clipPos;
         vertices[i].color = float4(color, 1.0);
         vertices[i].texcoords = v.texcoords;
-        vertices[i].materialIndex = pushConstant.meshletPrimitive->primitives[drawID.x].materialIndex;
+        vertices[i].materialIndex = pushConstant.meshletPrimitive->primitives[drawID].materialIndex;
     }
 
     for (uint i = instanceIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) 
