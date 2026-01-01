@@ -951,10 +951,18 @@ namespace VanK
         DrawLine(p2, p3, color, entityID);
         DrawLine(p3, p0, color, entityID);
     }
+    
+    struct QuadData
+    {
+        glm::mat4 modelMatrix;
+        glm::vec4 color;
+        uint32_t materialIndex;
+    };
 
     struct PushConstant2D
     {
-        glm::mat4 modelMatrix;
+        uint64_t numOfQuads;
+        uint64_t quadBuffer;
         uint64_t sceneData;
     };
     
@@ -1227,9 +1235,12 @@ namespace VanK
 
         uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10;
         meshDrawBuffer.reset(StorageBuffer::Create(meshDrawBuffersize));
+        
+        uint64_t quadBuffersize = sizeof(QuadData) * 10;
+        quadBuffer.reset(StorageBuffer::Create(quadBuffersize));
 
-        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + localMeshTaskSubmitBuffersize +
-            meshletPrimitiveBuffersize + meshDrawBuffersize;
+        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + 
+            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + quadBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
 
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
@@ -1310,6 +1321,8 @@ namespace VanK
         meshDrawBuffer.reset();
 
         meshletPrimitiveBuffer.reset();
+        
+        quadBuffer.reset();
     }
 
     void Renderer::CheckPendingVSyncChange()
@@ -1423,6 +1436,14 @@ namespace VanK
         /*meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});*/
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
         //----------
+        
+        
+        //quads
+        std::vector<QuadData> quads;
+        quads.emplace_back(QuadData{glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 0.0f, 0.0f)), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), whiteTexture->GetTextureIndex()});
+        quads.emplace_back(QuadData{glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), vikingRoom->GetTextureIndex()});
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, quadBuffer, quads, QuadData, 0);
+        //-----------
 
         {
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
@@ -1456,6 +1477,8 @@ namespace VanK
 
             VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
             RenderCommand::SetScissor(cmd, 1, rect);
+            
+            RenderCommand::SetLineWidth(cmd, m_LineWidth);
 
             RenderCommand::SetCullMode(cmd, cullMode);
 
@@ -1478,23 +1501,28 @@ namespace VanK
             RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
 
             //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
-            RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+            //RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
             
             meshTasks.clear();
             
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshQuadPipeline);
-            
-            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-            
-            PushConstant2D push2D
+            // quads/sprites/atlas
             {
-                .modelMatrix = glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)),
-                .sceneData = sceneBuffer->GetBufferAddress(),
-            };
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshQuadPipeline);
             
-            RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
             
-            RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
+                PushConstant2D push2D
+                {
+                    .numOfQuads = quads.size(),
+                    .quadBuffer = quadBuffer->GetBufferAddress(),
+                    .sceneData = sceneBuffer->GetBufferAddress(),
+                };
+            
+                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+            
+                RenderCommand::DrawMeshTasks(cmd, quads.size(), 1, 1);
+                quads.clear();
+            }
             
             RenderCommand::EndRendering(cmd);
         }

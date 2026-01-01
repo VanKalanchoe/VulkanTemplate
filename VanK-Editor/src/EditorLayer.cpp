@@ -363,8 +363,8 @@ namespace VanK
             switch (currentCull)
             {
             case 0 : Renderer::SetCullMode(VanK_CULL_MODE_NONE); break;
-            case 1 : Renderer::SetCullMode(VanK_CULL_MODE_FRONT_BIT); break;
-            case 2 : Renderer::SetCullMode(VanK_CULL_MODE_BACK_BIT); break;
+            case 1 : Renderer::SetCullMode(VanK_CULL_MODE_BACK_BIT); break;
+            case 2 : Renderer::SetCullMode(VanK_CULL_MODE_FRONT_BIT); break;
             }
         }
         ImGui::Image(s_Font->GetAtlasTexture()->getImTextureID(), {512, 512}, ImVec2(0, 1), ImVec2(1, 0));

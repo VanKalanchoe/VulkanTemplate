@@ -76,6 +76,17 @@ public struct MeshletTrianglesData
     public MeshletTriangleIndex[] meshletTriangles;
 };
 
+public struct Quads
+{
+    public column_major float4x4 modelMatrix;
+    public float4 color;
+    public uint32_t materialIndex;
+};
+
+public struct QuadData
+{
+    public Quads[] quads;
+}
 
 public struct Frustum
 {

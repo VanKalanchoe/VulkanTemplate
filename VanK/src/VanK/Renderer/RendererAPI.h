@@ -86,8 +86,8 @@ namespace VanK
     enum VanKCullModeFlags
     {
         VanK_CULL_MODE_NONE,
-        VanK_CULL_MODE_FRONT_BIT,
         VanK_CULL_MODE_BACK_BIT,
+        VanK_CULL_MODE_FRONT_BIT,
         VanK_CULL_MODE_FRONT_AND_BACK,
     };
 

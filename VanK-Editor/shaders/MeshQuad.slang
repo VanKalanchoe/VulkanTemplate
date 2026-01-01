@@ -10,37 +10,54 @@ struct VertexOutput
 
 struct PushConstant 
 {
-    column_major float4x4 modelMatrix;
+    uint64_t numOfQuads;
+    QuadData* quadData;
     SceneData* sceneData;
 };
 
+const static int32_t TASK_SHADER_DISPATCH_X = 64;
 const static int32_t MESH_SHADER_DISPATCH_X = 32;
 
-struct DummyPayLoad
+struct QuadPayLoad
 {
-    uint dummyData;
+    uint quadID;
 };
 
 [shader("task")]
-[numthreads(1, 1, 1)]
-void taskMain()
+[numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
+void taskMain(
+    uint3 gid : SV_GroupID, uint3 groupThreadID: SV_GroupThreadID,
+    uniform PushConstant pushConstant
+)
 {
-    DummyPayLoad localPayload;
-    DispatchMesh(1, 1, 1, localPayload);
+    // globalThreadID = thread index in group + offset from group
+    uint globalThreadID = gid.x;
+
+    // safety check
+    if (globalThreadID >= pushConstant.numOfQuads) return;
+
+    // create payload for this quad
+    QuadPayLoad payload;
+    payload.quadID = globalThreadID;
+
+    // dispatch exactly 1 mesh per quad
+    DispatchMesh(1, 1, 1, payload);
 }
 
-static const float4 positions[3] = 
+static const float4 positions[4] = 
 {
-    float4( 0.0, -0.5, 0.0, 1.0),  // bottom
+    float4(-0.5, -0.5, 0.0, 1.0),  // bottom-left
+    float4( 0.5, -0.5, 0.0, 1.0),  // bottom-right
     float4( 0.5,  0.5, 0.0, 1.0),  // top-right
     float4(-0.5,  0.5, 0.0, 1.0)   // top-left
 };
 
-static const float4 colors[3] =
+static const float2 uv[4] = 
 {
-    float4(1, 0, 0, 1),
-    float4(0, 1, 0, 1),
-    float4(0, 0, 1, 1)
+    float2(0.0, 0.0), // bottom-left
+    float2(1.0, 0.0), // bottom-right
+    float2(1.0, 1.0), // top-right
+    float2(0.0, 1.0)  // top-left
 };
 
 [shader("mesh")]
@@ -48,28 +65,34 @@ static const float4 colors[3] =
 [numthreads(1, 1, 1)]
 void meshMain
 (
-    out indices uint3 triangles[1], out vertices VertexOutput vertices[3],
-    uint3 DispatchThreadID : SV_DispatchThreadID, uint3 groupId : SV_GroupID,
+    in payload QuadPayLoad sharedPayload,
+    out indices uint3 triangles[2], out vertices VertexOutput vertices[4],
     uniform PushConstant pushConstant
 )
 {
-    uint meshletID = groupId.x;
+    uint quadID = sharedPayload.quadID;
+    float4x4 mvp = mul(pushConstant.sceneData->viewProj, pushConstant.quadData->quads[quadID].modelMatrix);
 
-    float4x4 mvp = mul(pushConstant.sceneData.viewProj, pushConstant.modelMatrix);
+	SetMeshOutputCounts(4, 2); // 4 vertices, 2 triangles
 
-	SetMeshOutputCounts(3, 1);
-
-	for (uint i = 0; i < 3; i++) 
+	for (uint i = 0; i < 4; i++) 
     {
 		vertices[i].position = mul(mvp, positions[i]);
-		vertices[i].color = colors[i];
+		vertices[i].color = pushConstant.quadData->quads[quadID].color;
+        vertices[i].texcoords = uv[i];
+        vertices[i].materialIndex = pushConstant.quadData->quads[quadID].materialIndex;
 	}
 
 	triangles[0] = uint3(0, 1, 2);
+    triangles[1] = uint3(0, 2, 3);
 }
+
+[[vk::binding(0, 0)]]
+Sampler2D texture[];
 
 [shader("pixel")]
 float4 fragmentMain(VertexOutput vertexInput)
 {
-  return vertexInput.color;
+    float4 textureColor = texture[vertexInput.materialIndex].Sample(vertexInput.texcoords);
+    return textureColor * vertexInput.color;
 }
