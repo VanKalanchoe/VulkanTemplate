@@ -34,6 +34,7 @@ public struct MeshletPrimitive
 public struct MeshDraw
 {
     public column_major float4x4 modelMatrix;
+    public uint64_t  primitiveID;
 };
 
 public struct MeshletVertexIndex 

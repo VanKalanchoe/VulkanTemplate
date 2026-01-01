@@ -405,7 +405,7 @@ namespace  VanK
         >
         featureChain =
         {
-            {.features = {.independentBlend = true, .sampleRateShading = true, .wideLines = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true,.shaderInt64 = true, }}, // vk::PhysicalDeviceFeatures2
+            {.features = {.independentBlend = true, .sampleRateShading = true, .multiDrawIndirect = true, .wideLines = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true,.shaderInt64 = true, }}, // vk::PhysicalDeviceFeatures2
             {.shaderDrawParameters = true},
             {
                 .drawIndirectCount = true,

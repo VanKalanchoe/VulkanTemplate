@@ -360,6 +360,7 @@ namespace VanK
     {
         // because this can change every frame needs to be uploaded every frame
         glm::mat4 modelMatrix;
+        uint64_t primitiveID;
     };
 
     struct Geometry
@@ -374,7 +375,7 @@ namespace VanK
 
     Geometry geometry;
 
-    size_t LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = MAXINT64, bool FrustumFor2D = false)
+    size_t LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = UINT32_MAX, bool FrustumFor2D = false)
     {
         size_t primitiveId = geometry.primitives.size();
         std::vector<Vertex> primitiveVertices{};
@@ -584,8 +585,10 @@ namespace VanK
             primitiveBounds.radius
         );
 
-        if (materialIndex != MAXINT64)
+        if (materialIndex != UINT32_MAX)
             primitive.materialIndex = materialIndex;
+        else 
+            primitive.materialIndex = 1;
         
         // small hack so for 2d frustum still works otherwise i have to disable it idk sounds more expansive or ignore 
         // but idk if that could cause glitches in the future
@@ -1217,10 +1220,12 @@ namespace VanK
             0, 1, 2, // first triangle
             0, 2, 3 // second triangle
         };
-
-        LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);
+        
         LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
-
+        LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);
+        LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
+        
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
 
@@ -1450,13 +1455,13 @@ namespace VanK
 
         //multiple meshes
         std::vector<MeshDraw> meshDraws;
-        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f))});
-        /*meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f))});*/
+        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)), 1});
+        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f)), 3});
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
         meshDraws.clear();
         std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[0].meshletCount + 64 - 1) / 64, 1, 1});
-        /*meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});*/
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[3].meshletCount + 64 - 1) / 64, 1, 1});
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
         //----------
         
