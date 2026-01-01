@@ -19,12 +19,13 @@ struct meshTasksSubmitPushConstant
 
 [shader("compute")]
 [numthreads(64,1,1)]
-void compMain(uint3 GlobalInvocationID : SV_DispatchThreadID, uniform meshTasksSubmitPushConstant pushConstant)
+void compMain
+(
+    uint3 GlobalInvocationID : SV_DispatchThreadID, 
+    uniform meshTasksSubmitPushConstant pushConstant
+)
 {
     uint idx = GlobalInvocationID.x;
-
-    // Only 1 task in buffer
-    if (idx >= 2) return;
 
     VanKDrawMeshTasksIndirectCommand* localPtr = (VanKDrawMeshTasksIndirectCommand*)pushConstant.localMeshTasksIndirectBufferAddress;
     VanKDrawMeshTasksIndirectCommand* indirectPtr = (VanKDrawMeshTasksIndirectCommand*)pushConstant.meshTasksIndirectBufferAddress;

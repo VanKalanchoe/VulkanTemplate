@@ -61,7 +61,7 @@
 		{
 			"bufferView":0,
 			"componentType":5126,
-			"count":4702,
+			"count":4922,
 			"max":[
 				0.7395350337028503,
 				0.9248819947242737,
@@ -77,13 +77,13 @@
 		{
 			"bufferView":1,
 			"componentType":5126,
-			"count":4702,
+			"count":4922,
 			"type":"VEC3"
 		},
 		{
 			"bufferView":2,
 			"componentType":5126,
-			"count":4702,
+			"count":4922,
 			"type":"VEC2"
 		},
 		{
@@ -96,32 +96,32 @@
 	"bufferViews":[
 		{
 			"buffer":0,
-			"byteLength":56424,
+			"byteLength":59064,
 			"byteOffset":0,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":56424,
-			"byteOffset":56424,
+			"byteLength":59064,
+			"byteOffset":59064,
 			"target":34962
 		},
 		{
 			"buffer":0,
-			"byteLength":37616,
-			"byteOffset":112848,
+			"byteLength":39376,
+			"byteOffset":118128,
 			"target":34962
 		},
 		{
 			"buffer":0,
 			"byteLength":22968,
-			"byteOffset":150464,
+			"byteOffset":157504,
 			"target":34963
 		}
 	],
 	"buffers":[
 		{
-			"byteLength":173432,
+			"byteLength":180472,
 			"uri":"viking_room.bin"
 		}
 	]

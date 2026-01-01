@@ -328,7 +328,7 @@ namespace VanK
         // {3} center, {1} radius
         glm::vec4 boundingSphere{};
     };
-    
+
     struct ExtractedMeshletModel
     {
         std::string name{};
@@ -342,26 +342,26 @@ namespace VanK
         /*MeshletPrimitive primitive{};*/
         Transform transform{};
     };
-    
-    struct VanKDrawMeshTasksIndirectCommand 
+
+    struct VanKDrawMeshTasksIndirectCommand
     {
-        uint32_t    groupCountX;
-        uint32_t    groupCountY;
-        uint32_t    groupCountZ;
+        uint32_t groupCountX;
+        uint32_t groupCountY;
+        uint32_t groupCountZ;
     };
-    
+
     struct meshTasksSubmitPushConstant
     {
         uint64_t meshTasksIndirectBufferAddress;
         uint64_t localMeshTasksIndirectBufferAddress;
     };
-    
+
     struct MeshDraw
     {
         // because this can change every frame needs to be uploaded every frame
         glm::mat4 modelMatrix;
     };
-    
+
     struct Geometry
     {
         // only needs to be updated once a new model is added so no need for upload every frame
@@ -369,140 +369,148 @@ namespace VanK
         std::vector<uint32_t> meshletVertices{};
         std::vector<uint8_t> meshletTriangles{};
         std::vector<Meshlet> meshlets{};
-        std::vector<MeshletPrimitive> primitives{}; 
+        std::vector<MeshletPrimitive> primitives{};
     };
+
     Geometry geometry;
 
-    size_t LoadMeshModel(std::string path)
+    size_t LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = MAXINT64, bool FrustumFor2D = false)
     {
         size_t primitiveId = geometry.primitives.size();
         std::vector<Vertex> primitiveVertices{};
         std::vector<uint32_t> primitiveIndices{};
-
-        // Use tinygltf to load the model instead of tinyobjloader
-        tinygltf::Model model;
-        tinygltf::TinyGLTF loader;
-        std::string err;
-        std::string warn;
-
-        bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
-        
-        if (!warn.empty())
+        if (!path.empty())
         {
-            std::cout << "glTF warning: " << warn << std::endl;
-        }
+            // Use tinygltf to load the model instead of tinyobjloader
+            tinygltf::Model model;
+            tinygltf::TinyGLTF loader;
+            std::string err;
+            std::string warn;
 
-        if (!err.empty())
-        {
-            std::cout << "glTF error: " << err << std::endl;
-        }
+            bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
 
-        if (!ret)
-        {
-            throw std::runtime_error("Failed to load glTF model");
-        }
-
-        primitiveVertices.clear();
-        primitiveIndices.clear();
-
-        // Process all meshes in the model
-        for (const auto& mesh : model.meshes)
-        {
-            for (const auto& primitive : mesh.primitives)
+            if (!warn.empty())
             {
-                // Get indices
-                const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-                const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-                const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
+                std::cout << "glTF warning: " << warn << std::endl;
+            }
 
-                // Get vertex positions
-                const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
-                const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
-                const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
+            if (!err.empty())
+            {
+                std::cout << "glTF error: " << err << std::endl;
+            }
 
-                // Get texture coordinates if available
-                bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
-                const tinygltf::Accessor* texCoordAccessor = nullptr;
-                const tinygltf::BufferView* texCoordBufferView = nullptr;
-                const tinygltf::Buffer* texCoordBuffer = nullptr;
+            if (!ret)
+            {
+                throw std::runtime_error("Failed to load glTF model");
+            }
 
-                if (hasTexCoords)
+            primitiveVertices.clear();
+            primitiveIndices.clear();
+
+            // Process all meshes in the model
+            for (const auto& mesh : model.meshes)
+            {
+                for (const auto& primitive : mesh.primitives)
                 {
-                    texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
-                    texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
-                    texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
-                }
+                    // Get indices
+                    const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
+                    const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
+                    const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
 
-                uint32_t baseVertex = static_cast<uint32_t>(primitiveVertices.size());
+                    // Get vertex positions
+                    const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
+                    const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
+                    const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
 
-                for (size_t i = 0; i < posAccessor.count; i++)
-                {
-                    Vertex vertex{};
-
-                    const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor
-                        .byteOffset + i * 12]);
-                    vertex.position = {pos[0], pos[1], pos[2]};
+                    // Get texture coordinates if available
+                    bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
+                    const tinygltf::Accessor* texCoordAccessor = nullptr;
+                    const tinygltf::BufferView* texCoordBufferView = nullptr;
+                    const tinygltf::Buffer* texCoordBuffer = nullptr;
 
                     if (hasTexCoords)
                     {
-                        const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->
-                            byteOffset + texCoordAccessor->byteOffset + i * 8]);
-                        vertex.texcoords = {texCoord[0], texCoord[1]};
+                        texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
+                        texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
+                        texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
                     }
-                    else
+
+                    uint32_t baseVertex = static_cast<uint32_t>(primitiveVertices.size());
+
+                    for (size_t i = 0; i < posAccessor.count; i++)
                     {
-                        vertex.texcoords = {0.0f, 0.0f};
+                        Vertex vertex{};
+
+                        const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor
+                            .byteOffset + i * 12]);
+                        vertex.position = {pos[0], pos[1], pos[2]};
+
+                        if (hasTexCoords)
+                        {
+                            const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->
+                                byteOffset + texCoordAccessor->byteOffset + i * 8]);
+                            vertex.texcoords = {texCoord[0], texCoord[1]};
+                        }
+                        else
+                        {
+                            vertex.texcoords = {0.0f, 0.0f};
+                        }
+
+                        /*vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};*/
+
+                        primitiveVertices.push_back(vertex);
                     }
 
-                    /*vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};*/
+                    const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
+                    size_t indexCount = indexAccessor.count;
+                    size_t indexStride = 0;
 
-                    primitiveVertices.push_back(vertex);
-                }
-
-                const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-                size_t indexCount = indexAccessor.count;
-                size_t indexStride = 0;
-
-                // Determine index stride based on component type
-                if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                {
-                    indexStride = sizeof(uint16_t);
-                }
-                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                {
-                    indexStride = sizeof(uint32_t);
-                }
-                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                {
-                    indexStride = sizeof(uint8_t);
-                }
-                else
-                {
-                    throw std::runtime_error("Unsupported index component type");
-                }
-
-                primitiveIndices.reserve(primitiveIndices.size() + indexCount);
-
-                for (size_t i = 0; i < indexCount; i++)
-                {
-                    uint32_t index = 0;
-
+                    // Determine index stride based on component type
                     if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
                     {
-                        index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
+                        indexStride = sizeof(uint16_t);
                     }
                     else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
                     {
-                        index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
+                        indexStride = sizeof(uint32_t);
                     }
                     else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
                     {
-                        index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
+                        indexStride = sizeof(uint8_t);
+                    }
+                    else
+                    {
+                        throw std::runtime_error("Unsupported index component type");
                     }
 
-                    primitiveIndices.push_back(baseVertex + index);
+                    primitiveIndices.reserve(primitiveIndices.size() + indexCount);
+
+                    for (size_t i = 0; i < indexCount; i++)
+                    {
+                        uint32_t index = 0;
+
+                        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
+                        {
+                            index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
+                        }
+                        else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
+                        {
+                            index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
+                        }
+                        else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
+                        {
+                            index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
+                        }
+
+                        primitiveIndices.push_back(baseVertex + index);
+                    }
                 }
             }
+        }
+        else
+        {
+            primitiveVertices = vertices;
+            primitiveIndices = indices;
         }
 
         std::vector<uint32_t> remap(primitiveIndices.size());
@@ -560,29 +568,37 @@ namespace VanK
         // ------------------------------------------------------------
         meshopt_Bounds primitiveBounds = meshopt_computeSphereBounds(
             reinterpret_cast<const float*>(primitiveVertices.data()), // float3 position at offset 0
-            primitiveVertices.size(),                                  // vertex count
-            sizeof(Vertex),                                            // vertex stride
-            nullptr,                                                   // no per-vertex radii
+            primitiveVertices.size(), // vertex count
+            sizeof(Vertex), // vertex stride
+            nullptr, // no per-vertex radii
             0
         );
 
         MeshletPrimitive primitive{};
         primitive.meshletOffset = static_cast<uint32_t>(geometry.meshlets.size());
-        primitive.meshletCount  = static_cast<uint32_t>(meshlets.size());
+        primitive.meshletCount = static_cast<uint32_t>(meshlets.size());
         primitive.boundingSphere = glm::vec4(
             primitiveBounds.center[0],
             primitiveBounds.center[1],
             primitiveBounds.center[2],
             primitiveBounds.radius
         );
+
+        if (materialIndex != MAXINT64)
+            primitive.materialIndex = materialIndex;
         
+        // small hack so for 2d frustum still works otherwise i have to disable it idk sounds more expansive or ignore 
+        // but idk if that could cause glitches in the future
+        if (FrustumFor2D)
+            primitive.boundingSphere.w += 0.001f;
+
         geometry.primitives.emplace_back(primitive);
 
         // ------------------------------------------------------------
         // Offsets into global buffers
         // ------------------------------------------------------------
-        uint32_t vertexOffset           = static_cast<uint32_t>(geometry.vertices.size());
-        uint32_t meshletVertexOffset    = static_cast<uint32_t>(geometry.meshletVertices.size());
+        uint32_t vertexOffset = static_cast<uint32_t>(geometry.vertices.size());
+        uint32_t meshletVertexOffset = static_cast<uint32_t>(geometry.meshletVertices.size());
         uint32_t meshletTrianglesOffset = static_cast<uint32_t>(geometry.meshletTriangles.size());
 
         // ------------------------------------------------------------
@@ -681,7 +697,6 @@ namespace VanK
         s_Data.SceneData.proj = Proj;
     }
 
-    
 
     void Renderer::BeginScene(const EditorCamera& camera)
     {
@@ -1102,11 +1117,11 @@ namespace VanK
         {
             .VanKShader = DrawIndirectShader
         };
-        
+
         VanKComputePipelineLayoutCreateInfo ComputePipelineLayoutCreateInfo
-       {
-           .PushConstants = {PushConstantRange{0, sizeof(meshTasksSubmitPushConstant)}}
-       };
+        {
+            .PushConstants = {PushConstantRange{0, sizeof(meshTasksSubmitPushConstant)}}
+        };
 
         VanKComputePipelineSpecification computePipelineSpecification
         {
@@ -1122,9 +1137,9 @@ namespace VanK
         m_ComputeDrawMeshTaskCommandPipelineSpecification.ComputePipelineCreateInfo.VanKShader = MeshTaskSubmit;
         m_ComputeDrawMeshTaskCommandPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawMeshTaskCommandPipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshTaskSubmit", "MeshTaskSubmit.slang", nullptr, &m_ComputeDrawMeshTaskCommandPipelineSpecification, &m_ComputeDrawMeshTaskCommandPipeline, VanKCompute);
-        
+
         WatchShaderFiles(); // has to be last after pipeline creation
-        
+
         pipelines =
         {
             m_GraphicsPBRPipeline,
@@ -1138,7 +1153,6 @@ namespace VanK
 
         whiteTexture = TextureImporter::LoadTexture2D("");
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
-        std::cout << std::dec << "vik: " << vikingRoom->GetTextureIndex();
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
 
         loadModel();
@@ -1150,15 +1164,22 @@ namespace VanK
         /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
         /*bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/kitten/kitten.gltf");*/
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
-        
-        
-        auto vikingRoom2 = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
-        auto bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
-        
-        std::cout << std::dec << "geo1: " << geometry.primitives[vikingRoom2].meshletOffset << std::endl;
-        std::cout << std::dec << "geo2: " << geometry.primitives[bunny].meshletOffset << std::endl;
-        std::cout << std::dec << "geo1: " << geometry.primitives[vikingRoom2].meshletCount << std::endl;
-        std::cout << std::dec << "geo2: " << geometry.primitives[bunny].meshletCount << std::endl;
+
+        // this makes no sense anway for 2d i want to use different shader anyway so i can build the quad in mesh shader directly no ?
+        std::vector<Vertex> quadVertices = {
+            {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
+            {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}},
+            {{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}},
+            {{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}}
+        };
+
+        std::vector<uint32_t> quadIndices = {
+            0, 1, 2, // first triangle
+            0, 2, 3 // second triangle
+        };
+
+        LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);
+        LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
 
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
@@ -1180,20 +1201,21 @@ namespace VanK
 
         uint64_t meshletBuffersize = sizeof(Meshlet) * geometry.meshlets.size();
         meshletBuffer.reset(StorageBuffer::Create(meshletBuffersize));
-        
+
         uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
         localMeshTaskSubmitBuffer.reset(StorageBuffer::Create(localMeshTaskSubmitBuffersize));
-        
+
         uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
         meshTaskSubmitBuffer.reset(IndirectBuffer::Create(meshTaskSubmitBuffersize));
-        
+
         uint64_t meshletPrimitiveBuffersize = sizeof(MeshletPrimitive) * 10;
         meshletPrimitiveBuffer.reset(StorageBuffer::Create(meshletPrimitiveBuffersize));
-        
+
         uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10;
         meshDrawBuffer.reset(StorageBuffer::Create(meshDrawBuffersize));
 
-        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize;
+        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + localMeshTaskSubmitBuffersize +
+            meshletPrimitiveBuffersize + meshDrawBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
 
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
@@ -1266,13 +1288,13 @@ namespace VanK
         meshletTrianglesBuffer.reset();
 
         meshletBuffer.reset();
-        
+
         localMeshTaskSubmitBuffer.reset();
-        
+
         meshTaskSubmitBuffer.reset();
-        
+
         meshDrawBuffer.reset();
-        
+
         meshletPrimitiveBuffer.reset();
     }
 
@@ -1320,6 +1342,7 @@ namespace VanK
 
         ImGui::SeparatorText("Effective Results");
         ImGui::Text("Total culled: %u", data.totalCulled);
+        //todo its not the actual rendererd stats
         ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data.totalCulled, geometry.meshlets.size());
         ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
         ImGui::End();
@@ -1374,37 +1397,37 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, geometry.meshletTriangles, uint8_t, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, geometry.meshlets, Meshlet, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletPrimitiveBuffer, geometry.primitives, MeshletPrimitive, 0);
-        
+
         //multiple meshes
         std::vector<MeshDraw> meshDraws;
         meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f))});
-        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f))});
+        /*meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f))});*/
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
         meshDraws.clear();
         std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
         meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[0].meshletCount + 64 - 1) / 64, 1, 1});
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});
+        /*meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});*/
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
         //----------
-        
+
         {
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
 
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
-            
+
             meshTasksSubmitPushConstant pushData
             {
                 .meshTasksIndirectBufferAddress = meshTaskSubmitBuffer->GetBufferAddress(),
                 .localMeshTasksIndirectBufferAddress = localMeshTaskSubmitBuffer->GetBufferAddress(),
             };
-            
+
             RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
-            
+
             RenderCommand::DispatchCompute(computePass, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
             RenderCommand::EndComputePass(computePass);
         }
-        
+
         {
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
@@ -1440,16 +1463,12 @@ namespace VanK
 
             RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
 
-            /*constexpr uint32_t taskDispatchX = 64;
-            uint32_t xCount = (stanfordBunny.meshlets.size() + (taskDispatchX - 1)) / taskDispatchX;
-            RenderCommand::DrawMeshTasks(cmd, xCount, 1, 1);
-            */
-        
+            //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
             RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
-        
+
             RenderCommand::EndRendering(cmd);
         }
-        
+
         meshTasks.clear();
     }
 

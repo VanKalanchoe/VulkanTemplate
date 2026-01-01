@@ -36,35 +36,43 @@ public struct MeshDraw
     public column_major float4x4 modelMatrix;
 };
 
-public struct MeshletVertexIndex {
+public struct MeshletVertexIndex 
+{
     public uint32_t vertexIndex;
 }
 
-public struct MeshletTriangleIndex {
+public struct MeshletTriangleIndex 
+{
     public uint8_t triangleIndex;
 }
 
-public struct VertexData {
+public struct VertexData 
+{
     public Vertex[] vertices;
 };
 
-public struct MeshletPrimitiveData {
+public struct MeshletPrimitiveData 
+{
     public MeshletPrimitive[] primitives;
 }
 
-public struct MeshDrawData {
+public struct MeshDrawData 
+{
     public MeshDraw[] meshDraw;
 }
 
-public struct MeshletData {
+public struct MeshletData 
+{
     public Meshlet[] meshlets;
 };
 
-public struct MeshletVerticesData {
+public struct MeshletVerticesData 
+{
     public MeshletVertexIndex[] meshletVertices;
 };
 
-public struct MeshletTrianglesData {
+public struct MeshletTrianglesData 
+{
     public MeshletTriangleIndex[] meshletTriangles;
 };
 
