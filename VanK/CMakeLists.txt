@@ -138,7 +138,7 @@ message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAl
     )
 
     # Link Vulkan, SDL, and any additional libraries
-    target_link_libraries(${CHAPTER_NAME} Vulkan::cppm SDL3::SDL3 "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/lib/slang.lib")
+    target_link_libraries(${CHAPTER_NAME} Vulkan::cppm SDL3::SDL3)
 
     # Set working directory for Visual Studio debug
     if(WIN32 AND ${CMAKE_GENERATOR} MATCHES "Visual Studio.*")
@@ -174,17 +174,37 @@ message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAl
         file(COPY ${CHAPTER_SHADER} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/shaders)
     endif()
 
-    add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/bin/slang.dll"
-            $<TARGET_FILE_DIR:${CHAPTER_NAME}>
-    )
+    if(WIN32)
+        target_link_libraries(${CHAPTER_NAME} Vulkan::cppm SDL3::SDL3 "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/lib/slang.lib")
 
-    add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/bin/slang-glslang.dll"
-            $<TARGET_FILE_DIR:${CHAPTER_NAME}>
-    )
+        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/bin/slang.dll"
+                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
+        )
+
+        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/bin/slang-glslang.dll"
+                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
+        )
+    endif()
+
+    if(APPLE)
+        target_link_libraries(${CHAPTER_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/lib/libslang.dylib")
+
+        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/lib/libslang.dylib"
+                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
+        )
+
+        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/lib/libslang-glslang.dylib"
+                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
+        )
+    endif()
 
     # Attach sources to the target
 target_sources(${CHAPTER_NAME} PRIVATE ${CHAPTER_SOURCES})

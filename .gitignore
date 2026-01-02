@@ -1,3 +1,4 @@
 /build
 /VanK/vendor/vcpkg
 VanK/vendor/slang
+.DS_Store
