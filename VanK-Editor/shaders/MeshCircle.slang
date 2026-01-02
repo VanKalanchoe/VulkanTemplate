@@ -7,6 +7,7 @@ struct VertexOutput
     float thickness : TEXCOORD1;
     float3 localPosition : TEXCOORD2;
     float fade : TEXCOORD3;
+    int entityID : TEXCOORD4;
 };
 
 struct PushConstant 
@@ -75,19 +76,25 @@ void meshMain
         vertices[i].thickness = pushConstant.circleData->circles[circleID].thickness;
         vertices[i].fade = pushConstant.circleData->circles[circleID].fade;
         float2 lp = positions[i].xy * 2.0;
-        vertices[i].localPosition = float3(lp, 0.0);;
+        vertices[i].localPosition = float3(lp, 0.0);
+        vertices[i].entityID = pushConstant.circleData->circles[circleID].entityID;
 	}
 
 	triangles[0] = uint3(0, 1, 2);
     triangles[1] = uint3(0, 2, 3);
 }
 
-[[vk::binding(0, 0)]]
-Sampler2D texture[];
+struct PixelOutput
+{
+    float4 color : SV_TARGET0; // Final color output (RGBA)
+    int entityID : SV_TARGET1;
+};
 
 [shader("pixel")]
-float4 fragmentMain(VertexOutput vertexInput)
+PixelOutput fragmentMain(VertexOutput vertexInput)
 {
+    PixelOutput output;
+
     // Calculate distance and fill circle with white
     float distance = 1.0 - length(vertexInput.localPosition);
     float circle = smoothstep(0.0, vertexInput.fade, distance);
@@ -100,5 +107,9 @@ float4 fragmentMain(VertexOutput vertexInput)
     float4 color = vertexInput.color;
     color.a *= circle; 
 
-    return color;
+    output.color = color;
+
+    output.entityID = vertexInput.entityID;
+
+    return output;
 }

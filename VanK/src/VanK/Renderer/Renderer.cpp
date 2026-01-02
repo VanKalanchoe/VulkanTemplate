@@ -44,137 +44,6 @@ namespace VanK
 
     static Renderer3DData s_Data;
 
-    const std::string MODEL_PATH = "../build/VanK/models/viking_room.glb";
-
-    void Renderer::loadModel()
-    {
-        // Use tinygltf to load the model instead of tinyobjloader
-        tinygltf::Model model;
-        tinygltf::TinyGLTF loader;
-        std::string err;
-        std::string warn;
-
-        bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);
-
-        if (!warn.empty())
-        {
-            std::cout << "glTF warning: " << warn << std::endl;
-        }
-
-        if (!err.empty())
-        {
-            std::cout << "glTF error: " << err << std::endl;
-        }
-
-        if (!ret)
-        {
-            throw std::runtime_error("Failed to load glTF model");
-        }
-
-        vertices.clear();
-        indices.clear();
-
-        // Process all meshes in the model
-        for (const auto& mesh : model.meshes)
-        {
-            for (const auto& primitive : mesh.primitives)
-            {
-                // Get indices
-                const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-                const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-                const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
-
-                // Get vertex positions
-                const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
-                const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
-                const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
-
-                // Get texture coordinates if available
-                bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
-                const tinygltf::Accessor* texCoordAccessor = nullptr;
-                const tinygltf::BufferView* texCoordBufferView = nullptr;
-                const tinygltf::Buffer* texCoordBuffer = nullptr;
-
-                if (hasTexCoords)
-                {
-                    texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
-                    texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
-                    texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
-                }
-
-                uint32_t baseVertex = static_cast<uint32_t>(vertices.size());
-
-                for (size_t i = 0; i < posAccessor.count; i++)
-                {
-                    shaderio::InstancedVertexData vertex{};
-
-                    const float* pos = reinterpret_cast<const float*>(&posBuffer.data[posBufferView.byteOffset + posAccessor
-                        .byteOffset + i * 12]);
-                    vertex.position = {pos[0], pos[1], pos[2]};
-
-                    if (hasTexCoords)
-                    {
-                        const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->
-                            byteOffset + texCoordAccessor->byteOffset + i * 8]);
-                        vertex.texcoords = {texCoord[0], texCoord[1]};
-                    }
-                    else
-                    {
-                        vertex.texcoords = {0.0f, 0.0f};
-                    }
-
-                    /*vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};*/
-
-                    vertices.push_back(vertex);
-                }
-
-                const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-                size_t indexCount = indexAccessor.count;
-                size_t indexStride = 0;
-
-                // Determine index stride based on component type
-                if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                {
-                    indexStride = sizeof(uint16_t);
-                }
-                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                {
-                    indexStride = sizeof(uint32_t);
-                }
-                else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                {
-                    indexStride = sizeof(uint8_t);
-                }
-                else
-                {
-                    throw std::runtime_error("Unsupported index component type");
-                }
-
-                indices.reserve(indices.size() + indexCount);
-
-                for (size_t i = 0; i < indexCount; i++)
-                {
-                    uint32_t index = 0;
-
-                    if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                    {
-                        index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
-                    }
-                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                    {
-                        index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
-                    }
-                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                    {
-                        index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
-                    }
-
-                    indices.push_back(baseVertex + index);
-                }
-            }
-        }
-    }
-
     struct TaskMeshPipelinePushConstant
     {
         uint64_t sceneData;
@@ -740,7 +609,7 @@ namespace VanK
 
     void Renderer::EndScene()
     {
-        shaderio::InstancedPBRData inst1;
+        /*shaderio::InstancedPBRData inst1;
         glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f));
         model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(0, 1, 0)); // rotate around Y axis
         inst1.Model = model;
@@ -748,7 +617,7 @@ namespace VanK
         inst1.textureIndex = vikingRoom->GetTextureIndex();
         inst1.EntityID = -1;
 
-        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst1);
+        RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst1);*/
 
         /*
         shaderio::InstancedPBRData inst2;
@@ -767,27 +636,51 @@ namespace VanK
         
         RegistryMesh::registerInstance(shaderio::PipelineType_PBR, s_Data.vikingHandle, inst3);*/
     }
-
+    
+    struct QuadData
+    {
+        glm::mat4 modelMatrix;
+        glm::vec4 color;
+        uint32_t materialIndex;
+        int EntityID;
+    };
+    
+    std::vector<QuadData> quads;
+    
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
     {
-        shaderio::InstancedQuadData instance;
+        /*shaderio::InstancedQuadData instance;
         instance.Model = transform;
         instance.color = color;
         instance.textureIndex = whiteTexture->GetTextureIndex();
         instance.EntityID = entityID;
 
-        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);
+        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);*/
+        QuadData instance;
+        instance.modelMatrix = transform;
+        instance.color = color;
+        instance.materialIndex = whiteTexture->GetTextureIndex();
+        instance.EntityID = entityID;
+        
+        quads.emplace_back(instance);
     }
 
     void Renderer::DrawQuad(const glm::mat4& transform, const Ref<Texture2D>& texture, float tilingFactor, const glm::vec4& tintColor, int entityID)
     {
-        shaderio::InstancedQuadData instance;
+        /*shaderio::InstancedQuadData instance;
         instance.Model = transform;
         instance.color = tintColor;
         instance.textureIndex = texture->GetTextureIndex();
         instance.EntityID = entityID;
 
-        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);
+        RegistryMesh::registerInstance(shaderio::PipelineType_Quad, s_Data.quadHandle, instance);*/
+        QuadData instance;
+        instance.modelMatrix = transform;
+        instance.color = tintColor;
+        instance.materialIndex = texture->GetTextureIndex();
+        instance.EntityID = entityID;
+        
+        quads.emplace_back(instance);
     }
 
     void Renderer::DrawSprite(const glm::mat4& transform, SpriteRendererComponent& src, int entityID)
@@ -802,18 +695,57 @@ namespace VanK
             DrawQuad(transform, src.Color, entityID);
         }
     }
-
+    
+    struct CircleData
+    {
+        glm::mat4 WorldPosition;
+        glm::vec4 Color;
+        float Thickness;
+        float Fade;
+        
+        // Editor-only
+        int EntityID;
+    };
+    
+    std::vector<CircleData> circles;
+    
     void Renderer::DrawCircle(const glm::mat4& transform, const glm::vec4& color, float thickness /*= 1.0f*/, float fade /*= 0.005f*/, int entityID /*= -1*/)
     {
-        shaderio::InstancedCircleData instance;
+        /*shaderio::InstancedCircleData instance;
         instance.WorldPosition = transform;
         instance.Color = color;
         instance.Thickness = thickness;
         instance.Fade = fade;
         instance.EntityID = entityID;
 
-        RegistryMesh::registerInstance(shaderio::PipelineType_Circle, s_Data.circleHandle, instance);
+        RegistryMesh::registerInstance(shaderio::PipelineType_Circle, s_Data.circleHandle, instance);*/
+        CircleData instance;
+        instance.WorldPosition = transform;
+        instance.Color = color;
+        instance.Thickness = thickness;
+        instance.Fade = fade;
+        instance.EntityID = entityID;
+        
+        circles.emplace_back(instance);
     }
+  
+    struct TextData
+    {
+        glm::mat4 Transform;
+        glm::vec2 QuadMin;
+        glm::vec2 QuadMax;
+        glm::vec2 TexMin;
+        glm::vec2 TexMax;
+        glm::vec4 Color;
+        uint32_t TextureIndex;
+
+        // TODO: bg color for outline/bg
+
+        // Editor-only
+        int EntityID;
+    };
+    
+    std::vector<TextData> texts;
 
     void Renderer::DrawString(const std::string& string, Ref<Font> font, const glm::mat4& transform, const TextParams& textParams, int entityID)
     {
@@ -890,7 +822,7 @@ namespace VanK
             texCoordMax *= glm::vec2(texelWidth, texelHeight);
 
             // render here
-            shaderio::InstancedTextData instance;
+            /*shaderio::InstancedTextData instance;
             instance.QuadMin = quadMin;
             instance.QuadMax = quadMax;
             instance.Transform = transform; // store transform per draw
@@ -900,7 +832,19 @@ namespace VanK
             instance.TextureIndex = fontAtlas->GetTextureIndex();
             instance.EntityID = entityID;
 
-            RegistryMesh::registerInstance(shaderio::PipelineType_Text, s_Data.textHandle, instance);
+            RegistryMesh::registerInstance(shaderio::PipelineType_Text, s_Data.textHandle, instance);*/
+            
+            TextData instance;
+            instance.QuadMin = quadMin;
+            instance.QuadMax = quadMax;
+            instance.Transform = transform; // store transform per draw
+            instance.TexMin = texCoordMin;
+            instance.TexMax = texCoordMax;
+            instance.Color = textParams.Color;
+            instance.TextureIndex = fontAtlas->GetTextureIndex();
+            instance.EntityID = entityID;
+            
+            texts.emplace_back(instance);
 
             if (i < string.size() - 1)
             {
@@ -918,15 +862,35 @@ namespace VanK
         DrawString(string, component.FontAsset, transform, {component.Color, component.Kerning, component.LineSpacing}, entityID);
     }
 
+    struct LineData
+    {
+        glm::vec3 P0;
+        glm::vec3 P1;
+        glm::vec4 Color;
+    
+        // Editor-only
+        int EntityID;
+    };
+    
+    std::vector<LineData> lines;
+    
     void Renderer::DrawLine(const glm::vec3& p0, const glm::vec3& p1, const glm::vec4& color, int entityID)
     {
-        shaderio::InstancedLineData instance;
+        /*shaderio::InstancedLineData instance;
         instance.P0 = p0;
         instance.P1 = p1;
         instance.Color = color;
         instance.EntityID = entityID;
 
-        RegistryMesh::registerInstance(shaderio::PipelineType_Line, s_Data.lineHandle, instance);
+        RegistryMesh::registerInstance(shaderio::PipelineType_Line, s_Data.lineHandle, instance);*/
+        
+        LineData instance;
+        instance.P0 = p0;
+        instance.P1 = p1;
+        instance.Color = color;
+        instance.EntityID = entityID;
+        
+        lines.emplace_back(instance);
     }
 
     void Renderer::DrawRect(const glm::vec3& position, const glm::vec2& size, const glm::vec4& color, int entityID)
@@ -955,21 +919,6 @@ namespace VanK
         DrawLine(p3, p0, color, entityID);
     }
     
-    struct QuadData
-    {
-        glm::mat4 modelMatrix;
-        glm::vec4 color;
-        uint32_t materialIndex;
-    };
-    
-    struct CircleData
-    {
-        glm::mat4 WorldPosition;
-        glm::vec4 Color;
-        float Thickness;
-        float Fade;
-    };
-
     struct PushConstant2D
     {
         uint64_t numOfElements;
@@ -986,16 +935,12 @@ namespace VanK
         RenderCommand::Init();
 
         // Shader creation
-        auto DrawIndirectShader = GetShaderLibrary().Load("DrawIndirectShader", "DrawIndirectShader.slang");
-        auto PBRShader = GetShaderLibrary().Load("PBRShader", "PBRShader.slang");
-        auto QuadShader = GetShaderLibrary().Load("QuadShader", "QuadShader.slang");
-        auto CircleShader = GetShaderLibrary().Load("CircleShader", "CircleShader.slang");
-        auto TextShader = GetShaderLibrary().Load("TextShader", "TextShader.slang");
-        auto LineShader = GetShaderLibrary().Load("LineShader", "LineShader.slang");
         auto MeshTaskSubmit = GetShaderLibrary().Load("MeshTaskSubmit", "MeshTaskSubmit.slang");
         auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
         auto MeshQuad = GetShaderLibrary().Load("MeshQuad", "MeshQuad.slang");
         auto MeshCircle = GetShaderLibrary().Load("MeshCircle", "MeshCircle.slang");
+        auto MeshText = GetShaderLibrary().Load("MeshText", "MeshText.slang");
+        auto MeshLine = GetShaderLibrary().Load("MeshLine", "MeshLine.slang");
         
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -1106,32 +1051,6 @@ namespace VanK
             .PipelineLayoutInfo = PipelineLayoutCreateInfo,
         };
 
-        m_GraphicsPBRPipelineSpecification = GraphicsPipelineSpecification;
-        m_GraphicsPBRPipelineSpecification.ShaderStageCreateInfo.VanKShader = PBRShader;
-        m_GraphicsPBRPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsPBRPipelineSpecification);
-        RegisterPipelineForShaderWatcher("PBRShader", "PBRShader.slang", &m_GraphicsPBRPipelineSpecification, nullptr, &m_GraphicsPBRPipeline, VanKGraphics);
-
-        m_GraphicsQuadPipelineSpecification = GraphicsPipelineSpecification;
-        m_GraphicsQuadPipelineSpecification.ShaderStageCreateInfo.VanKShader = QuadShader;
-        m_GraphicsQuadPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsQuadPipelineSpecification);
-        RegisterPipelineForShaderWatcher("QuadShader", "QuadShader.slang", &m_GraphicsQuadPipelineSpecification, nullptr, &m_GraphicsQuadPipeline, VanKGraphics);
-
-        m_GraphicsCirclePipelineSpecification = GraphicsPipelineSpecification;
-        m_GraphicsCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = CircleShader;
-        m_GraphicsCirclePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsCirclePipelineSpecification);
-        RegisterPipelineForShaderWatcher("CircleShader", "CircleShader.slang", &m_GraphicsCirclePipelineSpecification, nullptr, &m_GraphicsCirclePipeline, VanKGraphics);
-
-        m_GraphicsTextPipelineSpecification = GraphicsPipelineSpecification;
-        m_GraphicsTextPipelineSpecification.ShaderStageCreateInfo.VanKShader = TextShader;
-        m_GraphicsTextPipeline = RenderCommand::createGraphicsPipeline(m_GraphicsTextPipelineSpecification);
-        RegisterPipelineForShaderWatcher("TextShader", "TextShader.slang", &m_GraphicsTextPipelineSpecification, nullptr, &m_GraphicsTextPipeline, VanKGraphics);
-
-        m_GraphicsLinePipelineSpecification = GraphicsPipelineSpecification;
-        m_GraphicsLinePipelineSpecification.ShaderStageCreateInfo.VanKShader = LineShader;
-        m_GraphicsLinePipelineSpecification.InputAssemblyStateCreateInfo.VanKPrimitive = VanK_PRIMITIVE_TOPOLOGY_LINE_LIST;
-        m_GraphicsLinePipeline = RenderCommand::createGraphicsPipeline(m_GraphicsLinePipelineSpecification);
-        RegisterPipelineForShaderWatcher("LineShader", "LineShader.slang", &m_GraphicsLinePipelineSpecification, nullptr, &m_GraphicsLinePipeline, VanKGraphics);
-        
         m_MeshPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshPipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshShader;
@@ -1153,10 +1072,24 @@ namespace VanK
         m_MeshCirclePipeline = RenderCommand::createGraphicsPipeline(m_MeshCirclePipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshCircle", "MeshCircle.slang", &m_MeshCirclePipelineSpecification, nullptr, &m_MeshCirclePipeline, VanKGraphics);
         
+        m_MeshTextPipelineSpecification = GraphicsPipelineSpecification;
+        m_MeshTextPipelineSpecification.PipelineType = VanK_Mesh;
+        m_MeshTextPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshText;
+        m_MeshTextPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
+        m_MeshTextPipeline = RenderCommand::createGraphicsPipeline(m_MeshTextPipelineSpecification);
+        RegisterPipelineForShaderWatcher("MeshText", "MeshText.slang", &m_MeshTextPipelineSpecification, nullptr, &m_MeshTextPipeline, VanKGraphics);
+        
+        m_MeshLinePipelineSpecification = GraphicsPipelineSpecification;
+        m_MeshLinePipelineSpecification.PipelineType = VanK_Mesh;
+        m_MeshLinePipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshLine;
+        m_MeshLinePipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
+        m_MeshLinePipeline = RenderCommand::createGraphicsPipeline(m_MeshLinePipelineSpecification);
+        RegisterPipelineForShaderWatcher("MeshLine", "MeshLine.slang", &m_MeshLinePipelineSpecification, nullptr, &m_MeshLinePipeline, VanKGraphics);
+        
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
         {
-            .VanKShader = DrawIndirectShader
+            .VanKShader = MeshTaskSubmit
         };
 
         VanKComputePipelineLayoutCreateInfo ComputePipelineLayoutCreateInfo
@@ -1169,34 +1102,16 @@ namespace VanK
             .ComputePipelineCreateInfo = ComputePipelineCreateInfo,
             .ComputePipelineLayoutInfo = ComputePipelineLayoutCreateInfo
         };
-
-        m_ComputeDrawIndirectPipelineSpecification = computePipelineSpecification;
-        m_ComputeDrawIndirectPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawIndirectPipelineSpecification);
-        RegisterPipelineForShaderWatcher("DrawIndirectShader", "DrawIndirectShader.slang", nullptr, &m_ComputeDrawIndirectPipelineSpecification, &m_ComputeDrawIndirectPipeline, VanKCompute);
-
+        
         m_ComputeDrawMeshTaskCommandPipelineSpecification = computePipelineSpecification;
-        m_ComputeDrawMeshTaskCommandPipelineSpecification.ComputePipelineCreateInfo.VanKShader = MeshTaskSubmit;
         m_ComputeDrawMeshTaskCommandPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawMeshTaskCommandPipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshTaskSubmit", "MeshTaskSubmit.slang", nullptr, &m_ComputeDrawMeshTaskCommandPipelineSpecification, &m_ComputeDrawMeshTaskCommandPipeline, VanKCompute);
 
         WatchShaderFiles(); // has to be last after pipeline creation
 
-        pipelines =
-        {
-            m_GraphicsPBRPipeline,
-            m_GraphicsQuadPipeline,
-            m_GraphicsCirclePipeline,
-            m_GraphicsTextPipeline,
-            m_GraphicsLinePipeline
-        };
-
-        uniformScene.reset(UniformBuffer::Create(sizeof(s_Data.SceneData)));
-
         whiteTexture = TextureImporter::LoadTexture2D("");
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
-
-        loadModel();
 
         /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
@@ -1264,9 +1179,16 @@ namespace VanK
         
         uint64_t circleBuffersize = sizeof(CircleData) * 10;
         circleBuffer.reset(StorageBuffer::Create(circleBuffersize));
+        
+        uint64_t textBuffersize = sizeof(CircleData) * 10;
+        textBuffer.reset(StorageBuffer::Create(textBuffersize));
+        
+        uint64_t lineBuffersize = sizeof(LineData) * 10;
+        lineBuffer.reset(StorageBuffer::Create(lineBuffersize));
 
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize + 
-            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + quadBuffersize + circleBuffersize;
+        localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + quadBuffersize + circleBuffersize + textBuffersize +
+        lineBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
 
         s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
@@ -1293,36 +1215,6 @@ namespace VanK
         RenderCommand::DestroyAllPipelines();
 
         GetShaderLibrary().ShutdownAll();
-
-        uniformScene.reset();
-
-        m_TransferRingBuffer.reset();
-
-        for (auto& indirectBuffer : m_IndirectBuffers)
-        {
-            indirectBuffer.reset();
-        }
-
-        for (auto& countBuffer : m_CountBuffers)
-        {
-            countBuffer.reset();
-        }
-
-        m_InstancedVertexBuffer.reset();
-
-        m_InstancedIndexBuffer.reset();
-
-        m_InstancedPBRBuffer.reset();
-
-        m_InstancedQuadBuffer.reset();
-
-        m_InstancedCircleBuffer.reset();
-
-        m_InstancedTextBuffer.reset();
-
-        m_InstancedLineBuffer.reset();
-
-        m_MeshInfoBuffer.reset();
 
         m_TransferBuffer.reset();
 
@@ -1351,6 +1243,10 @@ namespace VanK
         quadBuffer.reset();
         
         circleBuffer.reset();
+        
+        textBuffer.reset();
+        
+        lineBuffer.reset();
     }
 
     void Renderer::CheckPendingVSyncChange()
@@ -1377,6 +1273,10 @@ namespace VanK
             SDL_Log("AcquireGPUCommandBuffer failed: %s", SDL_GetError());
 
         RegistryMesh::clearInstances();
+        quads.clear();
+        circles.clear();
+        texts.clear();
+        lines.clear();
     }
 
     void Renderer::EndSubmit()
@@ -1432,8 +1332,6 @@ namespace VanK
 
         DrawMeshShader();
 
-        /*DrawFrame();*/
-
         /*EndSubmit();*/
     }
 
@@ -1456,29 +1354,26 @@ namespace VanK
         //multiple meshes
         std::vector<MeshDraw> meshDraws;
         meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)), 1});
-        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f)), 3});
+        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f)), 2});
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
         meshDraws.clear();
         std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
         meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[3].meshletCount + 64 - 1) / 64, 1, 1});
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[2].meshletCount + 64 - 1) / 64, 1, 1});
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
         //----------
         
-        
         //quads
-        std::vector<QuadData> quads;
-        quads.emplace_back(QuadData{glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 0.0f, 0.0f)), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), whiteTexture->GetTextureIndex()});
-        quads.emplace_back(QuadData{glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f), vikingRoom->GetTextureIndex()});
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, quadBuffer, quads, QuadData, 0);
-        //-----------
         
-        //circle
-        std::vector<CircleData> circles;
-        circles.emplace_back(CircleData{glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 2.0f, 0.0f)), glm::vec4(0.0f, 1.0f, 0.0f, 1.0f), 1.0f, 0.005f});
-        circles.emplace_back(CircleData{glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 2.0f, 0.0f)), glm::vec4(0.0f, 1.0f, 0.0f, 1.0f),1.0f, 0.005f});
+        //circles
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, circleBuffer, circles, CircleData, 0);
-        //-----------
+        
+        //texts
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, textBuffer, texts, TextData, 0);
+        
+        //lines
+        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, lineBuffer, lines, LineData, 0);
 
         {
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
@@ -1556,9 +1451,9 @@ namespace VanK
                 RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
             
                 RenderCommand::DrawMeshTasks(cmd, quads.size(), 1, 1);
-                quads.clear();
             }
             
+            //circles
             {
                 RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshCirclePipeline);
             
@@ -1574,195 +1469,44 @@ namespace VanK
                 RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
             
                 RenderCommand::DrawMeshTasks(cmd, circles.size(), 1, 1);
-                circles.clear();
             }
             
-            RenderCommand::EndRendering(cmd);
-        }
-    }
-
-    void Renderer::DrawFrame()
-    {
-        ScopeTimer timer("Renderer::DrawFrame");
-
-        if (!RegistryMesh::hasDraws())
-        {
-            std::vector<VanKColorTargetInfo> colorAttachments;
-            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
-            colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
-
-            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
-
-            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
-
-            VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
-            RenderCommand::SetViewport(cmd, 1, viewPort);
-
-            VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
-            RenderCommand::SetScissor(cmd, 1, rect);
-
-            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
-
-            RenderCommand::EndRendering(cmd);
-            return;
-        }
-
-        auto& globalVertices = RegistryMesh::getVertices();
-        uint64_t vertexSize = sizeof(shaderio::InstancedVertexData) * std::max(1ull, globalVertices.size());
-        if (!m_InstancedVertexBuffer || m_InstancedVertexBuffer->GetSize() < vertexSize)
-            m_InstancedVertexBuffer.reset(VertexBuffer::Create(vertexSize));
-
-        auto& globalIndices = RegistryMesh::getIndices();
-        uint64_t indexSize = sizeof(uint32_t) * std::max(1ull, globalIndices.size());
-        if (!m_InstancedIndexBuffer || m_InstancedIndexBuffer->GetSize() < indexSize)
-            m_InstancedIndexBuffer.reset(IndexBuffer::Create(indexSize));
-
-        auto pbrInstances = RegistryMesh::getInstances<shaderio::InstancedPBRData>(shaderio::PipelineType_PBR);
-        uint64_t pbrSize = sizeof(shaderio::InstancedPBRData) * std::max(1ull, pbrInstances.size());
-        if (!m_InstancedPBRBuffer || m_InstancedPBRBuffer->GetSize() < pbrSize)
-            m_InstancedPBRBuffer.reset(StorageBuffer::Create(pbrSize));
-
-        auto quadInstances = RegistryMesh::getInstances<shaderio::InstancedQuadData>(shaderio::PipelineType_Quad);
-        uint64_t quadSize = sizeof(shaderio::InstancedQuadData) * std::max(1ull, quadInstances.size());
-        if (!m_InstancedQuadBuffer || m_InstancedQuadBuffer->GetSize() < quadSize)
-            m_InstancedQuadBuffer.reset(StorageBuffer::Create(quadSize));
-
-        auto circleInstances = RegistryMesh::getInstances<shaderio::InstancedCircleData>(shaderio::PipelineType_Circle);
-        uint64_t circleSize = sizeof(shaderio::InstancedCircleData) * std::max(1ull, circleInstances.size());
-        if (!m_InstancedCircleBuffer || m_InstancedCircleBuffer->GetSize() < circleSize)
-            m_InstancedCircleBuffer.reset(StorageBuffer::Create(circleSize));
-
-        auto textInstances = RegistryMesh::getInstances<shaderio::InstancedTextData>(shaderio::PipelineType_Text);
-        uint64_t textSize = sizeof(shaderio::InstancedTextData) * std::max(1ull, textInstances.size());
-        if (!m_InstancedTextBuffer || m_InstancedTextBuffer->GetSize() < textSize)
-            m_InstancedTextBuffer.reset(StorageBuffer::Create(textSize));
-
-        auto lineInstances = RegistryMesh::getInstances<shaderio::InstancedLineData>(shaderio::PipelineType_Line);
-        uint64_t lineSize = sizeof(shaderio::InstancedLineData) * std::max(1ull, lineInstances.size());
-        if (!m_InstancedLineBuffer || m_InstancedLineBuffer->GetSize() < lineSize)
-            m_InstancedLineBuffer.reset(StorageBuffer::Create(lineSize));
-
-        std::vector<shaderio::MeshInfo> allMeshInfos;
-        size_t countBuffersSize = sizeof(uint32_t) * (size_t)shaderio::PipelineType_Count;
-        for (uint32_t p = 0; p < static_cast<uint32_t>(shaderio::PipelineType_Count); ++p)
-        {
-            auto& meshes = RegistryMesh::getMeshInfo(static_cast<shaderio::PipelineType>(p));
-            allMeshInfos.insert(allMeshInfos.end(), meshes.begin(), meshes.end());
-
-            if (!m_CountBuffers[p] || m_CountBuffers[p]->GetSize() < sizeof(uint32_t))
-                m_CountBuffers[p].reset(IndirectBuffer::Create(sizeof(uint32_t)));
-        }
-        uint64_t meshSize = sizeof(shaderio::MeshInfo) * std::max(1ull, allMeshInfos.size());
-        if (!m_MeshInfoBuffer || m_MeshInfoBuffer->GetSize() < meshSize)
-            m_MeshInfoBuffer.reset(StorageBuffer::Create(meshSize));
-
-        uint64_t transferSize = vertexSize + indexSize + pbrSize + quadSize + circleSize + textSize + lineSize + countBuffersSize + meshSize;
-        if (!m_TransferRingBuffer || m_TransferRingBuffer->GetSize() < transferSize)
-            m_TransferRingBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedVertexBuffer, globalVertices, shaderio::InstancedVertexData, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedIndexBuffer, globalIndices, uint32_t, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedPBRBuffer, pbrInstances, shaderio::InstancedPBRData, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedQuadBuffer, quadInstances, shaderio::InstancedQuadData, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedCircleBuffer, circleInstances, shaderio::InstancedCircleData, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedTextBuffer, textInstances, shaderio::InstancedTextData, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_InstancedLineBuffer, lineInstances, shaderio::InstancedLineData, 0);
-
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_MeshInfoBuffer, allMeshInfos, shaderio::MeshInfo, 0);
-
-        static const std::vector<uint32_t> resetValue = {0};
-
-        for (uint32_t p = 0; p < static_cast<uint32_t>(shaderio::PipelineType_Count); p++)
-        {
-            uint64_t totalDraws = sizeof(shaderio::DrawIndexedIndirectCommand) * std::max(1ull, allMeshInfos.size());
-
-            if (!m_IndirectBuffers[p] || m_IndirectBuffers[p]->GetSize() < totalDraws)
-                m_IndirectBuffers[p].reset(IndirectBuffer::Create(totalDraws));
-
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferRingBuffer, m_CountBuffers[p], resetValue, uint32_t, 0);
-
-            s_Data.SceneData.indirectAddresses[p] =
-                m_IndirectBuffers[p]->GetBufferAddress();
-
-            s_Data.SceneData.countAddresses[p] =
-                m_CountBuffers[p]->GetBufferAddress();
-        }
-
-        s_Data.SceneData.vertexAddress = m_InstancedVertexBuffer->GetBufferAddress();
-        s_Data.SceneData.pbrAddress = m_InstancedPBRBuffer->GetBufferAddress();
-        s_Data.SceneData.quadAddress = m_InstancedQuadBuffer->GetBufferAddress();
-        s_Data.SceneData.meshInfoAddress = m_MeshInfoBuffer->GetBufferAddress();
-        s_Data.SceneData.circleAddress = m_InstancedCircleBuffer->GetBufferAddress();
-        s_Data.SceneData.textAddress = m_InstancedTextBuffer->GetBufferAddress();
-        s_Data.SceneData.lineAddress = m_InstancedLineBuffer->GetBufferAddress();
-        uint32_t meshCount = 0;
-        for (uint32_t p = 0; p < shaderio::PipelineType_Count; ++p)
-            meshCount += static_cast<uint32_t>(RegistryMesh::getMeshInfo(static_cast<shaderio::PipelineType>(p)).size());
-
-        s_Data.SceneData.numMeshes = meshCount;
-
-        uniformScene->Update(cmd, &s_Data.SceneData, sizeof(s_Data.SceneData));
-
-        {
-            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, m_InstancedVertexBuffer.get(), m_IndirectBuffers, m_CountBuffers);
-
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawIndirectPipeline);
-
-            RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Compute, uniformScene.get(), 1, 0, 0);
-
-            RenderCommand::DispatchCompute(computePass, (meshCount + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
-
-            RenderCommand::EndComputePass(computePass);
-        }
-
-        {
-            std::vector<VanKColorTargetInfo> colorAttachments;
-            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
-            colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_LOAD, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
-
-            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_LOAD, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
-
-            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
-
-            VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
-            RenderCommand::SetViewport(cmd, 1, viewPort);
-
-            VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
-            RenderCommand::SetScissor(cmd, 1, rect);
-
-            RenderCommand::SetLineWidth(cmd, m_LineWidth);
-
-            RenderCommand::SetCullMode(cmd, VanK_CULL_MODE_BACK_BIT);
-
-            RenderCommand::BindIndexBuffer(cmd, *m_InstancedIndexBuffer, VanKIndexElementSize::Uint32);
-
-            for (uint32_t p = 0; p < shaderio::PipelineType::PipelineType_Count; p++)
+            //texts
             {
-                RenderCommand::BindPipeline(
-                    cmd,
-                    VanKPipelineBindPoint::Graphics,
-                    pipelines[p]);
-
-                RenderCommand::BindUniformBuffer(cmd, VanKPipelineBindPoint::Graphics, uniformScene.get(), 1, 0, 0);
-
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshTextPipeline);
+            
                 RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                RenderCommand::DrawIndexedIndirectCount(
-                    cmd,
-                    *m_IndirectBuffers[p],
-                    0,
-                    *m_CountBuffers[p],
-                    0,
-                    meshCount,
-                    sizeof(shaderio::DrawIndexedIndirectCommand));
+            
+                PushConstant2D push2D
+                {
+                    .numOfElements = texts.size(),
+                    .bufferAddress = textBuffer->GetBufferAddress(),
+                    .sceneData = sceneBuffer->GetBufferAddress(),
+                };
+            
+                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+            
+                RenderCommand::DrawMeshTasks(cmd, texts.size(), 1, 1);
             }
-
+            
+            //lines
+            {
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshLinePipeline);
+            
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+            
+                PushConstant2D push2D
+                {
+                    .numOfElements = lines.size(),
+                    .bufferAddress = lineBuffer->GetBufferAddress(),
+                    .sceneData = sceneBuffer->GetBufferAddress(),
+                };
+            
+                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+            
+                RenderCommand::DrawMeshTasks(cmd, lines.size(), 1, 1);
+            }
+            
             RenderCommand::EndRendering(cmd);
         }
     }

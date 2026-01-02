@@ -39,7 +39,6 @@ namespace VanK
         
     public:
         inline static SDL_Window* m_window = nullptr; //remove from here
-        static void loadModel();
         static void BeginScene(const EditorCamera& camera);
         static void BeginScene(const Camera& camera, const glm::mat4& transform);
         static void EndScene();
@@ -67,7 +66,6 @@ namespace VanK
         static void EndSubmit();
         static void Flush();
         static void DrawMeshShader();
-        static void DrawFrame();
         static bool GetVSync() { return vSync; };
         static void QueVSyncChange(bool vSyncTemp) { vSync = vSyncTemp; s_VSyncChangeRequested = true; };
         static bool GetIsEditor() { return isEditor; }
@@ -102,21 +100,6 @@ namespace VanK
         inline static std::array<VanKPipeLine, shaderio::PipelineType_Count> pipelines;
         
         // Graphics Pipelines
-        inline static VanKPipeLine m_GraphicsPBRPipeline = {};
-        inline static VanKGraphicsPipelineSpecification m_GraphicsPBRPipelineSpecification = {};
-        
-        inline static VanKPipeLine m_GraphicsQuadPipeline = {};
-        inline static VanKGraphicsPipelineSpecification m_GraphicsQuadPipelineSpecification = {};
-        
-        inline static VanKPipeLine m_GraphicsCirclePipeline = {};
-        inline static VanKGraphicsPipelineSpecification m_GraphicsCirclePipelineSpecification = {};
-        
-        inline static VanKPipeLine m_GraphicsTextPipeline = {};
-        inline static VanKGraphicsPipelineSpecification m_GraphicsTextPipelineSpecification = {};
-        
-        inline static VanKPipeLine m_GraphicsLinePipeline = {};
-        inline static VanKGraphicsPipelineSpecification m_GraphicsLinePipelineSpecification = {};
-        
         inline static VanKPipeLine m_MeshPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_MeshPipelineSpecification = {};
         
@@ -126,32 +109,15 @@ namespace VanK
         inline static VanKPipeLine m_MeshCirclePipeline = {};
         inline static VanKGraphicsPipelineSpecification m_MeshCirclePipelineSpecification = {};
         
-        // Compute Pipelines
-        inline static VanKPipeLine m_ComputeDrawIndirectPipeline = {};
-        inline static VanKComputePipelineSpecification m_ComputeDrawIndirectPipelineSpecification = {};
+        inline static VanKPipeLine m_MeshTextPipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_MeshTextPipelineSpecification = {};
         
+        inline static VanKPipeLine m_MeshLinePipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_MeshLinePipelineSpecification = {};
+        // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawMeshTaskCommandPipeline = {};
         inline static VanKComputePipelineSpecification m_ComputeDrawMeshTaskCommandPipelineSpecification = {};
-        
-        inline static Ref<UniformBuffer> uniformScene;
-        
-        inline static Ref<IndexBuffer> m_InstancedIndexBuffer;
-        
-        inline static Ref<VertexBuffer> m_InstancedVertexBuffer; // change to storage in the future maybe ? 
-        
-        inline static Ref<TransferBuffer> m_TransferRingBuffer;
-        
-        inline static Ref<StorageBuffer> m_InstancedPBRBuffer;
-        inline static Ref<StorageBuffer> m_InstancedQuadBuffer;
-        inline static Ref<StorageBuffer> m_InstancedCircleBuffer;
-        inline static Ref<StorageBuffer> m_InstancedTextBuffer;
-        inline static Ref<StorageBuffer> m_InstancedLineBuffer;
-        inline static Ref<StorageBuffer> m_MeshInfoBuffer;
-        
-        inline static std::array<Ref<IndirectBuffer>, 5> m_IndirectBuffers;
-
-        inline static std::array<Ref<IndirectBuffer>, 5> m_CountBuffers;
-        
+    
     public:
         inline static bool frozen = false;
         inline static bool frozenDone = false;
@@ -170,6 +136,8 @@ namespace VanK
         //2d quads, circle, text, line dont need meshlets 1 thread means 1 instance of it
         inline static Ref<StorageBuffer> quadBuffer ;
         inline static Ref<StorageBuffer> circleBuffer ;
+        inline static Ref<StorageBuffer> textBuffer ;
+        inline static Ref<StorageBuffer> lineBuffer ;
         //--
         
         inline static Ref<StorageBuffer> localMeshTaskSubmitBuffer;

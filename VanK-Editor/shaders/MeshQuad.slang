@@ -6,6 +6,7 @@ struct VertexOutput
     float4 color : TEXCOORD0;
     float2 texcoords : TEXCOORD1;
     uint32_t materialIndex : TEXCOORD2;
+    int entityID : TEXCOORD3;
 };
 
 struct PushConstant 
@@ -81,6 +82,7 @@ void meshMain
 		vertices[i].color = pushConstant.quadData->quads[quadID].color;
         vertices[i].texcoords = uv[i];
         vertices[i].materialIndex = pushConstant.quadData->quads[quadID].materialIndex;
+        vertices[i].entityID = pushConstant.quadData->quads[quadID].entityID;
 	}
 
 	triangles[0] = uint3(0, 1, 2);
@@ -90,9 +92,21 @@ void meshMain
 [[vk::binding(0, 0)]]
 Sampler2D texture[];
 
-[shader("pixel")]
-float4 fragmentMain(VertexOutput vertexInput)
+struct PixelOutput
 {
+    float4 color : SV_TARGET0; // Final color output (RGBA)
+    int entityID : SV_TARGET1;
+};
+
+[shader("pixel")]
+PixelOutput fragmentMain(VertexOutput vertexInput)
+{
+    PixelOutput output;
+
     float4 textureColor = texture[vertexInput.materialIndex].Sample(vertexInput.texcoords);
-    return textureColor * vertexInput.color;
+    output.color = textureColor * vertexInput.color;
+
+    output.entityID = vertexInput.entityID;
+
+    return output;
 }

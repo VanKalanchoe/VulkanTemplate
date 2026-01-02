@@ -82,6 +82,7 @@ public struct Quads
     public column_major float4x4 modelMatrix;
     public float4 color;
     public uint32_t materialIndex;
+    public int entityID;
 };
 
 public struct QuadData
@@ -95,11 +96,48 @@ public struct Circles
     public float4 color;
     public float thickness;
     public float fade;
+    public int entityID;
 };
 
 public struct CircleData
 {
     public Circles[] circles;
+}
+
+public struct Texts
+{
+    public column_major float4x4 Transform;
+    public float2 quadMin;
+    public float2 quadMax;
+    public float2 texMin;
+    public float2 texMax;
+    public float4 color;
+    public uint32_t materialIndex;
+
+    // TODO: bg color for outline/bg
+
+    // Editor-only
+    public int entityID;
+};
+
+public struct TextData
+{
+    public Texts[] texts;
+}
+
+public struct Lines
+{
+    public float3 P0;
+    public float3 P1;
+    public float4 Color;
+
+    // Editor-only
+    public int EntityID;
+};
+
+public struct LineData
+{
+    public Lines[] lines;
 }
 
 public struct Frustum
