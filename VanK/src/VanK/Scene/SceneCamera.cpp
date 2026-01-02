@@ -36,11 +36,21 @@ namespace VanK
         RecalculateProjection();
     }
 
+    static glm::mat4 perspectiveProjection(float fovY, float aspectWbyH, float zNear)
+    {
+        float f = 1.0f / tanf(fovY / 2.0f);
+        return glm::mat4(
+            f / aspectWbyH, 0.0f, 0.0f, 0.0f,
+            0.0f, f, 0.0f, 0.0f,
+            0.0f, 0.0f, 0.0f, 1.0f,
+            0.0f, 0.0f, zNear, 0.0f);
+    }
+    
     void SceneCamera::RecalculateProjection()
     {
         if (m_ProjectionType == ProjectionType::Perspective)
         {
-            m_Projection = glm::perspective(m_PerspectiveFOV, m_AspectRatio, m_PerspectiveNear, m_PerspectiveFar);
+            m_Projection = perspectiveProjection(m_PerspectiveFOV, m_AspectRatio, m_PerspectiveNear);
         } else 
         {
             float orthoLeft = -m_OrthographicSize * m_AspectRatio * 0.5f;
@@ -50,8 +60,6 @@ namespace VanK
         
             m_Projection = glm::ortho(orthoLeft, orthoRight, orthoBottom, orthoTop, m_OrthographicNear, m_OrthographicFar);
         }
-        
-        m_Projection[1][1] *= -1.0f;
     }
 }
 

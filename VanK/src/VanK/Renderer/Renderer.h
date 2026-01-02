@@ -5,7 +5,6 @@
 #include "FileWatch.h"
 #include "VanK/Core/core.h"
 
-#include "RegistryMesh.h"
 #include "VanK/Asset/TextureImporter.h"
 #include "VanK/Scene/Components.h"
 
@@ -85,8 +84,6 @@ namespace VanK
         
     private:
         inline static bool isEditor = true; //remove from here
-        inline static std::vector<shaderio::InstancedVertexData> vertices;
-        inline static std::vector<uint32_t> indices;
         inline static bool vSync = false;
         inline static bool s_VSyncChangeRequested = false;
         inline static bool windowMinimized = false;
@@ -96,8 +93,6 @@ namespace VanK
         inline static VanKCullModeFlags cullMode = VanK_CULL_MODE_BACK_BIT;
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
-        
-        inline static std::array<VanKPipeLine, shaderio::PipelineType_Count> pipelines;
         
         // Graphics Pipelines
         inline static VanKPipeLine m_MeshPipeline = {};

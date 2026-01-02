@@ -438,9 +438,9 @@ namespace VanK
             glm::mat4 cameraView = glm::inverse(cameraEntity.GetComponent<TransformComponent>().GetTransform());*/
 
             // Editor camera
-            const glm::mat4& cameraProjection = m_EditorCamera.GetProjectionForImGuizmo();
+            const glm::mat4& cameraProjection = m_EditorCamera.GetGizmoProjection();
 
-            glm::mat4 cameraView = m_EditorCamera.GetViewMatrix();
+            glm::mat4 cameraView = m_EditorCamera.GetGizmoView();
 
             // Entity transform
             auto& tc = selectedEntity.GetComponent<TransformComponent>();

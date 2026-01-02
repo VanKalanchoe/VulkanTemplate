@@ -15,9 +15,9 @@
 #include <tiny_gltf.h>
 
 #include <meshoptimizer.h>
+#include <glm/gtc/type_ptr.inl>
 
 #include "MSDFData.h"
-#include "RegistryMesh.h"
 #include "VanK/Asset/AssetManager.h"
 
 namespace VanK
@@ -30,15 +30,6 @@ namespace VanK
 
     struct Renderer3DData
     {
-        MeshHandle vikingHandle;
-        MeshHandle cubeHandle;
-        MeshHandle quadHandle;
-        MeshHandle circleHandle;
-        MeshHandle textHandle;
-        MeshHandle lineHandle;
-
-        shaderio::SceneInfo SceneData;
-
         Ref<Texture2D> FontAtlasTexture;
     };
 
@@ -562,22 +553,38 @@ namespace VanK
 
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
-        glm::mat4 View = glm::inverse(transform);
-        glm::mat4 Proj = camera.GetProjection();
+        scenesData.view = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * glm::inverse(transform);;
+        scenesData.proj = camera.GetProjection();
+        scenesData.viewProj = camera.GetProjection() *  scenesData.view;
+        /*scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};*/
+        scenesData.frustum = Frustum(scenesData.viewProj);
 
-        s_Data.SceneData.view = View;
-        s_Data.SceneData.proj = Proj;
+        if (frozen)
+        {
+            if (!frozenDone)
+            {
+                frozenSceneData = scenesData;
+                frozenDone = true;
+            }
+            scenesData.frozenView = frozenSceneData.view;
+            scenesData.frozenProj = frozenSceneData.proj;
+            scenesData.frozenViewProj = frozenSceneData.viewProj;
+            scenesData.frozenCameraWorldPos = frozenSceneData.cameraWorldPos;
+            scenesData.frozenFrustum = frozenSceneData.frustum;
+        }
+        else
+        {
+            scenesData.frozenView = scenesData.view;
+            scenesData.frozenProj = scenesData.proj;
+            scenesData.frozenViewProj = scenesData.viewProj;
+            scenesData.frozenCameraWorldPos = scenesData.cameraWorldPos;
+            scenesData.frozenFrustum = scenesData.frustum;
+        }
     }
 
 
     void Renderer::BeginScene(const EditorCamera& camera)
     {
-        glm::mat4 View = camera.GetViewMatrix();
-        glm::mat4 Proj = camera.GetProjection();
-
-        s_Data.SceneData.view = View;
-        s_Data.SceneData.proj = Proj;
-
         scenesData.view = camera.GetViewMatrix();
         scenesData.proj = camera.GetProjection();
         scenesData.viewProj = camera.GetViewProjection();
@@ -1190,20 +1197,6 @@ namespace VanK
         localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + quadBuffersize + circleBuffersize + textBuffersize +
         lineBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
-
-        s_Data.vikingHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, vertices, indices);
-        s_Data.cubeHandle = RegistryMesh::registerMesh(shaderio::PipelineType_PBR, GeometryData::cubeVertices, GeometryData::cubeIndices);
-        s_Data.quadHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Quad, GeometryData::quadVertices, GeometryData::quadIndices);
-        s_Data.circleHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Circle, GeometryData::quadVertices, GeometryData::quadIndices);
-        s_Data.textHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Text, GeometryData::quadVertices, GeometryData::quadIndices);
-        s_Data.lineHandle = RegistryMesh::registerMesh(shaderio::PipelineType_Line, GeometryData::lineVertices, GeometryData::lineIndices);
-
-        /*RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_PBR);
-        RegistryMesh::DebugPrintPipelineInstances(shaderio::PipelineType_Quad);*/
-
-        // 4            4        156         152                   152
-        //draw calls, meshes, instances, actualy instances, draws saved by instancing
-        //pipeline statatistics imputassemblyvertices/primitives vertexshaderinvocation clippinginvocation clipping primitives fragmentshaderinvocations computershaderinvocatinon
     }
 
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
@@ -1271,8 +1264,7 @@ namespace VanK
         cmd = RenderCommand::BeginCommandBuffer();
         if (!cmd)
             SDL_Log("AcquireGPUCommandBuffer failed: %s", SDL_GetError());
-
-        RegistryMesh::clearInstances();
+        
         quads.clear();
         circles.clear();
         texts.clear();
@@ -1281,9 +1273,8 @@ namespace VanK
 
     void Renderer::EndSubmit()
     {
-        RegistryMesh::rebuildAllInstances();
-
         Flush();
+        
         uint64_t offset = 0;
         void* mapPtr = m_TransferDownlaoadBuffer->MapTransferBuffer(sizeof(CulledData), 0, offset);
         m_TransferDownlaoadBuffer->DownloadFromGPUBuffer(cmd, {0}, {cullBuffer.get(), 0, sizeof(CulledData)});

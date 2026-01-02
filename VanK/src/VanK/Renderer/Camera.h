@@ -13,15 +13,9 @@ namespace VanK
         virtual ~Camera() = default;
 
         const glm::mat4& GetProjection() const { return m_Projection; }
-        
-        glm::mat4 GetProjectionForImGuizmo() const 
-        {
-            glm::mat4 p = GetProjection();
-            p[1][1] *= -1.0f;
-            return p;
-        }
-
+        const glm::mat4& GetGizmoProjection() const { return gizmoProjection; }
     protected:
         glm::mat4 m_Projection = glm::mat4(1.0f);
+        glm::mat4 gizmoProjection = glm::mat4(1.0f);
     };
 }

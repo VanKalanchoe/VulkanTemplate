@@ -8,7 +8,7 @@
 
 namespace VanK 
 {
-	glm::mat4 perspectiveProjection(float fovY, float aspectWbyH, float zNear)
+	static  glm::mat4 perspectiveProjection(float fovY, float aspectWbyH, float zNear)
 	{
 		float f = 1.0f / tanf(fovY / 2.0f);
 		return glm::mat4(
@@ -28,6 +28,9 @@ namespace VanK
 	{
 		m_AspectRatio = m_ViewportWidth / m_ViewportHeight;
 		m_Projection = perspectiveProjection(glm::radians(m_FOV), m_AspectRatio, m_NearClip);
+		gizmoProjection = glm::perspective(glm::radians(m_FOV),
+											 m_AspectRatio,
+											 m_NearClip, m_FarClip);
 	}
 
 	void EditorCamera::UpdateView()
@@ -43,6 +46,13 @@ namespace VanK
 
 		// Flip Z to account for negative viewport
 		m_ViewMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * view;
+	}
+	
+	glm::mat4 EditorCamera::GetGizmoView() const
+	{
+		glm::mat4 view = glm::mat4_cast(GetOrientation());
+		view[3] = glm::vec4(GetPosition(), 1.0f);
+		return glm::inverse(view); // no reverse-Z scale here
 	}
 
 	std::pair<float, float> EditorCamera::PanSpeed() const
