@@ -185,5 +185,5 @@ float4 fragmentMain(VertexOutput vertexInput)
 {
   float4 textureColor = texture[vertexInput.materialIndex].Sample(vertexInput.texcoords);
   float4 hashColor = float4(vertexInput.color.xyz, 1.0f);
-  return textureColor /* * hashColor */; // make debug only key
+  return textureColor * hashColor; // make debug only key
 }
