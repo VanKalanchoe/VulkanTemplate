@@ -1005,7 +1005,7 @@ namespace VanK
         uint32_t GetCurrentFrameIndex() override { return frameIndex; }
         void setEnableTimeStamp(bool temp) { isTimeStapEnabled = temp; }
         bool getEnableTimeStamp() override { return isTimeStapEnabled; }
-        TimestampPass getTimeStampPass() override { return timestamp; }
+        VanKTimestampPass getTimeStampPass() override { return timestamp; }
         float getTimeStampPeriod() const override { return physicalDevice.getProperties2().properties.limits.timestampPeriod; };
         VanKPipelineStatistics getPipelineStatistics() override { return pipeStats; };
     private:
@@ -1094,7 +1094,7 @@ namespace VanK
         vk::raii::QueryPool queryPoolTimeStep = nullptr;
         utils::Buffer queryTimeStepBuffer;
         bool isTimeStapEnabled = false;
-        TimestampPass timestamp;
+        VanKTimestampPass timestamp;
         VanKPipelineStatistics pipeStats;
 
         std::vector<const char*> requiredDeviceExtension =

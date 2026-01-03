@@ -239,9 +239,9 @@ namespace VanK
             return s_RendererAPI ? s_RendererAPI->getEnableTimeStamp() : false;
         }
         
-        static TimestampPass getTimeStampPass()
+        static VanKTimestampPass getTimeStampPass()
         {
-            return s_RendererAPI ? s_RendererAPI->getTimeStampPass() : TimestampPass();
+            return s_RendererAPI ? s_RendererAPI->getTimeStampPass() : VanKTimestampPass();
         }
         
         static VanKPipelineStatistics getPipelineStatistics()
