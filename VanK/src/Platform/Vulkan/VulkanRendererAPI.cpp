@@ -1035,7 +1035,7 @@ namespace  VanK
         }
         
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
-        /*downloadQueryStatisticsBuffer();*/
+        downloadQueryStatisticsBuffer();
         if (isTimeStapEnabled)
             downloadQueryTimeStampBuffer();
     }
@@ -2459,13 +2459,15 @@ namespace  VanK
                 .queryType = vk::QueryType::ePipelineStatistics,
                 .queryCount = 1,
                 .pipelineStatistics =
-                    vk::QueryPipelineStatisticFlagBits::eInputAssemblyVertices |
+                    /*vk::QueryPipelineStatisticFlagBits::eInputAssemblyVertices |
                     vk::QueryPipelineStatisticFlagBits::eInputAssemblyPrimitives |
                     vk::QueryPipelineStatisticFlagBits::eVertexShaderInvocations |
                     vk::QueryPipelineStatisticFlagBits::eFragmentShaderInvocations |
-                    vk::QueryPipelineStatisticFlagBits::eComputeShaderInvocations |
-                    vk::QueryPipelineStatisticFlagBits::eClippingInvocations |
-                    vk::QueryPipelineStatisticFlagBits::eClippingPrimitives
+                    vk::QueryPipelineStatisticFlagBits::eComputeShaderInvocations |*/
+                    vk::QueryPipelineStatisticFlagBits::eClippingInvocations /*|
+                    vk::QueryPipelineStatisticFlagBits::eClippingPrimitives |
+                    vk::QueryPipelineStatisticFlagBits::eTaskShaderInvocationsEXT |
+                    vk::QueryPipelineStatisticFlagBits::eMeshShaderInvocationsEXT*/
             };
 
             queryPoolStatistics = vk::raii::QueryPool(device, poolInfo);
@@ -2498,7 +2500,7 @@ namespace  VanK
     {
         auto cmd = utils::beginSingleTimeCommands(device, commandPool);
         
-        cmd->copyQueryPoolResults(queryPoolStatistics, 0, 1, queryStatisticsBuffer.buffer, 0, 0, vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+        cmd->copyQueryPoolResults(queryPoolStatistics, 0, 1, queryStatisticsBuffer.buffer, 0, 0, vk::QueryResultFlagBits::e64/* | vk::QueryResultFlagBits::eWait*/);
 
         utils::endSingleTimeCommands(*cmd, queue);
         
@@ -2510,6 +2512,7 @@ namespace  VanK
             
             uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
 
+            /*
             std::cout << std::dec;
             std::cout << "Input assembly vertices: "        << stats[0] << "\n";
             std::cout << "Input assembly primitives: "      << stats[1] << "\n";
@@ -2517,7 +2520,9 @@ namespace  VanK
             std::cout << "Clipping invocations: "           << stats[3] << "\n";
             std::cout << "Clipping primitives: "            << stats[4] << "\n";
             std::cout << "Fragment shader invocations: "    << stats[5] << "\n";
-            std::cout << "Compute shader invocations: "     << stats[6] << "\n";
+            std::cout << "Compute shader invocations: "     << stats[6] << "\n";*/
+            
+            pipeStats.clippingInvocations = stats[0];
 
             queryStatisticsBuffer.buffer.getAllocation().unmap();
         }

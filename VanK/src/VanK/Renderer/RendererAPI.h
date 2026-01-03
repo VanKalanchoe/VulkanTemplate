@@ -22,6 +22,11 @@ namespace VanK
         uint64_t end;           // GPU timestamp for end
     };
     
+    struct VanKPipelineStatistics
+    {
+        uint64_t clippingInvocations;
+    };
+    
     struct VanKPipeLine_T;
     using VanKPipeLine = VanKPipeLine_T*;
 
@@ -484,6 +489,7 @@ namespace VanK
         virtual void setEnableTimeStamp(bool temp) = 0;
         virtual bool getEnableTimeStamp() = 0;
         virtual TimestampPass getTimeStampPass() = 0;
+        virtual VanKPipelineStatistics getPipelineStatistics() = 0;
         virtual float getTimeStampPeriod() const = 0;
         //---------
         

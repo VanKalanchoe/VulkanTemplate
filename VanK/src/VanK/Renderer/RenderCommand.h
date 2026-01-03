@@ -244,6 +244,11 @@ namespace VanK
             return s_RendererAPI ? s_RendererAPI->getTimeStampPass() : TimestampPass();
         }
         
+        static VanKPipelineStatistics getPipelineStatistics()
+        {
+            return s_RendererAPI ? s_RendererAPI->getPipelineStatistics() : VanKPipelineStatistics();
+        }
+        
         static float getTimeStampPeriod()
         {
             return s_RendererAPI ? s_RendererAPI->getTimeStampPeriod() : 0.0f;

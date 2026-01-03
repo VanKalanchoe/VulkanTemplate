@@ -1007,6 +1007,7 @@ namespace VanK
         bool getEnableTimeStamp() override { return isTimeStapEnabled; }
         TimestampPass getTimeStampPass() override { return timestamp; }
         float getTimeStampPeriod() const override { return physicalDevice.getProperties2().properties.limits.timestampPeriod; };
+        VanKPipelineStatistics getPipelineStatistics() override { return pipeStats; };
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -1094,6 +1095,7 @@ namespace VanK
         utils::Buffer queryTimeStepBuffer;
         bool isTimeStapEnabled = false;
         TimestampPass timestamp;
+        VanKPipelineStatistics pipeStats;
 
         std::vector<const char*> requiredDeviceExtension =
         {

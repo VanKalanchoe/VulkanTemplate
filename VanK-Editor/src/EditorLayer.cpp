@@ -350,7 +350,7 @@ namespace VanK
         ImGui::Checkbox("Frustum Cull", &frustumToggle);
         Renderer::SetFrustumCullEnabled(frustumToggle);
         
-        /*ImGui::Text("Primitives: %llu", RenderCommand::getPipelineStatistics().clippingInvocations);*/
+        ImGui::Text("Primitives: %llu", RenderCommand::getPipelineStatistics().clippingInvocations);
         
         int lineWidth = static_cast<int>(Renderer::GetLineWidth());
         if (ImGui::SliderInt("Line Width", &lineWidth, 1.0f, 10.0f))
