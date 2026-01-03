@@ -188,6 +188,12 @@ namespace VanK
         // {3} center, {1} radius
         glm::vec4 boundingSphere{};
     };
+    
+    struct ModelHandle
+    {
+        uint64_t firstPrimitive;
+        uint64_t primitiveCount;
+    };
 
     struct ExtractedMeshletModel
     {
@@ -203,18 +209,20 @@ namespace VanK
         Transform transform{};
     };
 
+    struct meshTasksSubmitPushConstant
+    {
+        uint64_t meshTasksIndirectBufferAddress;
+        uint64_t localMeshTasksIndirectBufferAddress;
+    };
+    
     struct VanKDrawMeshTasksIndirectCommand
     {
         uint32_t groupCountX;
         uint32_t groupCountY;
         uint32_t groupCountZ;
     };
-
-    struct meshTasksSubmitPushConstant
-    {
-        uint64_t meshTasksIndirectBufferAddress;
-        uint64_t localMeshTasksIndirectBufferAddress;
-    };
+    
+    std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
 
     struct MeshDraw
     {
@@ -222,6 +230,8 @@ namespace VanK
         glm::mat4 modelMatrix;
         uint64_t primitiveID;
     };
+    
+    std::vector<MeshDraw> meshDraws;
 
     struct Geometry
     {
@@ -235,9 +245,9 @@ namespace VanK
 
     Geometry geometry;
 
-    size_t LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = UINT32_MAX, bool FrustumFor2D = false)
+    ModelHandle LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = UINT32_MAX, bool FrustumFor2D = false)
     {
-        size_t primitiveId = geometry.primitives.size();
+        uint64_t firstPrimitive = geometry.primitives.size();
         std::vector<Vertex> primitiveVertices{};
         std::vector<uint32_t> primitiveIndices{};
         if (!path.empty())
@@ -514,41 +524,8 @@ namespace VanK
             });
         }
 
-
-        /*fastgltf::Node& node = gltf.nodes[0];
-        glm::vec3 localTranslation{};
-        glm::quat localRotation{};
-        glm::vec3 localScale{};
-        std::visit(
-            fastgltf::visitor{
-                [&](fastgltf::math::fmat4x4 matrix) {
-                    glm::mat4 glmMatrix;
-                    for (int i = 0; i < 4; ++i) {
-                        for (int j = 0; j < 4; ++j) {
-                            glmMatrix[i][j] = matrix[i][j];
-                        }
-                    }
-    
-                    localTranslation = glm::vec3(glmMatrix[3]);
-                    localRotation = glm::quat_cast(glmMatrix);
-                    localScale = glm::vec3(
-                        glm::length(glm::vec3(glmMatrix[0])),
-                        glm::length(glm::vec3(glmMatrix[1])),
-                        glm::length(glm::vec3(glmMatrix[2]))
-                    );
-                },
-                [&](fastgltf::TRS transform) {
-                    localTranslation = {transform.translation[0], transform.translation[1], transform.translation[2]};
-                    localRotation = {transform.rotation[3], transform.rotation[0], transform.rotation[1], transform.rotation[2]};
-                    localScale = {transform.scale[0], transform.scale[1], transform.scale[2]};
-                }
-            }
-            , node.transform
-        );
-    
-        meshletModel.transform = {localTranslation, localRotation, localScale};*/
-
-        return primitiveId;
+        uint64_t primitiveCount = geometry.primitives.size() - firstPrimitive;
+        return { firstPrimitive, primitiveCount };
     }
 
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
@@ -932,7 +909,21 @@ namespace VanK
         uint64_t bufferAddress;
         uint64_t sceneData;
     };
-    
+
+    static void SubmitModelDraw(
+    const ModelHandle& model,
+    const glm::mat4& transform)
+    {
+        for (uint64_t i = 0; i < model.primitiveCount; ++i)
+        {
+            uint64_t primitiveId = model.firstPrimitive + i;
+            const auto& prim = geometry.primitives[primitiveId];
+            
+            meshDraws.emplace_back(MeshDraw{transform, primitiveId});
+            meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[primitiveId].meshletCount + 64 - 1) / 64, 1, 1});
+        }
+    }
+
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -1143,10 +1134,13 @@ namespace VanK
             0, 2, 3 // second triangle
         };
         
-        LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
-        LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);
-        LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
-        LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
+        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf");*/
+        ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
+        /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
+        ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
+        
+        SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
         
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
@@ -1169,16 +1163,16 @@ namespace VanK
         uint64_t meshletBuffersize = sizeof(Meshlet) * geometry.meshlets.size();
         meshletBuffer.reset(StorageBuffer::Create(meshletBuffersize));
 
-        uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
+        uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10000;
         localMeshTaskSubmitBuffer.reset(StorageBuffer::Create(localMeshTaskSubmitBuffersize));
 
-        uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
+        uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10000;
         meshTaskSubmitBuffer.reset(IndirectBuffer::Create(meshTaskSubmitBuffersize));
 
-        uint64_t meshletPrimitiveBuffersize = sizeof(MeshletPrimitive) * 10;
+        uint64_t meshletPrimitiveBuffersize = sizeof(MeshletPrimitive) * 10000;
         meshletPrimitiveBuffer.reset(StorageBuffer::Create(meshletPrimitiveBuffersize));
 
-        uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10;
+        uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10000;
         meshDrawBuffer.reset(StorageBuffer::Create(meshDrawBuffersize));
         
         uint64_t quadBuffersize = sizeof(QuadData) * 10;
@@ -1342,15 +1336,9 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, geometry.meshlets, Meshlet, 0);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletPrimitiveBuffer, geometry.primitives, MeshletPrimitive, 0);
 
-        //multiple meshes
-        std::vector<MeshDraw> meshDraws;
-        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)), 1});
-        meshDraws.emplace_back(MeshDraw{glm::translate(glm::mat4(1.0f), glm::vec3(2.5f, 0.0f, 0.0f)), 2});
+        //multiple meshes---
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
-        meshDraws.clear();
-        std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[1].meshletCount + 64 - 1) / 64, 1, 1});
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[2].meshletCount + 64 - 1) / 64, 1, 1});
+        /*meshDraws.clear();*/
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
         //----------
         
@@ -1424,7 +1412,7 @@ namespace VanK
             //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
             RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
             
-            meshTasks.clear();
+            /*meshTasks.clear();*/
             
             // quads/sprites/atlas
             {
