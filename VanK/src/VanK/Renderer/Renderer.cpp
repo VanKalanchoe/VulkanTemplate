@@ -144,6 +144,8 @@ namespace VanK
         glm::vec2 texelSize{};
 
         float deltaTime{};
+        
+        bool FrustumCullEnabled{true};
     };
 
     std::vector<SceneDatas> scene;
@@ -674,7 +676,8 @@ namespace VanK
         scenesData.viewProj = camera.GetProjection() * scenesData.view;
         /*scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};*/
         scenesData.frustum = Frustum(scenesData.viewProj);
-
+        scenesData.FrustumCullEnabled = FrustumCullEnabled;
+        
         if (frozen)
         {
             if (!frozenDone)
@@ -706,6 +709,7 @@ namespace VanK
         scenesData.viewProj = camera.GetViewProjection();
         scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};
         scenesData.frustum = Frustum(scenesData.viewProj);
+        scenesData.FrustumCullEnabled = FrustumCullEnabled;
 
         if (frozen)
         {
@@ -1273,13 +1277,13 @@ namespace VanK
             0, 2, 3 // second triangle
         };
 
-        ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf");
-        /*ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
-        /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);#1#
+        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf");*/
+        /*ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");*/
+        /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
         ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
-        ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");*/
+        /*ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");*/
 
-        SubmitModelDraw(bistro, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
+        SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
 
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));

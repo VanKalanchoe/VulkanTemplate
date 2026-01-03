@@ -326,38 +326,40 @@ namespace VanK
       
           ImGui::Spacing();
       */
-        // Toggle GPU profiling via RenderCommand
-        bool enabled = RenderCommand::getEnableTimeStamp();
-        if (ImGui::Checkbox("Enable GPU Profiling", &enabled))
-        {
-            RenderCommand::setEnableTimeStamp(enabled);
-        }
-
-        // Display GPU times next to checkbox
-        if (enabled)
-        {
-            ImGui::SameLine(); // Continue on the same line
-            auto gpu = RenderCommand::getTimeStampPass();
-            float gpuMs = (gpu.end - gpu.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f;
-            ImGui::Text("(GPU: %.3f ms)", gpuMs);
-        }
+        
+        // gpu total time
+        RenderCommand::setEnableTimeStamp(true);
+        ImGui::SameLine(); // Continue on the same line
+        auto gpu = RenderCommand::getTimeStampPass();
+        std::cout << std::dec << "begin: " << gpu.begin << " end: " << gpu.end << std::endl;
+        float gpuMs = (gpu.end - gpu.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f;
+        ImGui::Text("(GPU: %.3f ms)", gpuMs);
 
         ImGui::Spacing();
 
-        for (auto& [name, time] : VanK::g_ProfileResults)
-            ImGui::Text("%s: %.3f ms", name.c_str(), time);
+        for (auto& [profileName, profileTime] : VanK::g_ProfileResults)
+            ImGui::Text("%s: %.3f ms", profileName.c_str(), profileTime);
+        
         ImGui::End();
 
         ImGui::Begin("Settings");
+        
         ImGui::Checkbox("Show physics collider", &m_ShowPhysicsColliders);
+        
+        bool frustumToggle = Renderer::isFrustumCullEnabled();
+        ImGui::Checkbox("Frustum Cull", &frustumToggle);
+        Renderer::SetFrustumCullEnabled(frustumToggle);
+        
+        /*ImGui::Text("Primitives: %llu", RenderCommand::getPipelineStatistics().clippingInvocations);*/
+        
         int lineWidth = static_cast<int>(Renderer::GetLineWidth());
         if (ImGui::SliderInt("Line Width", &lineWidth, 1.0f, 10.0f))
         {
             Renderer::SetLineWidth(static_cast<float>(lineWidth));
         }
+        
         const char* cullModes[] = { "None", "Back", "Front" };
         static int currentCull = Renderer::GetCullMode(); // 0=None, 1=Back, 2=Front
-
         if (ImGui::Combo("Cull Mode", &currentCull, cullModes, IM_ARRAYSIZE(cullModes)))
         {
             switch (currentCull)
@@ -367,7 +369,9 @@ namespace VanK
             case 2 : Renderer::SetCullMode(VanK_CULL_MODE_FRONT_BIT); break;
             }
         }
+        
         ImGui::Image(s_Font->GetAtlasTexture()->getImTextureID(), {512, 512}, ImVec2(0, 1), ImVec2(1, 0));
+        
         ImGui::End(); // End Settings
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 0});

@@ -75,6 +75,8 @@ namespace VanK
         static float GetLineWidth() { return m_LineWidth; }
         static void SetCullMode(VanKCullModeFlags flag) { cullMode = flag; }
         static VanKCullModeFlags GetCullMode() { return cullMode; }
+        static void SetFrustumCullEnabled(bool frustum) { FrustumCullEnabled = frustum; }
+        static bool isFrustumCullEnabled() { return FrustumCullEnabled; }
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
@@ -116,6 +118,7 @@ namespace VanK
     public:
         inline static bool frozen = false;
         inline static bool frozenDone = false;
+        inline static bool FrustumCullEnabled = true;
     private:
         inline static Ref<TransferBuffer> m_TransferBuffer;
         inline static Ref<StorageBuffer> sceneBuffer ;

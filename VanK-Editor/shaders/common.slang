@@ -165,4 +165,6 @@ public struct SceneData
     float2 texelSize;
 
     public float deltaTime;
+
+    public bool FrustumCullEnabled;
 };

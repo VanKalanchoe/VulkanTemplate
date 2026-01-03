@@ -87,18 +87,21 @@ void taskMain
         bool visible = true;
 
         // Frustum Cull
-        bool frustumVisible = true;
-        for (uint i = 0; i < 6; i++) 
+        if(pushConstant.sceneData->FrustumCullEnabled)
         {
-            float dist = dot(pushConstant.sceneData.frozenFrustum.planes[i].xyz, worldBounds.xyz) + pushConstant.sceneData.frozenFrustum.planes[i].w;
-            frustumVisible &= (dist >= -worldBounds.w);
+            bool frustumVisible = true;
+            for (uint i = 0; i < 6; i++) 
+            {
+                float dist = dot(pushConstant.sceneData.frozenFrustum.planes[i].xyz, worldBounds.xyz) + pushConstant.sceneData.frozenFrustum.planes[i].w;
+                frustumVisible &= (dist >= -worldBounds.w);
+            }
+            visible &= frustumVisible;
+            if (!frustumVisible) 
+            {
+                pushConstant.culledData.frustumCulled.add(1);
+            }
         }
-        visible &= frustumVisible;
-        if (!frustumVisible) 
-        {
-            pushConstant.culledData.frustumCulled.add(1);
-        }
-
+        
         // todo: send back to show how many culled from imgui
         if (visible) 
         {
