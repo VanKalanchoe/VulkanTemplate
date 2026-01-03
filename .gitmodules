@@ -8,3 +8,6 @@
 [submodule "VanK/vendor/VulkanMemoryAllocator-Hpp"]
 	path = VanK/vendor/VulkanMemoryAllocator-Hpp
 	url = https://github.com/YaaZ/VulkanMemoryAllocator-Hpp.git
+[submodule "assets/bistro"]
+	path = assets/bistro
+	url = https://github.com/VanKalanchoe/bistro.git
