@@ -19,7 +19,8 @@
 
 #include "MSDFData.h"
 #include "VanK/Asset/AssetManager.h"
-
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -144,7 +145,7 @@ namespace VanK
         glm::vec2 texelSize{};
 
         float deltaTime{};
-        
+
         bool FrustumCullEnabled{true};
     };
 
@@ -276,9 +277,84 @@ namespace VanK
 
         return localTransform;
     }
+
     std::vector<Vertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
+    std::unordered_map<std::string, Ref<Texture2D>> textureCache;
+    Ref<Texture2D> GetPrimitiveTexture(const tinygltf::Material& material, const std::string& basePath,
+                                   std::unordered_map<std::string, Ref<Texture2D>>& textureCache,
+                                   const tinygltf::Model& model)
+{
+    int imageIndex = -1;
+
+    // 1. Check KHR_materials_pbrSpecularGlossiness extension
+    if (material.extensions.find("KHR_materials_pbrSpecularGlossiness") != material.extensions.end()) {
+        auto& ext = material.extensions.at("KHR_materials_pbrSpecularGlossiness");
+        if (ext.Has("diffuseTexture")) {
+            int texIndex = ext.Get("diffuseTexture").Get("index").Get<int>();
+            imageIndex = model.textures[texIndex].source;
+        }
+    }
+
+    // 2. Standard PBR base color (fallback)
+    if (imageIndex < 0 && material.pbrMetallicRoughness.baseColorTexture.index >= 0)
+        imageIndex = model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source;
+
+    // 3. Fallback: emissiveTexture
+    if (imageIndex < 0 && material.emissiveTexture.index >= 0)
+        imageIndex = model.textures[material.emissiveTexture.index].source;
+
+    if (imageIndex >= 0) {
+        const tinygltf::Image& img = model.images[imageIndex];
+        Ref<Texture2D> texHandle;
+
+        if (!img.uri.empty()) {
+            // External file
+            auto it = textureCache.find(img.uri);
+            if (it != textureCache.end())
+                texHandle = it->second;
+            else {
+                texHandle = TextureImporter::LoadTexture2D(basePath + img.uri);
+                textureCache[img.uri] = texHandle;
+            }
+        } else if (img.bufferView >= 0) {
+            // Embedded image
+            std::string key = "embedded_" + std::to_string(imageIndex);
+            auto it = textureCache.find(key);
+            if (it != textureCache.end())
+                texHandle = it->second;
+            else {
+                const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
+                const tinygltf::Buffer& buf = model.buffers[bv.buffer];
+
+                int width, height, channels;
+                unsigned char* pixels = stbi_load_from_memory(buf.data.data() + bv.byteOffset,
+                                                              static_cast<int>(bv.byteLength),
+                                                              &width, &height, &channels, 3);
+                if (!pixels) return nullptr;
+
+                TextureSpecification spec;
+                spec.Width = width;
+                spec.Height = height;
+                spec.Format = ImageFormat::RGB8;
+                spec.GenerateMips = false;
+
+                texHandle = Texture2D::Create(spec, Buffer((void*)pixels, width * height * 3));
+                textureCache[key] = texHandle;
+
+                stbi_image_free(pixels);
+            }
+        }
+
+        return texHandle;
+    }
+
+    return nullptr;
+}
+
+
     void TraverseNode(
+        std::string& basePath,
         const tinygltf::Model& model,
         int nodeIndex,
         const glm::mat4& parentTransform,
@@ -334,13 +410,15 @@ namespace VanK
 
                     if (hasTexCoords)
                     {
-                        const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * 8]);
-                        v.texcoords = {texCoord[0], texCoord[1]};
+                        size_t texStride = texCoordBufferView->byteStride ? texCoordBufferView->byteStride : sizeof(float) * 2;
+                        const float* texCoord = reinterpret_cast<const float*>(texCoordBuffer->data.data() + texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * texStride);
+                        v.texcoords = { texCoord[0], 1.0f - texCoord[1] }; // invert Y
                     }
                     else
                     {
                         v.texcoords = {0.0f, 0.0f};
                     }
+
 
                     verticesOut.push_back(v);
                 }
@@ -370,153 +448,181 @@ namespace VanK
 
                     indicesOut.push_back(baseVertex + idx);
                 }
-                
+
                 std::vector<uint32_t> remap(primitiveIndices.size());
-        size_t vertexCount = meshopt_generateVertexRemap
-        (
-            remap.data(),
-            primitiveIndices.data(),
-            primitiveIndices.size(),
-            primitiveVertices.data(),
-            primitiveVertices.size(),
-            sizeof(Vertex)
-        );
+                size_t vertexCount = meshopt_generateVertexRemap
+                (
+                    remap.data(),
+                    primitiveIndices.data(),
+                    primitiveIndices.size(),
+                    primitiveVertices.data(),
+                    primitiveVertices.size(),
+                    sizeof(Vertex)
+                );
 
-        std::vector<Vertex> remappedVertices(vertexCount);
-        meshopt_remapVertexBuffer(remappedVertices.data(), primitiveVertices.data(), primitiveVertices.size(), sizeof(Vertex), remap.data());
-        std::vector<uint32_t> remappedIndices(primitiveIndices.size());
-        meshopt_remapIndexBuffer(remappedIndices.data(), primitiveIndices.data(), primitiveIndices.size(), remap.data());
+                std::vector<Vertex> remappedVertices(vertexCount);
+                meshopt_remapVertexBuffer(remappedVertices.data(), primitiveVertices.data(), primitiveVertices.size(), sizeof(Vertex), remap.data());
+                std::vector<uint32_t> remappedIndices(primitiveIndices.size());
+                meshopt_remapIndexBuffer(remappedIndices.data(), primitiveIndices.data(), primitiveIndices.size(), remap.data());
 
-        meshopt_optimizeVertexCache(remappedIndices.data(), remappedIndices.data(), primitiveIndices.size(), vertexCount);
-        meshopt_optimizeVertexFetch(remappedVertices.data(), remappedIndices.data(), primitiveIndices.size(), remappedVertices.data(), vertexCount, sizeof(Vertex));
+                meshopt_optimizeVertexCache(remappedIndices.data(), remappedIndices.data(), primitiveIndices.size(), vertexCount);
+                meshopt_optimizeVertexFetch(remappedVertices.data(), remappedIndices.data(), primitiveIndices.size(), remappedVertices.data(), vertexCount, sizeof(Vertex));
 
-        primitiveVertices = remappedVertices;
-        primitiveIndices = remappedIndices;
+                primitiveVertices = remappedVertices;
+                primitiveIndices = remappedIndices;
 
-        const size_t maxVertices = 64;
-        const size_t maxTriangles = 96;
+                const size_t maxVertices = 64;
+                const size_t maxTriangles = 96;
 
-        // build clusters (meshlets) out of the mesh
-        size_t maxMeshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
-        std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
-        std::vector<unsigned int> meshletVertices(primitiveIndices.size());
-        std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
+                // build clusters (meshlets) out of the mesh
+                size_t maxMeshlets = meshopt_buildMeshletsBound(primitiveIndices.size(), maxVertices, maxTriangles);
+                std::vector<meshopt_Meshlet> meshlets(maxMeshlets);
+                std::vector<unsigned int> meshletVertices(primitiveIndices.size());
+                std::vector<unsigned char> meshletTriangles(primitiveIndices.size());
 
-        std::vector<uint32_t> primitiveVertexPositions;
-        meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
-                                              primitiveIndices.data(), primitiveIndices.size(),
-                                              reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
-                                              maxVertices, maxTriangles, 0.f));
+                std::vector<uint32_t> primitiveVertexPositions;
+                meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
+                                                      primitiveIndices.data(), primitiveIndices.size(),
+                                                      reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
+                                                      maxVertices, maxTriangles, 0.f));
 
-        // Optimize each meshlet's micro index buffer/vertex layout individually
-        for (auto& meshlet : meshlets)
-        {
-            meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
-        }
+                // Optimize each meshlet's micro index buffer/vertex layout individually
+                for (auto& meshlet : meshlets)
+                {
+                    meshopt_optimizeMeshlet(&meshletVertices[meshlet.vertex_offset], &meshletTriangles[meshlet.triangle_offset], meshlet.triangle_count, meshlet.vertex_count);
+                }
 
-        // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
-        {
-            const meshopt_Meshlet& last = meshlets.back();
-            meshletVertices.resize(last.vertex_offset + last.vertex_count);
-            meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
-        }
+                // Trim the meshlet data to minimize waste for meshletVertices/meshletTriangles
+                {
+                    const meshopt_Meshlet& last = meshlets.back();
+                    meshletVertices.resize(last.vertex_offset + last.vertex_count);
+                    meshletTriangles.resize(last.triangle_offset + last.triangle_count * 3);
+                }
 
-        // ------------------------------------------------------------
-        // Primitive (whole-mesh) bounding sphere using meshoptimizer
-        // ------------------------------------------------------------
-        meshopt_Bounds primitiveBounds = meshopt_computeSphereBounds(
-            reinterpret_cast<const float*>(primitiveVertices.data()), // float3 position at offset 0
-            primitiveVertices.size(), // vertex count
-            sizeof(Vertex), // vertex stride
-            nullptr, // no per-vertex radii
-            0
-        );
+                // ------------------------------------------------------------
+                // Primitive (whole-mesh) bounding sphere using meshoptimizer
+                // ------------------------------------------------------------
+                meshopt_Bounds primitiveBounds = meshopt_computeSphereBounds(
+                    reinterpret_cast<const float*>(primitiveVertices.data()), // float3 position at offset 0
+                    primitiveVertices.size(), // vertex count
+                    sizeof(Vertex), // vertex stride
+                    nullptr, // no per-vertex radii
+                    0
+                );
 
-        MeshletPrimitive prim{};
-        prim.meshletOffset = static_cast<uint32_t>(geometry.meshlets.size());
-        prim.meshletCount = static_cast<uint32_t>(meshlets.size());
-        prim.boundingSphere = glm::vec4(
-            primitiveBounds.center[0],
-            primitiveBounds.center[1],
-            primitiveBounds.center[2],
-            primitiveBounds.radius
-        );
+                MeshletPrimitive prim{};
+                prim.meshletOffset = static_cast<uint32_t>(geometry.meshlets.size());
+                prim.meshletCount = static_cast<uint32_t>(meshlets.size());
+                prim.boundingSphere = glm::vec4(
+                    primitiveBounds.center[0],
+                    primitiveBounds.center[1],
+                    primitiveBounds.center[2],
+                    primitiveBounds.radius
+                );
+                
+               const tinygltf::Material& material = model.materials[primitive.material];
+                /*
+                // Check if the material has a normal map
+                if (material.normalTexture.index >= 0) {
+                    const tinygltf::Texture& tex = model.textures[material.normalTexture.index];
+                    if (tex.source >= 0) {  // tex.source is index into images
+                        const tinygltf::Image& img = model.images[tex.source];
+                        
+                        if (!img.uri.empty() && img.uri.ends_with(".ktx2")) {
+                            Ref<Texture2D> texHandle;
 
-        /*if (materialIndex != UINT32_MAX)
-            prim.materialIndex = materialIndex;
-        else*/
-            prim.materialIndex = 0;
+                            // Check cache first
+                            auto it = textureCache.find(img.uri);
+                            if (it != textureCache.end()) {
+                                texHandle = it->second; // reuse
+                            } else {
+                                texHandle = TextureImporter::LoadTexture2D(basePath + img.uri);
+                                textureCache[img.uri] = texHandle; // store in cache
+                            }
+                            prim.materialIndex = texHandle->GetTextureIndex(); // attach to primitive
+                        }
+                    }
+                }*/
+                
+                Ref<Texture2D> albedoTex = GetPrimitiveTexture(material, basePath, textureCache, model);
+                if (albedoTex)
+                    prim.materialIndex = albedoTex->GetTextureIndex();
+                
+                /*if (materialIndex != UINT32_MAX)
+                    prim.materialIndex = materialIndex;
+                else*/
+                
 
-        // small hack so for 2d frustum still works otherwise i have to disable it idk sounds more expansive or ignore 
-        // but idk if that could cause glitches in the future
-        /*if (FrustumFor2D)
-            prim.boundingSphere.w += 0.001f;*/
+                // small hack so for 2d frustum still works otherwise i have to disable it idk sounds more expansive or ignore 
+                // but idk if that could cause glitches in the future
+                /*if (FrustumFor2D)
+                    prim.boundingSphere.w += 0.001f;*/
 
-        geometry.primitives.emplace_back(prim);
+                geometry.primitives.emplace_back(prim);
 
-        // ------------------------------------------------------------
-        // Offsets into global buffers
-        // ------------------------------------------------------------
-        uint32_t vertexOffset = static_cast<uint32_t>(geometry.vertices.size());
-        uint32_t meshletVertexOffset = static_cast<uint32_t>(geometry.meshletVertices.size());
-        uint32_t meshletTrianglesOffset = static_cast<uint32_t>(geometry.meshletTriangles.size());
+                // ------------------------------------------------------------
+                // Offsets into global buffers
+                // ------------------------------------------------------------
+                uint32_t vertexOffset = static_cast<uint32_t>(geometry.vertices.size());
+                uint32_t meshletVertexOffset = static_cast<uint32_t>(geometry.meshletVertices.size());
+                uint32_t meshletTrianglesOffset = static_cast<uint32_t>(geometry.meshletTriangles.size());
 
-        // ------------------------------------------------------------
-        // Append primitive data to model buffers
-        // ------------------------------------------------------------
-        geometry.vertices.insert(
-            geometry.vertices.end(),
-            primitiveVertices.begin(),
-            primitiveVertices.end()
-        );
+                // ------------------------------------------------------------
+                // Append primitive data to model buffers
+                // ------------------------------------------------------------
+                geometry.vertices.insert(
+                    geometry.vertices.end(),
+                    primitiveVertices.begin(),
+                    primitiveVertices.end()
+                );
 
-        geometry.meshletVertices.insert(
-            geometry.meshletVertices.end(),
-            meshletVertices.begin(),
-            meshletVertices.end()
-        );
+                geometry.meshletVertices.insert(
+                    geometry.meshletVertices.end(),
+                    meshletVertices.begin(),
+                    meshletVertices.end()
+                );
 
-        geometry.meshletTriangles.insert(
-            geometry.meshletTriangles.end(),
-            meshletTriangles.begin(),
-            meshletTriangles.end()
-        );
+                geometry.meshletTriangles.insert(
+                    geometry.meshletTriangles.end(),
+                    meshletTriangles.begin(),
+                    meshletTriangles.end()
+                );
 
-        for (meshopt_Meshlet& meshlet : meshlets)
-        {
-            meshopt_Bounds bounds = meshopt_computeMeshletBounds(
-                &meshletVertices[meshlet.vertex_offset],
-                &meshletTriangles[meshlet.triangle_offset],
-                meshlet.triangle_count,
-                reinterpret_cast<const float*>(primitiveVertices.data()),
-                primitiveVertices.size(),
-                sizeof(Vertex)
-            );
+                for (meshopt_Meshlet& meshlet : meshlets)
+                {
+                    meshopt_Bounds bounds = meshopt_computeMeshletBounds(
+                        &meshletVertices[meshlet.vertex_offset],
+                        &meshletTriangles[meshlet.triangle_offset],
+                        meshlet.triangle_count,
+                        reinterpret_cast<const float*>(primitiveVertices.data()),
+                        primitiveVertices.size(),
+                        sizeof(Vertex)
+                    );
 
-            geometry.meshlets.push_back({
-                .meshletBoundingSphere = glm::vec4(
-                    bounds.center[0], bounds.center[1], bounds.center[2],
-                    bounds.radius
-                ),
-                .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
-                .coneCutoff = bounds.cone_cutoff,
+                    geometry.meshlets.push_back({
+                        .meshletBoundingSphere = glm::vec4(
+                            bounds.center[0], bounds.center[1], bounds.center[2],
+                            bounds.radius
+                        ),
+                        .coneApex = glm::vec3(bounds.cone_apex[0], bounds.cone_apex[1], bounds.cone_apex[2]),
+                        .coneCutoff = bounds.cone_cutoff,
 
-                .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
-                .vertexOffset = vertexOffset,
+                        .coneAxis = glm::vec3(bounds.cone_axis[0], bounds.cone_axis[1], bounds.cone_axis[2]),
+                        .vertexOffset = vertexOffset,
 
-                .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
-                .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
-                .meshletVerticesCount = meshlet.vertex_count,
-                .meshletTriangleCount = meshlet.triangle_count,
-            });
-        }
+                        .meshletVerticesOffset = meshletVertexOffset + meshlet.vertex_offset,
+                        .meshletTriangleOffset = meshletTrianglesOffset + meshlet.triangle_offset,
+                        .meshletVerticesCount = meshlet.vertex_count,
+                        .meshletTriangleCount = meshlet.triangle_count,
+                    });
+                }
             }
         }
 
         // Recurse into children
         for (int child : node.children)
         {
-            TraverseNode(model, child, worldTransform, verticesOut, indicesOut);
+            TraverseNode(basePath, model, child, worldTransform, verticesOut, indicesOut);
         }
     }
 
@@ -524,7 +630,7 @@ namespace VanK
     ModelHandle LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = UINT32_MAX, bool FrustumFor2D = false)
     {
         uint64_t firstPrimitive = geometry.primitives.size();
-        
+
         if (!path.empty())
         {
             // Use tinygltf to load the model instead of tinyobjloader
@@ -532,6 +638,26 @@ namespace VanK
             tinygltf::TinyGLTF loader;
             std::string err;
             std::string warn;
+            
+            std::filesystem::path modelPath(path);
+            std::filesystem::path baseDir = std::filesystem::absolute(modelPath).parent_path();
+            std::string baseTexturePath = baseDir.string();
+            if (!baseTexturePath.empty() && baseTexturePath.back() != '/') {
+                baseTexturePath += "/";
+            }
+            std::cout << "Using base texture path: " << baseTexturePath << std::endl;
+
+            loader.SetImageLoader([](tinygltf::Image* image, const int image_idx, std::string* err,
+                                     std::string* warn, int req_width, int req_height,
+                                     const unsigned char* bytes, int size, void* user_data) -> bool
+            {
+                // Skip KTX2
+                if (!image->uri.empty() && image->uri.ends_with(".ktx2"))
+                    return true;
+
+
+                return true;
+            }, nullptr);
 
             bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
 
@@ -550,12 +676,18 @@ namespace VanK
                 throw std::runtime_error("Failed to load glTF model");
             }
 
-            
+            /*for (auto& img : model.images) {
+                if (!img.uri.empty() && img.uri.ends_with(".ktx2")) {
+                    Ref<Texture2D> tex = TextureImporter::LoadTexture2D(baseTexturePath + img.uri);
+                    // store in cache
+                }
+            }*/
+
             for (const auto& allscene : model.scenes)
             {
                 for (int nodeIndex : allscene.nodes)
                 {
-                    TraverseNode(model, nodeIndex, glm::mat4(1.0f), primitiveVertices, primitiveIndices);
+                    TraverseNode(baseTexturePath, model, nodeIndex, glm::mat4(1.0f), primitiveVertices, primitiveIndices);
                 }
             }
         }
@@ -564,8 +696,6 @@ namespace VanK
             primitiveVertices = vertices;
             primitiveIndices = indices;
         }
-
-        
 
         uint64_t primitiveCount = geometry.primitives.size() - firstPrimitive;
         return {firstPrimitive, primitiveCount};
@@ -579,7 +709,7 @@ namespace VanK
         /*scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};*/
         scenesData.frustum = Frustum(scenesData.viewProj);
         scenesData.FrustumCullEnabled = FrustumCullEnabled;
-        
+
         if (frozen)
         {
             if (!frozenDone)
@@ -1187,7 +1317,7 @@ namespace VanK
 
         SubmitModelDraw(bistro, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
         /*SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));*/
-        
+
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
 
@@ -1365,8 +1495,9 @@ namespace VanK
 
         /*EndSubmit();*/
     }
-    
+
     bool done = false;
+
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
@@ -1407,7 +1538,7 @@ namespace VanK
         {
             GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
             /*RenderCommand::StartTimeStamp(cmd, lol);*/
-            
+
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
 
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
@@ -1423,7 +1554,7 @@ namespace VanK
             RenderCommand::DispatchCompute(computePass, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
             RenderCommand::EndComputePass(computePass);
-            
+
             /*RenderCommand::StopTimeStamp(cmd, lol);*/
         }
 
