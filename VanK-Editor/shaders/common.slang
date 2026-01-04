@@ -4,6 +4,8 @@ public struct Vertex
 {
     public float3 position;
     public float2 texcoords;
+    public float4 baseColor;
+    public float transmission;
 }
 
 public struct Meshlet

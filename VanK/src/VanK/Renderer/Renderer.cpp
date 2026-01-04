@@ -164,7 +164,9 @@ namespace VanK
     struct Vertex
     {
         glm::vec3 position{0.0f};
-        glm::vec2 texcoords;
+        glm::vec2 texcoords{0.0f};
+        glm::vec4 baseColor{0.0f};
+        float transmission{0.0f};
     };
 
     struct Meshlet
@@ -283,13 +285,25 @@ namespace VanK
     std::vector<uint32_t> primitiveIndices{};
     std::unordered_map<std::string, Ref<Texture2D>> textureCache;
 
-    Ref<Texture2D> GetPrimitiveTexture(const tinygltf::Material& material, const std::string& basePath,
-                                       std::unordered_map<std::string, Ref<Texture2D>>& textureCache,
-                                       const tinygltf::Model& model)
+    bool IsTransparent(const tinygltf::Material& material)
+    {
+        if (material.alphaMode == "BLEND") return true;
+        if (material.pbrMetallicRoughness.baseColorFactor.size() == 4 && material.pbrMetallicRoughness.baseColorFactor[3] < 1.0f)
+            return true;
+        if (material.extensions.find("KHR_materials_transmission") != material.extensions.end())
+            return true;
+        return false;
+    }
+
+    Ref<Texture2D> GetPrimitiveTexture
+    (
+        const tinygltf::Material& material, const std::string& basePath,
+        std::unordered_map<std::string, 
+        Ref<Texture2D>>& textureCache,
+        const tinygltf::Model& model)
     {
         int imageIndex = -1;
-
-        // 1. Check KHR_materials_pbrSpecularGlossiness extension
+        
         if (material.extensions.find("KHR_materials_pbrSpecularGlossiness") != material.extensions.end())
         {
             auto& ext = material.extensions.at("KHR_materials_pbrSpecularGlossiness");
@@ -300,11 +314,10 @@ namespace VanK
             }
         }
 
-        // 2. Standard PBR base color (fallback)
         if (imageIndex < 0 && material.pbrMetallicRoughness.baseColorTexture.index >= 0)
             imageIndex = model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source;
 
-        // 3. Fallback: emissiveTexture
+
         if (imageIndex < 0 && material.emissiveTexture.index >= 0)
             imageIndex = model.textures[material.emissiveTexture.index].source;
 
@@ -340,13 +353,13 @@ namespace VanK
                     int width, height, channels;
                     unsigned char* pixels = stbi_load_from_memory(buf.data.data() + bv.byteOffset,
                                                                   static_cast<int>(bv.byteLength),
-                                                                  &width, &height, &channels, 3);
+                                                                  &width, &height, &channels, 4);
                     if (!pixels) return nullptr;
 
                     TextureSpecification spec;
                     spec.Width = width;
                     spec.Height = height;
-                    spec.Format = ImageFormat::RGB8;
+                    spec.Format = ImageFormat::RGBA8;
                     spec.GenerateMips = false;
 
                     texHandle = Texture2D::Create(spec, Buffer((void*)pixels, width * height * 3));
@@ -359,9 +372,8 @@ namespace VanK
             return texHandle;
         }
 
-        return nullptr;
+        return Renderer::getWhiteTexture();
     }
-
 
     void TraverseNode(
         std::string& basePath,
@@ -430,6 +442,31 @@ namespace VanK
                         v.texcoords = {0.0f, 0.0f};
                     }
 
+                    glm::vec4 baseColor = glm::vec4(1.0f); // default white
+                    float transmission = 0.0f;
+
+                    if (primitive.material >= 0)
+                    {
+                        const tinygltf::Material& material = model.materials[primitive.material];
+
+                        if (material.pbrMetallicRoughness.baseColorFactor.size() == 4)
+                        {
+                            auto& bc = material.pbrMetallicRoughness.baseColorFactor;
+                            baseColor = glm::vec4(bc[0], bc[1], bc[2], bc[3]);
+                        }
+
+                        // Optional: transmission
+                        if (material.extensions.find("KHR_materials_transmission") != material.extensions.end())
+                        {
+                            auto& ext = material.extensions.at("KHR_materials_transmission");
+                            if (ext.Has("transmissionFactor"))
+                                transmission = static_cast<float>(ext.Get("transmissionFactor").Get<double>());
+                        }
+                    }
+
+                    // Then inside your vertex loop:
+                    v.baseColor = baseColor;
+                    v.transmission = transmission;
 
                     verticesOut.push_back(v);
                 }
@@ -531,12 +568,15 @@ namespace VanK
                     primitiveBounds.radius
                 );
 
-                const tinygltf::Material& material = model.materials[primitive.material];
+                if (primitive.material >= 0)
+                {
+                    const tinygltf::Material& material = model.materials[primitive.material];
 
-                if (Ref<Texture2D> albedoTex = GetPrimitiveTexture(material, basePath, textureCache, model))
-                    prim.materialIndex = albedoTex->GetTextureIndex();
-                else
-                    prim.materialIndex = materialIndex;
+                    if (Ref<Texture2D> albedoTex = GetPrimitiveTexture(material, basePath, textureCache, model))
+                        prim.materialIndex = albedoTex->GetTextureIndex();
+                    else
+                        prim.materialIndex = materialIndex;
+                }
 
                 geometry.primitives.emplace_back(prim);
 
@@ -1059,19 +1099,71 @@ namespace VanK
         uint64_t sceneData;
     };
 
-    static void SubmitModelDraw(
-        const ModelHandle& model,
-        const glm::mat4& transform)
+    static void SubmitModelDraw(const ModelHandle& model, const glm::mat4& transform)
     {
+        struct PrimitiveDraw
+        {
+            uint64_t primitiveId;
+            uint32_t meshletCount;
+            bool transparent;
+        };
+
+        std::vector<PrimitiveDraw> primitiveDraws;
+
+        // First, collect all primitives and determine transparency
         for (uint64_t i = 0; i < model.primitiveCount; ++i)
         {
             uint64_t primitiveId = model.firstPrimitive + i;
             const auto& prim = geometry.primitives[primitiveId];
 
-            meshDraws.emplace_back(MeshDraw{transform, primitiveId});
-            meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{(geometry.primitives[primitiveId].meshletCount + 64 - 1) / 64, 1, 1});
+            // Determine if the primitive is transparent by scanning its vertices
+            bool isTransparent = false;
+
+            // Compute range of vertices covered by this primitive
+            uint32_t vertexStart = UINT32_MAX;
+            uint32_t vertexCount = 0;
+
+            for (uint32_t m = 0; m < prim.meshletCount; ++m)
+            {
+                const auto& meshlet = geometry.meshlets[prim.meshletOffset + m];
+                vertexStart = std::min(vertexStart, meshlet.vertexOffset);
+                vertexCount += meshlet.meshletVerticesCount;
+            }
+
+            // Clamp to valid range just in case
+            if (vertexStart != UINT32_MAX && vertexStart + vertexCount <= geometry.vertices.size())
+            {
+                for (uint32_t vi = vertexStart; vi < vertexStart + vertexCount; ++vi)
+                {
+                    const Vertex& v = geometry.vertices[vi];
+                    if (v.transmission > 0.0f || v.baseColor.a < 1.0f)
+                    {
+                        isTransparent = true;
+                        break;
+                    }
+                }
+            }
+
+            primitiveDraws.push_back({primitiveId, prim.meshletCount, isTransparent});
+        }
+
+        // Sort primitives: opaque first, transparent last
+        std::sort(primitiveDraws.begin(), primitiveDraws.end(),
+                  [](const PrimitiveDraw& a, const PrimitiveDraw& b)
+                  {
+                      return a.transparent < b.transparent; // false (opaque) comes first
+                  });
+
+        // Submit draws in sorted order
+        for (const auto& pd : primitiveDraws)
+        {
+            meshDraws.emplace_back(MeshDraw{transform, pd.primitiveId});
+            meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{
+                (pd.meshletCount + 64 - 1) / 64, 1, 1
+            });
         }
     }
+
 
     void Renderer::Init(Window& window)
     {
@@ -1169,7 +1261,7 @@ namespace VanK
 
         VanKPipelineDepthStencilStateCreateInfo DepthStencilStateCreateInfo
         {
-            .depthTestEnable = true,
+            .depthTestEnable = true, // dsiabled ebcause of transparence textures
             .depthWriteEnable = true,
             .VanKdepthCompareOp = VanK_COMPARE_OP_GREATER
         };
@@ -1285,14 +1377,14 @@ namespace VanK
         };
 
         ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());
-        /*ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");*/
+        //ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
-        /*ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf", pinkTexture->GetTextureIndex());*/
-        /*ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");*/
+        // ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf", pinkTexture->GetTextureIndex());
+        // ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
 
         SubmitModelDraw(bistro, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
-        /*SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));*/
-
+        /*SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f)));*/
+        //SubmitModelDraw(monkey, glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)));
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
 

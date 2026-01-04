@@ -665,11 +665,9 @@ namespace  VanK
         // The rasterizer is used to convert the primitives into fragments, and how it will appear
         vk::PipelineRasterizationStateCreateInfo rasterizer
         {
-            .depthClampEnable = vk::False,
-            .rasterizerDiscardEnable = vk::False,
             .polygonMode = ConvertToVkPolygonMode(pipelineSpecification.RasterizationStateCreateInfo.VanKPolygon),
             .frontFace = ConvertToVkFrontFace(pipelineSpecification.RasterizationStateCreateInfo.VanKFrontFace),
-            .depthBiasEnable = vk::False,
+            .depthBiasEnable = vk::True,
         };
         
         vk::PipelineMultisampleStateCreateInfo multisampling // todo expose this as api

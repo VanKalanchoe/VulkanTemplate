@@ -6,6 +6,7 @@ struct VertexOutput
     float4 color : TEXCOORD0;
     float2 texcoords : TEXCOORD1;
     uint32_t materialIndex : TEXCOORD2;
+    float transmissionFactor : TEXCOORD3;
 };
 
 struct CulledData
@@ -143,13 +144,13 @@ void meshMain
     Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIdx];
     float4x4 viewProj = pushConstant.sceneData->viewProj;
     // to do make is a function for debug only
-    uint hash = meshletIdx * 747796405u + 2891336453u;
-    float3 color = float3
+/*     uint hash = meshletIdx * 747796405u + 2891336453u;
+    float3 hashcolor = float3
     (
         (hash & 0xFF) / 255.0,
         ((hash >> 8) & 0xFF) / 255.0,
         ((hash >> 16) & 0xFF) / 255.0
-    );
+    );  * by color*/
 
     SetMeshOutputCounts(meshlet.meshletVerticesCount, meshlet.meshletTriangleCount);
     
@@ -163,7 +164,8 @@ void meshMain
         float4 clipPos = mul(viewProj, worldPos);
 
         vertices[i].position = clipPos;
-        vertices[i].color = float4(color, 1.0);
+        vertices[i].color = v.baseColor;
+        vertices[i].transmissionFactor = v.transmission;
         vertices[i].texcoords = v.texcoords;
         vertices[i].materialIndex = pushConstant.meshletPrimitive->primitives[primitiveID].materialIndex;
     }
@@ -187,6 +189,14 @@ Sampler2D texture[];
 float4 fragmentMain(VertexOutput vertexInput)
 {
   float4 textureColor = texture[vertexInput.materialIndex].Sample(vertexInput.texcoords);
-  float4 hashColor = float4(vertexInput.color.xyz, 1.0f);
-  return textureColor /* * hashColor */; // make debug only key
+  
+  float4 finalColor = textureColor * vertexInput.color;
+
+  float transmission = saturate(vertexInput.transmissionFactor);
+   float alpha = finalColor.a * (1.0 - transmission);
+
+  if (finalColor.a < 0.5) discard;
+
+/*   float4 hashColor = float4(vertexInput.color.xyz, 1.0f); */
+ return float4(finalColor.rgb, alpha); /* * hashColor */; // make debug only key
 }

@@ -77,6 +77,8 @@ namespace VanK
         static VanKCullModeFlags GetCullMode() { return cullMode; }
         static void SetFrustumCullEnabled(bool frustum) { FrustumCullEnabled = frustum; }
         static bool isFrustumCullEnabled() { return FrustumCullEnabled; }
+        static Ref<Texture2D>& getWhiteTexture() { return whiteTexture; };
+        static Ref<Texture2D>& getPinkTexture() { return pinkTexture; };
         inline static VanKTimestampPass computeCommandTask;
         inline static VanKTimestampPass renderPassMesh;
     private:
