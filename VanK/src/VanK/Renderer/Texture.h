@@ -3,6 +3,7 @@
 #include <ktx.h>
 
 #include "imgui.h"
+#include "glm/glm.hpp"
 
 #include "VanK/Core/core.h"
 #include "VanK/Asset/Asset.h"
@@ -20,12 +21,14 @@ namespace VanK
     
     struct TextureSpecification
     {
-        std::string Name;
+        std::string Name = "";
         uint32_t Width = 1;
         uint32_t Height = 1;
         ImageFormat Format = ImageFormat::SRGBA8;
         bool GenerateMips = true;
         bool FlipTexture = false;
+        
+        glm::vec4 defaultColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
         
         ktxTexture2* ktTexture = nullptr;
     };

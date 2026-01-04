@@ -118,9 +118,19 @@ namespace VanK
             
             // Allocate 4 bytes for 1 pixel RGBA
             Buffer data(spec.Width * spec.Height * 4);
+      
+            uint8_t r = static_cast<uint8_t>(glm::clamp(spec.defaultColor.r, 0.0f, 1.0f) * 255.0f);
+            uint8_t g = static_cast<uint8_t>(glm::clamp(spec.defaultColor.g, 0.0f, 1.0f) * 255.0f);
+            uint8_t b = static_cast<uint8_t>(glm::clamp(spec.defaultColor.b, 0.0f, 1.0f) * 255.0f);
+            uint8_t a = static_cast<uint8_t>(glm::clamp(spec.defaultColor.a, 0.0f, 1.0f) * 255.0f);
             
-            // Set all 4 bytes to 255 (white)
-            memset(data.Data, 255, data.Size);
+            for (uint32_t i = 0; i < spec.Width * spec.Height; i++)
+            {
+                data.Data[i * 4 + 0] = r;
+                data.Data[i * 4 + 1] = g;
+                data.Data[i * 4 + 2] = b;
+                data.Data[i * 4 + 3] = a;
+            }
             
             // Create texture
             Ref<Texture2D> texture = Texture2D::Create(spec, data);

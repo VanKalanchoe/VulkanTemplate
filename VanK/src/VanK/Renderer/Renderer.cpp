@@ -21,6 +21,7 @@
 #include "VanK/Asset/AssetManager.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
+
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -281,76 +282,85 @@ namespace VanK
     std::vector<Vertex> primitiveVertices{};
     std::vector<uint32_t> primitiveIndices{};
     std::unordered_map<std::string, Ref<Texture2D>> textureCache;
+
     Ref<Texture2D> GetPrimitiveTexture(const tinygltf::Material& material, const std::string& basePath,
-                                   std::unordered_map<std::string, Ref<Texture2D>>& textureCache,
-                                   const tinygltf::Model& model)
-{
-    int imageIndex = -1;
+                                       std::unordered_map<std::string, Ref<Texture2D>>& textureCache,
+                                       const tinygltf::Model& model)
+    {
+        int imageIndex = -1;
 
-    // 1. Check KHR_materials_pbrSpecularGlossiness extension
-    if (material.extensions.find("KHR_materials_pbrSpecularGlossiness") != material.extensions.end()) {
-        auto& ext = material.extensions.at("KHR_materials_pbrSpecularGlossiness");
-        if (ext.Has("diffuseTexture")) {
-            int texIndex = ext.Get("diffuseTexture").Get("index").Get<int>();
-            imageIndex = model.textures[texIndex].source;
-        }
-    }
-
-    // 2. Standard PBR base color (fallback)
-    if (imageIndex < 0 && material.pbrMetallicRoughness.baseColorTexture.index >= 0)
-        imageIndex = model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source;
-
-    // 3. Fallback: emissiveTexture
-    if (imageIndex < 0 && material.emissiveTexture.index >= 0)
-        imageIndex = model.textures[material.emissiveTexture.index].source;
-
-    if (imageIndex >= 0) {
-        const tinygltf::Image& img = model.images[imageIndex];
-        Ref<Texture2D> texHandle;
-
-        if (!img.uri.empty()) {
-            // External file
-            auto it = textureCache.find(img.uri);
-            if (it != textureCache.end())
-                texHandle = it->second;
-            else {
-                texHandle = TextureImporter::LoadTexture2D(basePath + img.uri);
-                textureCache[img.uri] = texHandle;
-            }
-        } else if (img.bufferView >= 0) {
-            // Embedded image
-            std::string key = "embedded_" + std::to_string(imageIndex);
-            auto it = textureCache.find(key);
-            if (it != textureCache.end())
-                texHandle = it->second;
-            else {
-                const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
-                const tinygltf::Buffer& buf = model.buffers[bv.buffer];
-
-                int width, height, channels;
-                unsigned char* pixels = stbi_load_from_memory(buf.data.data() + bv.byteOffset,
-                                                              static_cast<int>(bv.byteLength),
-                                                              &width, &height, &channels, 3);
-                if (!pixels) return nullptr;
-
-                TextureSpecification spec;
-                spec.Width = width;
-                spec.Height = height;
-                spec.Format = ImageFormat::RGB8;
-                spec.GenerateMips = false;
-
-                texHandle = Texture2D::Create(spec, Buffer((void*)pixels, width * height * 3));
-                textureCache[key] = texHandle;
-
-                stbi_image_free(pixels);
+        // 1. Check KHR_materials_pbrSpecularGlossiness extension
+        if (material.extensions.find("KHR_materials_pbrSpecularGlossiness") != material.extensions.end())
+        {
+            auto& ext = material.extensions.at("KHR_materials_pbrSpecularGlossiness");
+            if (ext.Has("diffuseTexture"))
+            {
+                int texIndex = ext.Get("diffuseTexture").Get("index").Get<int>();
+                imageIndex = model.textures[texIndex].source;
             }
         }
 
-        return texHandle;
-    }
+        // 2. Standard PBR base color (fallback)
+        if (imageIndex < 0 && material.pbrMetallicRoughness.baseColorTexture.index >= 0)
+            imageIndex = model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source;
 
-    return nullptr;
-}
+        // 3. Fallback: emissiveTexture
+        if (imageIndex < 0 && material.emissiveTexture.index >= 0)
+            imageIndex = model.textures[material.emissiveTexture.index].source;
+
+        if (imageIndex >= 0)
+        {
+            const tinygltf::Image& img = model.images[imageIndex];
+            Ref<Texture2D> texHandle;
+
+            if (!img.uri.empty())
+            {
+                // External file
+                auto it = textureCache.find(img.uri);
+                if (it != textureCache.end())
+                    texHandle = it->second;
+                else
+                {
+                    texHandle = TextureImporter::LoadTexture2D(basePath + img.uri);
+                    textureCache[img.uri] = texHandle;
+                }
+            }
+            else if (img.bufferView >= 0)
+            {
+                // Embedded image
+                std::string key = "embedded_" + std::to_string(imageIndex);
+                auto it = textureCache.find(key);
+                if (it != textureCache.end())
+                    texHandle = it->second;
+                else
+                {
+                    const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
+                    const tinygltf::Buffer& buf = model.buffers[bv.buffer];
+
+                    int width, height, channels;
+                    unsigned char* pixels = stbi_load_from_memory(buf.data.data() + bv.byteOffset,
+                                                                  static_cast<int>(bv.byteLength),
+                                                                  &width, &height, &channels, 3);
+                    if (!pixels) return nullptr;
+
+                    TextureSpecification spec;
+                    spec.Width = width;
+                    spec.Height = height;
+                    spec.Format = ImageFormat::RGB8;
+                    spec.GenerateMips = false;
+
+                    texHandle = Texture2D::Create(spec, Buffer((void*)pixels, width * height * 3));
+                    textureCache[key] = texHandle;
+
+                    stbi_image_free(pixels);
+                }
+            }
+
+            return texHandle;
+        }
+
+        return nullptr;
+    }
 
 
     void TraverseNode(
@@ -359,7 +369,8 @@ namespace VanK
         int nodeIndex,
         const glm::mat4& parentTransform,
         std::vector<Vertex>& verticesOut,
-        std::vector<uint32_t>& indicesOut
+        std::vector<uint32_t>& indicesOut,
+        uint32_t& materialIndex
     )
     {
         const tinygltf::Node& node = model.nodes[nodeIndex];
@@ -412,7 +423,7 @@ namespace VanK
                     {
                         size_t texStride = texCoordBufferView->byteStride ? texCoordBufferView->byteStride : sizeof(float) * 2;
                         const float* texCoord = reinterpret_cast<const float*>(texCoordBuffer->data.data() + texCoordBufferView->byteOffset + texCoordAccessor->byteOffset + i * texStride);
-                        v.texcoords = { texCoord[0], 1.0f - texCoord[1] }; // invert Y
+                        v.texcoords = {texCoord[0], 1.0f - texCoord[1]}; // invert Y
                     }
                     else
                     {
@@ -519,44 +530,13 @@ namespace VanK
                     primitiveBounds.center[2],
                     primitiveBounds.radius
                 );
-                
-               const tinygltf::Material& material = model.materials[primitive.material];
-                /*
-                // Check if the material has a normal map
-                if (material.normalTexture.index >= 0) {
-                    const tinygltf::Texture& tex = model.textures[material.normalTexture.index];
-                    if (tex.source >= 0) {  // tex.source is index into images
-                        const tinygltf::Image& img = model.images[tex.source];
-                        
-                        if (!img.uri.empty() && img.uri.ends_with(".ktx2")) {
-                            Ref<Texture2D> texHandle;
 
-                            // Check cache first
-                            auto it = textureCache.find(img.uri);
-                            if (it != textureCache.end()) {
-                                texHandle = it->second; // reuse
-                            } else {
-                                texHandle = TextureImporter::LoadTexture2D(basePath + img.uri);
-                                textureCache[img.uri] = texHandle; // store in cache
-                            }
-                            prim.materialIndex = texHandle->GetTextureIndex(); // attach to primitive
-                        }
-                    }
-                }*/
-                
-                Ref<Texture2D> albedoTex = GetPrimitiveTexture(material, basePath, textureCache, model);
-                if (albedoTex)
+                const tinygltf::Material& material = model.materials[primitive.material];
+
+                if (Ref<Texture2D> albedoTex = GetPrimitiveTexture(material, basePath, textureCache, model))
                     prim.materialIndex = albedoTex->GetTextureIndex();
-                
-                /*if (materialIndex != UINT32_MAX)
+                else
                     prim.materialIndex = materialIndex;
-                else*/
-                
-
-                // small hack so for 2d frustum still works otherwise i have to disable it idk sounds more expansive or ignore 
-                // but idk if that could cause glitches in the future
-                /*if (FrustumFor2D)
-                    prim.boundingSphere.w += 0.001f;*/
 
                 geometry.primitives.emplace_back(prim);
 
@@ -622,12 +602,12 @@ namespace VanK
         // Recurse into children
         for (int child : node.children)
         {
-            TraverseNode(basePath, model, child, worldTransform, verticesOut, indicesOut);
+            TraverseNode(basePath, model, child, worldTransform, verticesOut, indicesOut, materialIndex);
         }
     }
 
 
-    ModelHandle LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = UINT32_MAX, bool FrustumFor2D = false)
+    ModelHandle LoadMeshModel(std::string path, uint32_t materialIndex = 0, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
     {
         uint64_t firstPrimitive = geometry.primitives.size();
 
@@ -638,11 +618,12 @@ namespace VanK
             tinygltf::TinyGLTF loader;
             std::string err;
             std::string warn;
-            
+
             std::filesystem::path modelPath(path);
             std::filesystem::path baseDir = std::filesystem::absolute(modelPath).parent_path();
             std::string baseTexturePath = baseDir.string();
-            if (!baseTexturePath.empty() && baseTexturePath.back() != '/') {
+            if (!baseTexturePath.empty() && baseTexturePath.back() != '/')
+            {
                 baseTexturePath += "/";
             }
             std::cout << "Using base texture path: " << baseTexturePath << std::endl;
@@ -676,18 +657,11 @@ namespace VanK
                 throw std::runtime_error("Failed to load glTF model");
             }
 
-            /*for (auto& img : model.images) {
-                if (!img.uri.empty() && img.uri.ends_with(".ktx2")) {
-                    Ref<Texture2D> tex = TextureImporter::LoadTexture2D(baseTexturePath + img.uri);
-                    // store in cache
-                }
-            }*/
-
             for (const auto& allscene : model.scenes)
             {
                 for (int nodeIndex : allscene.nodes)
                 {
-                    TraverseNode(baseTexturePath, model, nodeIndex, glm::mat4(1.0f), primitiveVertices, primitiveIndices);
+                    TraverseNode(baseTexturePath, model, nodeIndex, glm::mat4(1.0f), primitiveVertices, primitiveIndices, materialIndex);
                 }
             }
         }
@@ -1283,6 +1257,7 @@ namespace VanK
         WatchShaderFiles(); // has to be last after pipeline creation
 
         whiteTexture = TextureImporter::LoadTexture2D("");
+        pinkTexture = TextureImporter::LoadTexture2D("", {.defaultColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)});
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
 
@@ -1309,10 +1284,10 @@ namespace VanK
             0, 2, 3 // second triangle
         };
 
-        ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf");
+        ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());
         /*ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");*/
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
-        /*ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");*/
+        /*ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf", pinkTexture->GetTextureIndex());*/
         /*ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");*/
 
         SubmitModelDraw(bistro, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
