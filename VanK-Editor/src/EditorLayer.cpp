@@ -329,15 +329,23 @@ namespace VanK
         
         // gpu total time
         RenderCommand::setEnableTimeStamp(true);
-        ImGui::SameLine(); // Continue on the same line
-        auto gpu = RenderCommand::getTimeStampPass();
-        std::cout << std::dec << "begin: " << gpu.begin << " end: " << gpu.end << std::endl;
-        float gpuMs = (gpu.end - gpu.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f;
+        auto gpu = RenderCommand::getGPURenderTime();
+        float gpuMs = static_cast<float>(gpu.end - gpu.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f;
         ImGui::Text("(GPU: %.3f ms)", gpuMs);
+        
+        /*auto gpu2 = Renderer::lol;
+        float gpuMs2 = static_cast<float>(gpu2.end - gpu2.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f;
+        ImGui::Text("(GPU: %.3f ms)", gpuMs2);*/
 
+        for (auto& [profileName, profileTime] : g_GPUProfileResults)
+        {
+            float gpuMsTime = static_cast<float>(profileTime.end - profileTime.begin) * RenderCommand::getTimeStampPeriod() * 1e-6f;
+            ImGui::Text("%s: %.3f ms", profileName.c_str(), gpuMsTime);
+        }
+        
         ImGui::Spacing();
 
-        for (auto& [profileName, profileTime] : VanK::g_ProfileResults)
+        for (auto& [profileName, profileTime] : g_CPUProfileResults)
             ImGui::Text("%s: %.3f ms", profileName.c_str(), profileTime);
         
         ImGui::End();

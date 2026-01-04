@@ -276,7 +276,8 @@ namespace VanK
 
         return localTransform;
     }
-
+    std::vector<Vertex> primitiveVertices{};
+    std::vector<uint32_t> primitiveIndices{};
     void TraverseNode(
         const tinygltf::Model& model,
         int nodeIndex,
@@ -297,6 +298,9 @@ namespace VanK
 
             for (const auto& primitive : mesh.primitives)
             {
+                primitiveVertices.clear();
+                primitiveIndices.clear();
+
                 // Load primitive vertices and indices (similar to your existing code)
                 const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
                 const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
@@ -366,166 +370,8 @@ namespace VanK
 
                     indicesOut.push_back(baseVertex + idx);
                 }
-            }
-        }
-
-        // Recurse into children
-        for (int child : node.children)
-        {
-            TraverseNode(model, child, worldTransform, verticesOut, indicesOut);
-        }
-    }
-
-
-    ModelHandle LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = UINT32_MAX, bool FrustumFor2D = false)
-    {
-        uint64_t firstPrimitive = geometry.primitives.size();
-        std::vector<Vertex> primitiveVertices{};
-        std::vector<uint32_t> primitiveIndices{};
-        if (!path.empty())
-        {
-            // Use tinygltf to load the model instead of tinyobjloader
-            tinygltf::Model model;
-            tinygltf::TinyGLTF loader;
-            std::string err;
-            std::string warn;
-
-            bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
-
-            if (!warn.empty())
-            {
-                std::cout << "glTF warning: " << warn << std::endl;
-            }
-
-            if (!err.empty())
-            {
-                std::cout << "glTF error: " << err << std::endl;
-            }
-
-            if (!ret)
-            {
-                throw std::runtime_error("Failed to load glTF model");
-            }
-
-            primitiveVertices.clear();
-            primitiveIndices.clear();
-
-            for (const auto& scene : model.scenes)
-            {
-                for (int nodeIndex : scene.nodes)
-                {
-                    TraverseNode(model, nodeIndex, glm::mat4(1.0f), primitiveVertices, primitiveIndices);
-                }
-            }
-
-            /*// Process all meshes in the model
-            for (const auto& mesh : model.meshes)
-            {
-                for (const auto& primitive : mesh.primitives)
-                {
-                    // Get indices
-                    const tinygltf::Accessor& indexAccessor = model.accessors[primitive.indices];
-                    const tinygltf::BufferView& indexBufferView = model.bufferViews[indexAccessor.bufferView];
-                    const tinygltf::Buffer& indexBuffer = model.buffers[indexBufferView.buffer];
-
-                    // Get vertex positions
-                    const tinygltf::Accessor& posAccessor = model.accessors[primitive.attributes.at("POSITION")];
-                    const tinygltf::BufferView& posBufferView = model.bufferViews[posAccessor.bufferView];
-                    const tinygltf::Buffer& posBuffer = model.buffers[posBufferView.buffer];
-
-                    // Get texture coordinates if available
-                    bool hasTexCoords = primitive.attributes.find("TEXCOORD_0") != primitive.attributes.end();
-                    const tinygltf::Accessor* texCoordAccessor = nullptr;
-                    const tinygltf::BufferView* texCoordBufferView = nullptr;
-                    const tinygltf::Buffer* texCoordBuffer = nullptr;
-
-                    if (hasTexCoords)
-                    {
-                        texCoordAccessor = &model.accessors[primitive.attributes.at("TEXCOORD_0")];
-                        texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
-                        texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
-                    }
-
-                    uint32_t baseVertex = static_cast<uint32_t>(primitiveVertices.size());
-                    size_t stride = posBufferView.byteStride ? posBufferView.byteStride : sizeof(float) * 3;
-                    const uint8_t* bufferStart = posBuffer.data.data() + posBufferView.byteOffset + posAccessor.byteOffset;
-
-                    for (size_t i = 0; i < posAccessor.count; i++)
-                    {
-                        Vertex vertex{};
-
-                        const float* pos = reinterpret_cast<const float*>(bufferStart + i * stride);
-                        vertex.position = {pos[0], pos[1], pos[2]};
-
-                        if (hasTexCoords)
-                        {
-                            const float* texCoord = reinterpret_cast<const float*>(&texCoordBuffer->data[texCoordBufferView->
-                                byteOffset + texCoordAccessor->byteOffset + i * 8]);
-                            vertex.texcoords = {texCoord[0], texCoord[1]};
-                        }
-                        else
-                        {
-                            vertex.texcoords = {0.0f, 0.0f};
-                        }
-
-                        /*vertex.color = {1.0f, 1.0f, 1.0f, 1.0f};#1#
-
-                        primitiveVertices.push_back(vertex);
-                    }
-
-                    const unsigned char* indexData = &indexBuffer.data[indexBufferView.byteOffset + indexAccessor.byteOffset];
-                    size_t indexCount = indexAccessor.count;
-                    size_t indexStride = 0;
-
-                    // Determine index stride based on component type
-                    if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                    {
-                        indexStride = sizeof(uint16_t);
-                    }
-                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                    {
-                        indexStride = sizeof(uint32_t);
-                    }
-                    else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                    {
-                        indexStride = sizeof(uint8_t);
-                    }
-                    else
-                    {
-                        throw std::runtime_error("Unsupported index component type");
-                    }
-
-                    primitiveIndices.reserve(primitiveIndices.size() + indexCount);
-
-                    for (size_t i = 0; i < indexCount; i++)
-                    {
-                        uint32_t index = 0;
-
-                        if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_SHORT)
-                        {
-                            index = *reinterpret_cast<const uint16_t*>(indexData + i * indexStride);
-                        }
-                        else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_INT)
-                        {
-                            index = *reinterpret_cast<const uint32_t*>(indexData + i * indexStride);
-                        }
-                        else if (indexAccessor.componentType == TINYGLTF_COMPONENT_TYPE_UNSIGNED_BYTE)
-                        {
-                            index = *reinterpret_cast<const uint8_t*>(indexData + i * indexStride);
-                        }
-
-                        primitiveIndices.push_back(baseVertex + index);
-                    }
-                }
-            }*/
-        }
-        else
-        {
-            primitiveVertices = vertices;
-            primitiveIndices = indices;
-        }
-
-        std::vector<uint32_t> remap(primitiveIndices.size());
+                
+                std::vector<uint32_t> remap(primitiveIndices.size());
         size_t vertexCount = meshopt_generateVertexRemap
         (
             remap.data(),
@@ -586,27 +432,27 @@ namespace VanK
             0
         );
 
-        MeshletPrimitive primitive{};
-        primitive.meshletOffset = static_cast<uint32_t>(geometry.meshlets.size());
-        primitive.meshletCount = static_cast<uint32_t>(meshlets.size());
-        primitive.boundingSphere = glm::vec4(
+        MeshletPrimitive prim{};
+        prim.meshletOffset = static_cast<uint32_t>(geometry.meshlets.size());
+        prim.meshletCount = static_cast<uint32_t>(meshlets.size());
+        prim.boundingSphere = glm::vec4(
             primitiveBounds.center[0],
             primitiveBounds.center[1],
             primitiveBounds.center[2],
             primitiveBounds.radius
         );
 
-        if (materialIndex != UINT32_MAX)
-            primitive.materialIndex = materialIndex;
-        else
-            primitive.materialIndex = 0;
+        /*if (materialIndex != UINT32_MAX)
+            prim.materialIndex = materialIndex;
+        else*/
+            prim.materialIndex = 0;
 
         // small hack so for 2d frustum still works otherwise i have to disable it idk sounds more expansive or ignore 
         // but idk if that could cause glitches in the future
-        if (FrustumFor2D)
-            primitive.boundingSphere.w += 0.001f;
+        /*if (FrustumFor2D)
+            prim.boundingSphere.w += 0.001f;*/
 
-        geometry.primitives.emplace_back(primitive);
+        geometry.primitives.emplace_back(prim);
 
         // ------------------------------------------------------------
         // Offsets into global buffers
@@ -664,6 +510,62 @@ namespace VanK
                 .meshletTriangleCount = meshlet.triangle_count,
             });
         }
+            }
+        }
+
+        // Recurse into children
+        for (int child : node.children)
+        {
+            TraverseNode(model, child, worldTransform, verticesOut, indicesOut);
+        }
+    }
+
+
+    ModelHandle LoadMeshModel(std::string path, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, uint32_t materialIndex = UINT32_MAX, bool FrustumFor2D = false)
+    {
+        uint64_t firstPrimitive = geometry.primitives.size();
+        
+        if (!path.empty())
+        {
+            // Use tinygltf to load the model instead of tinyobjloader
+            tinygltf::Model model;
+            tinygltf::TinyGLTF loader;
+            std::string err;
+            std::string warn;
+
+            bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
+
+            if (!warn.empty())
+            {
+                std::cout << "glTF warning: " << warn << std::endl;
+            }
+
+            if (!err.empty())
+            {
+                std::cout << "glTF error: " << err << std::endl;
+            }
+
+            if (!ret)
+            {
+                throw std::runtime_error("Failed to load glTF model");
+            }
+
+            
+            for (const auto& allscene : model.scenes)
+            {
+                for (int nodeIndex : allscene.nodes)
+                {
+                    TraverseNode(model, nodeIndex, glm::mat4(1.0f), primitiveVertices, primitiveIndices);
+                }
+            }
+        }
+        else
+        {
+            primitiveVertices = vertices;
+            primitiveIndices = indices;
+        }
+
+        
 
         uint64_t primitiveCount = geometry.primitives.size() - firstPrimitive;
         return {firstPrimitive, primitiveCount};
@@ -1277,14 +1179,15 @@ namespace VanK
             0, 2, 3 // second triangle
         };
 
-        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf");*/
+        ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf");
         /*ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");*/
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
-        ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        /*ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");*/
         /*ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");*/
 
-        SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
-
+        SubmitModelDraw(bistro, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
+        /*SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));*/
+        
         uint64_t sceneBuffersize = sizeof(SceneDatas);
         sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
 
@@ -1462,7 +1365,8 @@ namespace VanK
 
         /*EndSubmit();*/
     }
-
+    
+    bool done = false;
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
@@ -1473,18 +1377,21 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, sceneBuffer, scene, SceneDatas, 0);
         scene.clear();
 
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, geometry.vertices, Vertex, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, geometry.meshletVertices, uint32_t, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, geometry.meshletTriangles, uint8_t, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, geometry.meshlets, Meshlet, 0);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletPrimitiveBuffer, geometry.primitives, MeshletPrimitive, 0);
+        if (!done)
+        {
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, geometry.vertices, Vertex, 0);
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, geometry.meshletVertices, uint32_t, 0);
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, geometry.meshletTriangles, uint8_t, 0);
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, geometry.meshlets, Meshlet, 0);
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletPrimitiveBuffer, geometry.primitives, MeshletPrimitive, 0);
 
-        //multiple meshes---
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
-        /*meshDraws.clear();*/
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
-        //----------
-
+            //multiple meshes---
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
+            /*meshDraws.clear();*/
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
+            //----------
+            done = true;
+        }
         //quads
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, quadBuffer, quads, QuadData, 0);
 
@@ -1498,6 +1405,9 @@ namespace VanK
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, lineBuffer, lines, LineData, 0);
 
         {
+            GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
+            /*RenderCommand::StartTimeStamp(cmd, lol);*/
+            
             VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
 
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
@@ -1513,9 +1423,12 @@ namespace VanK
             RenderCommand::DispatchCompute(computePass, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
             RenderCommand::EndComputePass(computePass);
+            
+            /*RenderCommand::StopTimeStamp(cmd, lol);*/
         }
 
         {
+            GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
             std::vector<VanKColorTargetInfo> colorAttachments;
             colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
             colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});

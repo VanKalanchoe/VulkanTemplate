@@ -77,6 +77,8 @@ namespace VanK
         static VanKCullModeFlags GetCullMode() { return cullMode; }
         static void SetFrustumCullEnabled(bool frustum) { FrustumCullEnabled = frustum; }
         static bool isFrustumCullEnabled() { return FrustumCullEnabled; }
+        inline static VanKTimestampPass computeCommandTask;
+        inline static VanKTimestampPass renderPassMesh;
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,

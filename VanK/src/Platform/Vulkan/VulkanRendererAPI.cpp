@@ -911,11 +911,13 @@ namespace  VanK
         commandBuffers[frameIndex].resetQueryPool(queryPoolStatistics, 0, 1);
         commandBuffers[frameIndex].beginQuery(queryPoolStatistics, 0);
         
-        //timestamp
-        commandBuffers[frameIndex].resetQueryPool(queryPoolTimeStep, 0, 2);
-        commandBuffers[frameIndex].writeTimestamp2(vk::PipelineStageFlagBits2::eTopOfPipe, queryPoolTimeStep, 0);
-        
         auto cmd = new VanKCommandBuffer_T{&commandBuffers[frameIndex]};
+        
+        //timestamp
+        timeStampIndex = 0;
+        commandBuffers[frameIndex].resetQueryPool(queryPoolTimeStep, 0, maxTimeStamp);
+        timestamp.queryIndex = 0;
+        StartTimeStamp(cmd, timestamp);
         
         return cmd;
     }
@@ -926,7 +928,7 @@ namespace  VanK
         Unwrap(cmd).endQuery(queryPoolStatistics, 0);
         
         //timestamp
-        Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eBottomOfPipe, queryPoolTimeStep, 1);
+        StopTimeStamp(cmd, timestamp);
         
         Unwrap(cmd).end();
     }
@@ -2479,7 +2481,7 @@ namespace  VanK
             vk::QueryPoolCreateInfo poolInfo
            {
                .queryType = vk::QueryType::eTimestamp,
-               .queryCount = 2,
+               .queryCount = maxTimeStamp,
            };
 
             queryPoolTimeStep = vk::raii::QueryPool(device, poolInfo);
@@ -2490,10 +2492,10 @@ namespace  VanK
     void VulkanRendererAPI::createQueryBuffer()
     {
         // 7 pipelineStatistics, 1 querycount
-        queryStatisticsBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 7 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
+        queryStatisticsBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 1 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
         
         // timestamp, 2 quercount
-        queryTimeStepBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 1 * 2, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
+        queryTimeStepBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 1 * maxTimeStamp, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
     }
 
     void VulkanRendererAPI::downloadQueryStatisticsBuffer()
@@ -2533,11 +2535,29 @@ namespace  VanK
         }
     }
     
+    void VulkanRendererAPI::StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass)
+    {
+        uint32_t base = timeStampIndex;
+        
+        timeStampIndex += 2;
+        
+        Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, queryPoolTimeStep, base + 0);
+        
+        pass.queryIndex = base;
+        
+        activeTimestamps.emplace_back(&pass);
+    }
+    
+    void VulkanRendererAPI::StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass)
+    {
+       Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, queryPoolTimeStep, pass.queryIndex + 1);
+    }
+    
     void VulkanRendererAPI::downloadQueryTimeStampBuffer() // todo use vankcommandbuffer because its in a pass anyway
     {
         auto cmd = utils::beginSingleTimeCommands(device, commandPool);
         
-        cmd->copyQueryPoolResults(queryPoolTimeStep, 0, 2, queryTimeStepBuffer.buffer, 0, sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
+        cmd->copyQueryPoolResults(queryPoolTimeStep, 0, timeStampIndex, queryTimeStepBuffer.buffer, 0, sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
         
         utils::endSingleTimeCommands(*cmd, queue);
         
@@ -2549,8 +2569,16 @@ namespace  VanK
             
             uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
             
-            timestamp.begin = stats[0];
-            timestamp.end = stats[1];
+            /*timestamp.begin = stats[timestamp.queryIndex + 0];
+            timestamp.end = stats[timestamp.queryIndex + 1];*/
+            
+            for (auto* passPtr : activeTimestamps)
+            {
+                passPtr->begin = stats[passPtr->queryIndex];
+                passPtr->end   = stats[passPtr->queryIndex + 1];
+            }
+            
+            activeTimestamps.clear();
 
             queryTimeStepBuffer.buffer.getAllocation().unmap();
         }

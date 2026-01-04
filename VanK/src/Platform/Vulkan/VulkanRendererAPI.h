@@ -1003,11 +1003,13 @@ namespace VanK
         static bool IsInitialized() { return s_instance != nullptr; }
         int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) override;
         uint32_t GetCurrentFrameIndex() override { return frameIndex; }
-        void setEnableTimeStamp(bool temp) { isTimeStapEnabled = temp; }
+        void setEnableTimeStamp(bool temp) override { isTimeStapEnabled = temp; }
         bool getEnableTimeStamp() override { return isTimeStapEnabled; }
-        VanKTimestampPass getTimeStampPass() override { return timestamp; }
+        VanKTimestampPass getGPURenderTime() override { return timestamp; }
         float getTimeStampPeriod() const override { return physicalDevice.getProperties2().properties.limits.timestampPeriod; };
         VanKPipelineStatistics getPipelineStatistics() override { return pipeStats; };
+        void StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) override;
+        void StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) override;
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -1089,13 +1091,17 @@ namespace VanK
         //statistic
         vk::raii::QueryPool queryPoolStatistics = nullptr;
         utils::Buffer queryStatisticsBuffer;
+        VanKPipelineStatistics pipeStats;
         
         //timestep
         vk::raii::QueryPool queryPoolTimeStep = nullptr;
         utils::Buffer queryTimeStepBuffer;
         bool isTimeStapEnabled = false;
         VanKTimestampPass timestamp;
-        VanKPipelineStatistics pipeStats;
+        std::vector<VanKTimestampPass*> activeTimestamps;
+        
+        uint32_t timeStampIndex = 0;
+        uint32_t maxTimeStamp = 128;
 
         std::vector<const char*> requiredDeviceExtension =
         {
@@ -1184,7 +1190,7 @@ namespace VanK
 
         void createSyncObjects();
 
-        //statisitcs
+        //statisitcs / timestamps ----
         void createQueryPool();
         
         void createQueryBuffer();
@@ -1192,7 +1198,8 @@ namespace VanK
         void downloadQueryStatisticsBuffer();
         
         void downloadQueryTimeStampBuffer();
-
+        //------
+        
         static uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
 
         static vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);

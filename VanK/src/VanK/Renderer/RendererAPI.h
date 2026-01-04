@@ -18,7 +18,7 @@ namespace VanK
     
     struct VanKTimestampPass 
     {
-        uint64_t queryIndex;
+        uint32_t queryIndex;
         uint64_t begin;         // GPU timestamp for start
         uint64_t end;           // GPU timestamp for end
     };
@@ -489,9 +489,11 @@ namespace VanK
         virtual void waitForGraphicsQueueIdle() = 0;
         virtual void setEnableTimeStamp(bool temp) = 0;
         virtual bool getEnableTimeStamp() = 0;
-        virtual VanKTimestampPass getTimeStampPass() = 0;
+        virtual VanKTimestampPass getGPURenderTime() = 0;
         virtual VanKPipelineStatistics getPipelineStatistics() = 0;
         virtual float getTimeStampPeriod() const = 0;
+        virtual void StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) = 0;
+        virtual void StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) = 0;
         //---------
         
         static RenderAPIType GetAPI() { return s_API; }

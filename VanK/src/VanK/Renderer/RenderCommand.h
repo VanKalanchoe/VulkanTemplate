@@ -239,9 +239,9 @@ namespace VanK
             return s_RendererAPI ? s_RendererAPI->getEnableTimeStamp() : false;
         }
         
-        static VanKTimestampPass getTimeStampPass()
+        static VanKTimestampPass getGPURenderTime()
         {
-            return s_RendererAPI ? s_RendererAPI->getTimeStampPass() : VanKTimestampPass();
+            return s_RendererAPI ? s_RendererAPI->getGPURenderTime() : VanKTimestampPass();
         }
         
         static VanKPipelineStatistics getPipelineStatistics()
@@ -252,6 +252,16 @@ namespace VanK
         static float getTimeStampPeriod()
         {
             return s_RendererAPI ? s_RendererAPI->getTimeStampPeriod() : 0.0f;
+        }
+        
+        static void StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass)
+        {
+            if (s_RendererAPI) s_RendererAPI->StartTimeStamp(cmd, pass);
+        }
+        
+        static void StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass)
+        {
+            if (s_RendererAPI) s_RendererAPI->StopTimeStamp(cmd, pass);
         }
         
         static void SetConfig(const RendererAPI::Config& cfg)
