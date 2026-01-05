@@ -198,6 +198,10 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 
     // Normal map
     float3 N = normalize(vertexInput.normals);
+   /*  float3 T = normalize(vertexInput.tangents.xyz);
+    float3 B = cross(N, T) * vertexInput.tangents.w; // handedness
+    float3x3 TBN = float3x3(T, B, N); // tangent-space to world-space
+     */
     float3 nmap = float3(0, 0, 1);
     if (mats.normalTexture >= 0)
         nmap = texture[mats.normalTexture].Sample(vertexInput.texcoords).rgb * 2 - 1; // convert from [0,1] → [-1,1]
@@ -221,7 +225,7 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     
     //debug visualisatzion
     /* finalColor.rgb = mats.emissiveFactor; */
-    /* finalColor.rgb = N * 0.5 + 0.5; */
+    finalColor.rgb = N * 0.5 + 0.5;
 
     // Decide discard based on alpha only
     if (mats.transparent && mats.transmissionFactor == 0.0 && finalColor.a < 0.5)
