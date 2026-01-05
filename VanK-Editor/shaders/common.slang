@@ -4,6 +4,8 @@ public struct Vertex
 {
     public float3 position;
     public float2 texcoords;
+    public float3 normals;
+    public float4 tangents;
 }
 
 public struct Meshlet

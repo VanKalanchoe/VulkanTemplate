@@ -3,8 +3,10 @@ import common;
 struct VertexOutput
 {
     float4 position : SV_Position;
-    float2 texcoords : TEXCOORD1;
-    uint32_t materialIndex : TEXCOORD2;
+    float2 texcoords : TEXCOORD0;
+    float3 normals : TEXCOORD1;
+    float4 tangents : TEXCOORD2;
+    uint32_t materialIndex : TEXCOORD3;
 };
 
 struct CulledData
@@ -161,9 +163,11 @@ void meshMain
         
         float4 worldPos = mul(pushConstant.meshDrawBuffer->meshDraw[drawID].modelMatrix, float4(v.position, 1.0));
         float4 clipPos = mul(viewProj, worldPos);
-
+        
         vertices[i].position = clipPos;
         vertices[i].texcoords = v.texcoords;
+        vertices[i].normals = v.normals;
+        vertices[i].tangents = v.tangents;
         vertices[i].materialIndex = pushConstant.meshletPrimitive->primitives[primitiveID].materialIndex;
     }
 
@@ -193,9 +197,12 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
         albedo *= texture[mats.albedoTexture].Sample(vertexInput.texcoords);
 
     // Normal map
+    float3 N = normalize(vertexInput.normals);
     float3 nmap = float3(0, 0, 1);
     if (mats.normalTexture >= 0)
-        nmap = texture[mats.normalTexture].Sample(vertexInput.texcoords).rgb * 2 - 1;
+        nmap = texture[mats.normalTexture].Sample(vertexInput.texcoords).rgb * 2 - 1; // convert from [0,1] → [-1,1]
+
+    /* N = normalize(mul(TBN, nmap)); */
 
     // Specular + glossiness
     float4 specgloss = mats.specularFacto;
@@ -210,12 +217,14 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     // Final color //srgb albedo
     float4 finalColor;
     finalColor.rgb = albedo.rgb + emissive;
-    finalColor.a   = albedo.a; 
+    finalColor.a   = albedo.a;
     
+    //debug visualisatzion
     /* finalColor.rgb = mats.emissiveFactor; */
+    /* finalColor.rgb = N * 0.5 + 0.5; */
 
     // Decide discard based on alpha only
-    if (mats.transparent  && mats.transmissionFactor == 0.0 && finalColor.a < 0.5)
+    if (mats.transparent && mats.transmissionFactor == 0.0 && finalColor.a < 0.5)
         discard;
 
     // Leave alpha untouched; lighting will handle transmission

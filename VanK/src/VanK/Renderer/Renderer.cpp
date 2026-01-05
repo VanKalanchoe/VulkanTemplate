@@ -26,9 +26,9 @@ namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
     static std::atomic<bool> s_IsPipelineReloadFinished = false;
-    bool IsShaderReloadFinished = false;
-    std::string changedFile;
-    Timer ReloadTimer;
+    static bool IsShaderReloadFinished = false;
+    static std::string changedFile;
+    static Timer ReloadTimer;
 
     struct Renderer3DData
     {
@@ -151,9 +151,9 @@ namespace VanK
         bool FrustumCullEnabled{true};
     };
 
-    std::vector<SceneDatas> scene;
-    SceneDatas scenesData{};
-    SceneDatas frozenSceneData{};
+    static std::vector<SceneDatas> scene;
+    static SceneDatas scenesData{};
+    static SceneDatas frozenSceneData{};
 
     struct CulledData
     {
@@ -166,6 +166,8 @@ namespace VanK
     {
         glm::vec3 position{0.0f};
         glm::vec2 texcoords{0.0f};
+        glm::vec3 normals{0.0f};
+        glm::vec4 tangents{0.0f};
     };
 
     struct Meshlet
@@ -210,7 +212,7 @@ namespace VanK
         float transmissionFactor{0}; // 0 = opaque, 1 = full transparent
     };
 
-    std::vector<Material> materials;
+    static std::vector<Material> materials;
 
     struct ModelHandle
     {
@@ -231,7 +233,7 @@ namespace VanK
         uint32_t groupCountZ;
     };
 
-    std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
+    static std::vector<VanKDrawMeshTasksIndirectCommand> meshTasks;
 
     struct MeshDraw
     {
@@ -240,7 +242,7 @@ namespace VanK
         uint64_t primitiveID;
     };
 
-    std::vector<MeshDraw> meshDraws;
+    static std::vector<MeshDraw> meshDraws;
 
     struct Geometry
     {
@@ -252,9 +254,9 @@ namespace VanK
         std::vector<MeshletPrimitive> primitives{};
     };
 
-    Geometry geometry;
+    static Geometry geometry;
 
-    glm::mat4 GetNodeTransform(const tinygltf::Node& node)
+    static glm::mat4 GetNodeTransform(const tinygltf::Node& node)
     {
         glm::mat4 localTransform(1.0f);
 
@@ -284,11 +286,11 @@ namespace VanK
         return localTransform;
     }
 
-    std::vector<Vertex> primitiveVertices{};
-    std::vector<uint32_t> primitiveIndices{};
-    std::unordered_map<std::string, Ref<Texture2D>> textureCache;
+    static std::vector<Vertex> primitiveVertices{};
+    static std::vector<uint32_t> primitiveIndices{};
+    static std::unordered_map<std::string, Ref<Texture2D>> textureCache;
 
-    Ref<Texture2D> LoadTextureFromImage
+    static Ref<Texture2D> LoadTextureFromImage
     (
         int imageIndex,
         const std::string& basePath,
@@ -348,7 +350,7 @@ namespace VanK
         return nullptr;
     }
 
-    uint32_t BuildMaterial(
+    static uint32_t BuildMaterial(
         const tinygltf::Material& gltfMat,
         const std::string& basePath,
         const tinygltf::Model& model)
@@ -489,7 +491,7 @@ namespace VanK
     }
 
 
-    void TraverseNode(
+    static void TraverseNode(
         std::string& basePath,
         const tinygltf::Model& model,
         int nodeIndex,
@@ -536,6 +538,30 @@ namespace VanK
                     texCoordBufferView = &model.bufferViews[texCoordAccessor->bufferView];
                     texCoordBuffer = &model.buffers[texCoordBufferView->buffer];
                 }
+                
+                bool hasNormals = primitive.attributes.contains("NORMAL");
+                const tinygltf::Accessor* normalAccessor = nullptr;
+                const tinygltf::BufferView* normalBufferView = nullptr;
+                const tinygltf::Buffer* normalBuffer = nullptr;
+
+                if (hasNormals)
+                {
+                    normalAccessor = &model.accessors[primitive.attributes.at("NORMAL")];
+                    normalBufferView = &model.bufferViews[normalAccessor->bufferView];
+                    normalBuffer = &model.buffers[normalBufferView->buffer];
+                }
+                
+                bool hasTangent = primitive.attributes.contains("TANGENT");
+                const tinygltf::Accessor* tangentAccessor = nullptr;
+                const tinygltf::BufferView* tangentBufferView = nullptr;
+                const tinygltf::Buffer* tangentBuffer = nullptr;
+
+                if (hasTangent)
+                {
+                    tangentAccessor = &model.accessors[primitive.attributes.at("TANGENT")];
+                    tangentBufferView = &model.bufferViews[tangentAccessor->bufferView];
+                    tangentBuffer = &model.buffers[tangentBufferView->buffer];
+                }
 
                 for (size_t i = 0; i < posAccessor.count; i++)
                 {
@@ -555,7 +581,48 @@ namespace VanK
                     {
                         v.texcoords = {0.0f, 0.0f};
                     }
+                    
+                    if (hasNormals)
+                    {
+                        size_t normalStride =
+                            normalBufferView->byteStride
+                                ? normalBufferView->byteStride
+                                : sizeof(float) * 3;
 
+                        const float* n = reinterpret_cast<const float*>(
+                            normalBuffer->data.data() +
+                            normalBufferView->byteOffset +
+                            normalAccessor->byteOffset +
+                            i * normalStride
+                        );
+                        
+                        glm::vec3 localNormal(n[0], n[1], n[2]);
+                        glm::mat3 normalMatrix = glm::transpose(glm::inverse(glm::mat3(worldTransform)));
+
+                        v.normals = normalMatrix * localNormal;
+                    }
+                    else
+                    {
+                        v.normals = glm::vec3(0.0f, 0.0f, 1.0f); // fallback
+                    }
+                    
+                    if (hasTangent)
+                    {
+                        size_t tangentStride = tangentBufferView->byteStride ? tangentBufferView->byteStride : sizeof(float) * 4;
+                        const float* t = reinterpret_cast<const float*>(
+                            tangentBuffer->data.data() + tangentBufferView->byteOffset + tangentAccessor->byteOffset + i * tangentStride
+                        );
+
+                        // Transform only rotation/scale (ignore translation)
+                        glm::vec3 worldTangent = glm::mat3(worldTransform) * glm::vec3(t[0], t[1], t[2]);
+
+                        v.tangents = glm::vec4(worldTangent, t[3]); // keep w as handedness
+                    }
+                    else
+                    {
+                        v.tangents = glm::vec4(1, 0, 0, 1); // fallback
+                    }
+                    
                     verticesOut.push_back(v);
                 }
 
@@ -739,7 +806,7 @@ namespace VanK
     }
 
 
-    ModelHandle LoadMeshModel(std::string path, uint32_t materialIndex = 0, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
+    static ModelHandle LoadMeshModel(std::string path, uint32_t materialIndex = 0, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
     {
         uint64_t firstPrimitive = geometry.primitives.size();
 
@@ -910,7 +977,7 @@ namespace VanK
         int EntityID;
     };
 
-    std::vector<QuadData> quads;
+    static std::vector<QuadData> quads;
 
     void Renderer::DrawQuad(const glm::mat4& transform, const glm::vec4& color, int entityID)
     {
@@ -972,7 +1039,7 @@ namespace VanK
         int EntityID;
     };
 
-    std::vector<CircleData> circles;
+    static std::vector<CircleData> circles;
 
     void Renderer::DrawCircle(const glm::mat4& transform, const glm::vec4& color, float thickness /*= 1.0f*/, float fade /*= 0.005f*/, int entityID /*= -1*/)
     {
@@ -1010,7 +1077,7 @@ namespace VanK
         int EntityID;
     };
 
-    std::vector<TextData> texts;
+    static std::vector<TextData> texts;
 
     void Renderer::DrawString(const std::string& string, Ref<Font> font, const glm::mat4& transform, const TextParams& textParams, int entityID)
     {
@@ -1137,7 +1204,7 @@ namespace VanK
         int EntityID;
     };
 
-    std::vector<LineData> lines;
+    static std::vector<LineData> lines;
 
     void Renderer::DrawLine(const glm::vec3& p0, const glm::vec3& p1, const glm::vec4& color, int entityID)
     {
@@ -1646,7 +1713,7 @@ namespace VanK
         /*EndSubmit();*/
     }
 
-    bool done = false;
+    static bool done = false;
 
     void Renderer::DrawMeshShader()
     {
