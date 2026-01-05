@@ -26,6 +26,7 @@ struct PushConstant
     MeshletData* meshletBuffer;
     MeshletPrimitiveData* meshletPrimitive;
     MeshDrawData* meshDrawBuffer;
+    MaterialData* materialBuffer;
 };
 
 const static int32_t TASK_SHADER_DISPATCH_X = 64;
@@ -186,17 +187,21 @@ void meshMain
 Sampler2D texture[];
 
 [shader("pixel")]
-float4 fragmentMain(VertexOutput vertexInput)
+float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 {
-  float4 textureColor = texture[vertexInput.materialIndex].Sample(vertexInput.texcoords);
-  
-  float4 finalColor = textureColor * vertexInput.color;
+    Material mats = pushConstant.materialBuffer->materials[vertexInput.materialIndex];
 
-  float transmission = saturate(vertexInput.transmissionFactor);
-   float alpha = finalColor.a * (1.0 - transmission);
+    float4 textureColor = texture[mats.albedoTexture].Sample(vertexInput.texcoords);
 
-  if (finalColor.a < 0.5) discard;
+    float4 finalColor = textureColor * vertexInput.color;
+
+    float transmission = saturate(vertexInput.transmissionFactor);
+
+    float alpha = finalColor.a * (1.0 - transmission);
+
+    if (mats.transparent && finalColor.a < 0.5)
+        discard;
 
 /*   float4 hashColor = float4(vertexInput.color.xyz, 1.0f); */
- return float4(finalColor.rgb, alpha); /* * hashColor */; // make debug only key
+    return float4(finalColor.rgb, alpha); /* * hashColor */; // make debug only key
 }

@@ -47,6 +47,7 @@ namespace VanK
         uint64_t meshletBuffer;
         uint64_t meshletPrimitives;
         uint64_t meshDraws;
+        uint64_t materialBuffer;
     };
 
     struct Transform
@@ -195,24 +196,21 @@ namespace VanK
         glm::vec4 boundingSphere{};
     };
 
+    struct Material
+    {
+        uint32_t albedoTexture{0};
+        uint32_t normalTexture{0};
+        uint32_t specularTexture{0};
+        uint32_t emissiveTexture{0};
+        bool transparent{false};
+    };
+
+    std::vector<Material> materials;
+
     struct ModelHandle
     {
         uint64_t firstPrimitive;
         uint64_t primitiveCount;
-    };
-
-    struct ExtractedMeshletModel
-    {
-        std::string name{};
-        bool bSuccessfullyLoaded{false};
-
-        /*std::vector<Vertex> vertices{};
-        std::vector<uint32_t> meshletVertices{};
-        std::vector<uint8_t> meshletTriangles{};
-        std::vector<Meshlet> meshlets{};*/
-
-        /*MeshletPrimitive primitive{};*/
-        Transform transform{};
     };
 
     struct meshTasksSubmitPushConstant
@@ -295,84 +293,158 @@ namespace VanK
         return false;
     }
 
-    Ref<Texture2D> GetPrimitiveTexture
+    Ref<Texture2D> LoadTextureFromImage
     (
-        const tinygltf::Material& material, const std::string& basePath,
-        std::unordered_map<std::string, 
-        Ref<Texture2D>>& textureCache,
-        const tinygltf::Model& model)
+        int imageIndex,
+        const std::string& basePath,
+        const tinygltf::Model& model,
+        bool generateMips = false
+    )
     {
-        int imageIndex = -1;
+        if (imageIndex < 0)
+            return nullptr;
+
+        const tinygltf::Image& img = model.images[imageIndex];
+        std::string key = img.uri.empty() ? "embedded_" + std::to_string(imageIndex) : img.uri;
+
+        auto it = textureCache.find(key);
+        if (it != textureCache.end())
+            return it->second;
         
-        if (material.extensions.find("KHR_materials_pbrSpecularGlossiness") != material.extensions.end())
+        if (!img.uri.empty())
         {
-            auto& ext = material.extensions.at("KHR_materials_pbrSpecularGlossiness");
+            Ref<Texture2D> tex = TextureImporter::LoadTexture2D(basePath + img.uri, {.GenerateMips = generateMips});
+            textureCache[key] = tex;
+            return tex;
+        }
+        
+        if (img.bufferView >= 0)
+        {
+            const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
+            const tinygltf::Buffer& buf = model.buffers[bv.buffer];
+
+            int w = 0, h = 0, c = 0;
+            
+            unsigned char* pixels = stbi_load_from_memory
+            (
+                buf.data.data() + bv.byteOffset,
+                static_cast<int>(bv.byteLength),
+                &w, &h, &c, 4
+            );
+
+            if (!pixels) return nullptr;
+
+            TextureSpecification spec{};
+            spec.Width = w;
+            spec.Height = h;
+            spec.Format = ImageFormat::RGBA8;
+            spec.GenerateMips = generateMips;
+
+            Ref<Texture2D> tex = Texture2D::Create(
+                spec,
+                Buffer(pixels, w * h * 4)
+            );
+
+            stbi_image_free(pixels);
+            textureCache[key] = tex;
+            return tex;
+        }
+
+        return nullptr;
+    }
+
+    uint32_t BuildMaterial
+    (
+        const tinygltf::Material& gltfMat,
+        const std::string& basePath,
+        const tinygltf::Model& model
+    )
+    {
+        Material mat{};
+
+        // -----------------------------
+        // ALBEDO
+        // -----------------------------
+        int albedoImage = -1;
+
+        // Specular-Glossiness workflow has priority
+        if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness"))
+        {
+            const auto& ext = gltfMat.extensions.at("KHR_materials_pbrSpecularGlossiness");
             if (ext.Has("diffuseTexture"))
             {
                 int texIndex = ext.Get("diffuseTexture").Get("index").Get<int>();
-                imageIndex = model.textures[texIndex].source;
+                albedoImage = model.textures[texIndex].source;
             }
         }
 
-        if (imageIndex < 0 && material.pbrMetallicRoughness.baseColorTexture.index >= 0)
-            imageIndex = model.textures[material.pbrMetallicRoughness.baseColorTexture.index].source;
-
-
-        if (imageIndex < 0 && material.emissiveTexture.index >= 0)
-            imageIndex = model.textures[material.emissiveTexture.index].source;
-
-        if (imageIndex >= 0)
+        // Metallic-Roughness fallback
+        else if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
         {
-            const tinygltf::Image& img = model.images[imageIndex];
-            Ref<Texture2D> texHandle;
-
-            if (!img.uri.empty())
-            {
-                // External file
-                auto it = textureCache.find(img.uri);
-                if (it != textureCache.end())
-                    texHandle = it->second;
-                else
-                {
-                    texHandle = TextureImporter::LoadTexture2D(basePath + img.uri);
-                    textureCache[img.uri] = texHandle;
-                }
-            }
-            else if (img.bufferView >= 0)
-            {
-                // Embedded image
-                std::string key = "embedded_" + std::to_string(imageIndex);
-                auto it = textureCache.find(key);
-                if (it != textureCache.end())
-                    texHandle = it->second;
-                else
-                {
-                    const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
-                    const tinygltf::Buffer& buf = model.buffers[bv.buffer];
-
-                    int width, height, channels;
-                    unsigned char* pixels = stbi_load_from_memory(buf.data.data() + bv.byteOffset,
-                                                                  static_cast<int>(bv.byteLength),
-                                                                  &width, &height, &channels, 4);
-                    if (!pixels) return nullptr;
-
-                    TextureSpecification spec;
-                    spec.Width = width;
-                    spec.Height = height;
-                    spec.Format = ImageFormat::RGBA8;
-                    spec.GenerateMips = false;
-
-                    texHandle = Texture2D::Create(spec, Buffer((void*)pixels, width * height * 3));
-                    textureCache[key] = texHandle;
-
-                    stbi_image_free(pixels);
-                }
-            }
-
-            return texHandle;
+            int texIndex = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
+            albedoImage = model.textures[texIndex].source;
         }
 
-        return Renderer::getWhiteTexture();
+        if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, true))
+            mat.albedoTexture = t->GetTextureIndex();
+        else
+            mat.albedoTexture = Renderer::getWhiteTexture()->GetTextureIndex();
+
+
+        // -----------------------------
+        // NORMAL
+        // -----------------------------
+        if (gltfMat.normalTexture.index >= 0)
+        {
+            int texIndex = gltfMat.normalTexture.index;
+            int imgIndex = model.textures[texIndex].source;
+            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
+                mat.normalTexture = t->GetTextureIndex();
+        }
+        else
+        {
+            mat.normalTexture = Renderer::getPinkTexture()->GetTextureIndex();
+        }
+
+        // -----------------------------
+        // SPECULAR + GLOSSINESS
+        // -----------------------------
+        if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness"))
+        {
+            const auto& ext = gltfMat.extensions.at("KHR_materials_pbrSpecularGlossiness");
+            if (ext.Has("specularGlossinessTexture"))
+            {
+                int texIndex = ext.Get("specularGlossinessTexture").Get("index").Get<int>();
+                int imgIndex = model.textures[texIndex].source;
+                if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
+                    mat.specularTexture = t->GetTextureIndex();
+            }
+        }
+
+        // --------
+        // ---------------------
+        // EMISSIVE
+        // -----------------------------
+        if (gltfMat.emissiveTexture.index >= 0)
+        {
+            int texIndex = gltfMat.emissiveTexture.index;
+            int imgIndex = model.textures[texIndex].source;
+            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
+                mat.emissiveTexture = t->GetTextureIndex();
+        }
+
+        // -----------------------------
+        // TRANSPARENCY
+        // -----------------------------
+        mat.transparent =
+            gltfMat.alphaMode == "BLEND" ||
+            (gltfMat.pbrMetallicRoughness.baseColorFactor.size() == 4 &&
+                gltfMat.pbrMetallicRoughness.baseColorFactor[3] < 1.0) ||
+            gltfMat.extensions.contains("KHR_materials_transmission");
+
+        materials.push_back(mat);
+        
+        return static_cast<uint32_t>(materials.size() - 1);
     }
 
     void TraverseNode(
@@ -570,12 +642,16 @@ namespace VanK
 
                 if (primitive.material >= 0)
                 {
-                    const tinygltf::Material& material = model.materials[primitive.material];
-
-                    if (Ref<Texture2D> albedoTex = GetPrimitiveTexture(material, basePath, textureCache, model))
-                        prim.materialIndex = albedoTex->GetTextureIndex();
-                    else
-                        prim.materialIndex = materialIndex;
+                    prim.materialIndex = BuildMaterial
+                    (
+                        model.materials[primitive.material],
+                        basePath,
+                        model
+                    );
+                }
+                else
+                {
+                    prim.materialIndex = materialIndex;
                 }
 
                 geometry.primitives.emplace_back(prim);
@@ -1418,6 +1494,9 @@ namespace VanK
         uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10000;
         meshDrawBuffer.reset(StorageBuffer::Create(meshDrawBuffersize));
 
+        uint64_t materialBuffersize = sizeof(Material) * 10000;
+        materialBuffer.reset(StorageBuffer::Create(materialBuffersize));
+
         uint64_t quadBuffersize = sizeof(QuadData) * 10;
         quadBuffer.reset(StorageBuffer::Create(quadBuffersize));
 
@@ -1431,7 +1510,7 @@ namespace VanK
         lineBuffer.reset(StorageBuffer::Create(lineBuffersize));
 
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize +
-            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + quadBuffersize + circleBuffersize + textBuffersize +
+            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + materialBuffersize + quadBuffersize + circleBuffersize + textBuffersize +
             lineBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
     }
@@ -1466,9 +1545,11 @@ namespace VanK
 
         meshTaskSubmitBuffer.reset();
 
+        meshletPrimitiveBuffer.reset();
+
         meshDrawBuffer.reset();
 
-        meshletPrimitiveBuffer.reset();
+        materialBuffer.reset();
 
         quadBuffer.reset();
 
@@ -1582,6 +1663,7 @@ namespace VanK
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, geometry.meshletTriangles, uint8_t, 0);
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, geometry.meshlets, Meshlet, 0);
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletPrimitiveBuffer, geometry.primitives, MeshletPrimitive, 0);
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, materialBuffer, materials, Material, 0);
 
             //multiple meshes---
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
@@ -1590,6 +1672,7 @@ namespace VanK
             //----------
             done = true;
         }
+
         //quads
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, quadBuffer, quads, QuadData, 0);
 
@@ -1658,7 +1741,8 @@ namespace VanK
                 .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
                 .meshletBuffer = meshletBuffer->GetBufferAddress(),
                 .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
-                .meshDraws = meshDrawBuffer->GetBufferAddress()
+                .meshDraws = meshDrawBuffer->GetBufferAddress(),
+                .materialBuffer = materialBuffer->GetBufferAddress()
             };
 
             RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));

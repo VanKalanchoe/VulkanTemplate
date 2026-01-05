@@ -1407,7 +1407,7 @@ namespace VanK
         {
         case VanKGraphics: return vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         case VanKCompute: return vk::ShaderStageFlagBits::eCompute;
-        case VanKMesh: return vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT;
+        case VanKMesh: return vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment;
         }
         return vk::ShaderStageFlagBits::eAll;
     }

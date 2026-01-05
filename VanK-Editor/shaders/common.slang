@@ -79,6 +79,20 @@ public struct MeshletTrianglesData
     public MeshletTriangleIndex[] meshletTriangles;
 };
 
+public struct Material
+{
+    public uint32_t albedoTexture;
+    public uint32_t normalTexture;
+    public uint32_t specularTexture;
+    public uint32_t emissiveTexture;
+    public bool transparent;
+};
+
+public struct MaterialData
+{
+    public Material[] materials;
+}
+
 public struct Quads
 {
     public column_major float4x4 modelMatrix;
