@@ -880,6 +880,10 @@ namespace  VanK
 
     void VulkanRendererAPI::DestroyPipeline(VanKPipeLine pipeline)
     {
+        sceneImageInitialized = false;
+        entityImageInitialized = false;
+        entityColorImageInitialized = false;
+        m_hasActiveRenderPass = false;
         auto it = m_PipelineResources.find(Unwrap(pipeline));
         if (it != m_PipelineResources.end())
         {
