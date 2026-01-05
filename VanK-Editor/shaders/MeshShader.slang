@@ -3,10 +3,8 @@ import common;
 struct VertexOutput
 {
     float4 position : SV_Position;
-    float4 color : TEXCOORD0;
     float2 texcoords : TEXCOORD1;
     uint32_t materialIndex : TEXCOORD2;
-    float transmissionFactor : TEXCOORD3;
 };
 
 struct CulledData
@@ -165,8 +163,6 @@ void meshMain
         float4 clipPos = mul(viewProj, worldPos);
 
         vertices[i].position = clipPos;
-        vertices[i].color = v.baseColor;
-        vertices[i].transmissionFactor = v.transmission;
         vertices[i].texcoords = v.texcoords;
         vertices[i].materialIndex = pushConstant.meshletPrimitive->primitives[primitiveID].materialIndex;
     }
@@ -191,17 +187,37 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 {
     Material mats = pushConstant.materialBuffer->materials[vertexInput.materialIndex];
 
-    float4 textureColor = texture[mats.albedoTexture].Sample(vertexInput.texcoords);
+    // Base color + texture
+    float4 albedo = mats.diffuseFactor;
+    if (mats.albedoTexture >= 0)
+        albedo *= texture[mats.albedoTexture].Sample(vertexInput.texcoords);
 
-    float4 finalColor = textureColor * vertexInput.color;
+    // Normal map
+    float3 nmap = float3(0, 0, 1);
+    if (mats.normalTexture >= 0)
+        nmap = texture[mats.normalTexture].Sample(vertexInput.texcoords).rgb * 2 - 1;
 
-    float transmission = saturate(vertexInput.transmissionFactor);
+    // Specular + glossiness
+    float4 specgloss = mats.specularFacto;
+    if (mats.specularTexture >= 0)
+        specgloss *= texture[mats.specularTexture].Sample(vertexInput.texcoords);
 
-    float alpha = finalColor.a * (1.0 - transmission);
+    // Emissive
+    float3 emissive = mats.emissiveFactor;
+    if (mats.emissiveTexture >= 0)
+        emissive *= texture[mats.emissiveTexture].Sample(vertexInput.texcoords).rgb;
 
-    if (mats.transparent && finalColor.a < 0.5)
+    // Final color //srgb albedo
+    float4 finalColor;
+    finalColor.rgb = albedo.rgb + emissive;
+    finalColor.a   = albedo.a; 
+    
+    /* finalColor.rgb = mats.emissiveFactor; */
+
+    // Decide discard based on alpha only
+    if (mats.transparent  && mats.transmissionFactor == 0.0 && finalColor.a < 0.5)
         discard;
 
-/*   float4 hashColor = float4(vertexInput.color.xyz, 1.0f); */
-    return float4(finalColor.rgb, alpha); /* * hashColor */; // make debug only key
+    // Leave alpha untouched; lighting will handle transmission
+    return finalColor;
 }

@@ -4,8 +4,6 @@ public struct Vertex
 {
     public float3 position;
     public float2 texcoords;
-    public float4 baseColor;
-    public float transmission;
 }
 
 public struct Meshlet
@@ -85,7 +83,13 @@ public struct Material
     public uint32_t normalTexture;
     public uint32_t specularTexture;
     public uint32_t emissiveTexture;
+
+    public float4 diffuseFactor;
+    public float4 specularFacto;
+    public float3 emissiveFactor;
+
     public bool transparent;
+    public  float transmissionFactor;
 };
 
 public struct MaterialData

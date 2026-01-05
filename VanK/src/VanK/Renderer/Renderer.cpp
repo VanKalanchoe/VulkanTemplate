@@ -166,8 +166,6 @@ namespace VanK
     {
         glm::vec3 position{0.0f};
         glm::vec2 texcoords{0.0f};
-        glm::vec4 baseColor{0.0f};
-        float transmission{0.0f};
     };
 
     struct Meshlet
@@ -202,7 +200,14 @@ namespace VanK
         uint32_t normalTexture{0};
         uint32_t specularTexture{0};
         uint32_t emissiveTexture{0};
+
+        glm::vec4 diffuseFactor{1};
+        glm::vec4 specularFactor{1};
+        glm::vec3 emissiveFactor{0};
+
         bool transparent{false};
+
+        float transmissionFactor{0}; // 0 = opaque, 1 = full transparent
     };
 
     std::vector<Material> materials;
@@ -283,16 +288,6 @@ namespace VanK
     std::vector<uint32_t> primitiveIndices{};
     std::unordered_map<std::string, Ref<Texture2D>> textureCache;
 
-    bool IsTransparent(const tinygltf::Material& material)
-    {
-        if (material.alphaMode == "BLEND") return true;
-        if (material.pbrMetallicRoughness.baseColorFactor.size() == 4 && material.pbrMetallicRoughness.baseColorFactor[3] < 1.0f)
-            return true;
-        if (material.extensions.find("KHR_materials_transmission") != material.extensions.end())
-            return true;
-        return false;
-    }
-
     Ref<Texture2D> LoadTextureFromImage
     (
         int imageIndex,
@@ -310,21 +305,21 @@ namespace VanK
         auto it = textureCache.find(key);
         if (it != textureCache.end())
             return it->second;
-        
+
         if (!img.uri.empty())
         {
             Ref<Texture2D> tex = TextureImporter::LoadTexture2D(basePath + img.uri, {.GenerateMips = generateMips});
             textureCache[key] = tex;
             return tex;
         }
-        
+
         if (img.bufferView >= 0)
         {
             const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
             const tinygltf::Buffer& buf = model.buffers[bv.buffer];
 
             int w = 0, h = 0, c = 0;
-            
+
             unsigned char* pixels = stbi_load_from_memory
             (
                 buf.data.data() + bv.byteOffset,
@@ -353,43 +348,93 @@ namespace VanK
         return nullptr;
     }
 
-    uint32_t BuildMaterial
-    (
+    uint32_t BuildMaterial(
         const tinygltf::Material& gltfMat,
         const std::string& basePath,
-        const tinygltf::Model& model
-    )
+        const tinygltf::Model& model)
     {
         Material mat{};
 
         // -----------------------------
-        // ALBEDO
+        // BASE COLOR / DIFFUSE
         // -----------------------------
+        mat.diffuseFactor = glm::vec4(1.0f); // default white
         int albedoImage = -1;
 
-        // Specular-Glossiness workflow has priority
-        if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness"))
+        if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0) // New PBR (Metallic-Roughness)
+        {
+            int texIndex = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
+            albedoImage = model.textures[texIndex].source;
+            if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, true))
+                mat.albedoTexture = t->GetTextureIndex();
+
+            if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() == 4)
+            {
+                const auto& bc = gltfMat.pbrMetallicRoughness.baseColorFactor;
+                mat.diffuseFactor = glm::vec4(bc[0], bc[1], bc[2], bc[3]);
+            }
+        }
+        else if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness")) // Old PBR
         {
             const auto& ext = gltfMat.extensions.at("KHR_materials_pbrSpecularGlossiness");
+
+            // Diffuse texture
             if (ext.Has("diffuseTexture"))
             {
                 int texIndex = ext.Get("diffuseTexture").Get("index").Get<int>();
                 albedoImage = model.textures[texIndex].source;
+                if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, true))
+                    mat.albedoTexture = t->GetTextureIndex();
+            }
+
+            // Diffuse factor
+            if (ext.Has("diffuseFactor"))
+            {
+                const tinygltf::Value& df = ext.Get("diffuseFactor");
+                if (df.IsArray() && df.ArrayLen() >= 4)
+                {
+                    mat.diffuseFactor = glm::vec4(
+                        static_cast<float>(df.Get(0).Get<double>()),
+                        static_cast<float>(df.Get(1).Get<double>()),
+                        static_cast<float>(df.Get(2).Get<double>()),
+                        static_cast<float>(df.Get(3).Get<double>())
+                    );
+                }
+            }
+
+            // Specular + glossiness factor
+            if (ext.Has("specularFactor") || ext.Has("glossinessFactor"))
+            {
+                glm::vec4 specGloss(0.0f);
+
+                if (ext.Has("specularFactor"))
+                {
+                    const tinygltf::Value& sf = ext.Get("specularFactor");
+                    if (sf.IsArray() && sf.ArrayLen() >= 3)
+                    {
+                        specGloss.r = static_cast<float>(sf.Get(0).Get<double>());
+                        specGloss.g = static_cast<float>(sf.Get(1).Get<double>());
+                        specGloss.b = static_cast<float>(sf.Get(2).Get<double>());
+                    }
+                }
+
+                if (ext.Has("glossinessFactor"))
+                    specGloss.a = static_cast<float>(ext.Get("glossinessFactor").Get<double>());
+                else
+                    specGloss.a = 1.0f;
+
+                mat.specularFactor = specGloss;
+            }
+
+            // Specular-Glossiness texture
+            if (ext.Has("specularGlossinessTexture"))
+            {
+                int texIndex = ext.Get("specularGlossinessTexture").Get("index").Get<int>();
+                int imgIndex = model.textures[texIndex].source;
+                if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
+                    mat.specularTexture = t->GetTextureIndex();
             }
         }
-
-        // Metallic-Roughness fallback
-        else if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0)
-        {
-            int texIndex = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
-            albedoImage = model.textures[texIndex].source;
-        }
-
-        if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, true))
-            mat.albedoTexture = t->GetTextureIndex();
-        else
-            mat.albedoTexture = Renderer::getWhiteTexture()->GetTextureIndex();
-
 
         // -----------------------------
         // NORMAL
@@ -401,30 +446,20 @@ namespace VanK
             if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
                 mat.normalTexture = t->GetTextureIndex();
         }
-        else
-        {
-            mat.normalTexture = Renderer::getPinkTexture()->GetTextureIndex();
-        }
 
         // -----------------------------
-        // SPECULAR + GLOSSINESS
-        // -----------------------------
-        if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness"))
-        {
-            const auto& ext = gltfMat.extensions.at("KHR_materials_pbrSpecularGlossiness");
-            if (ext.Has("specularGlossinessTexture"))
-            {
-                int texIndex = ext.Get("specularGlossinessTexture").Get("index").Get<int>();
-                int imgIndex = model.textures[texIndex].source;
-                if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
-                    mat.specularTexture = t->GetTextureIndex();
-            }
-        }
-
-        // --------
-        // ---------------------
         // EMISSIVE
         // -----------------------------
+        mat.emissiveFactor = glm::vec3(1.0f); // default white
+        if (gltfMat.emissiveFactor.size() == 3)
+        {
+            mat.emissiveFactor = glm::vec3(
+                static_cast<float>(gltfMat.emissiveFactor[0]),
+                static_cast<float>(gltfMat.emissiveFactor[1]),
+                static_cast<float>(gltfMat.emissiveFactor[2])
+            );
+        }
+
         if (gltfMat.emissiveTexture.index >= 0)
         {
             int texIndex = gltfMat.emissiveTexture.index;
@@ -434,18 +469,25 @@ namespace VanK
         }
 
         // -----------------------------
+        // TRANSMISSION
+        // -----------------------------
+        mat.transmissionFactor = 0.0f;
+        if (gltfMat.extensions.contains("KHR_materials_transmission"))
+        {
+            const auto& ext = gltfMat.extensions.at("KHR_materials_transmission");
+            if (ext.Has("transmissionFactor"))
+                mat.transmissionFactor = static_cast<float>(ext.Get("transmissionFactor").Get<double>());
+        }
+
+        // -----------------------------
         // TRANSPARENCY
         // -----------------------------
-        mat.transparent =
-            gltfMat.alphaMode == "BLEND" ||
-            (gltfMat.pbrMetallicRoughness.baseColorFactor.size() == 4 &&
-                gltfMat.pbrMetallicRoughness.baseColorFactor[3] < 1.0) ||
-            gltfMat.extensions.contains("KHR_materials_transmission");
+        mat.transparent = (gltfMat.alphaMode == "BLEND") || (mat.transmissionFactor > 0.0f);
 
         materials.push_back(mat);
-        
         return static_cast<uint32_t>(materials.size() - 1);
     }
+
 
     void TraverseNode(
         std::string& basePath,
@@ -513,32 +555,6 @@ namespace VanK
                     {
                         v.texcoords = {0.0f, 0.0f};
                     }
-
-                    glm::vec4 baseColor = glm::vec4(1.0f); // default white
-                    float transmission = 0.0f;
-
-                    if (primitive.material >= 0)
-                    {
-                        const tinygltf::Material& material = model.materials[primitive.material];
-
-                        if (material.pbrMetallicRoughness.baseColorFactor.size() == 4)
-                        {
-                            auto& bc = material.pbrMetallicRoughness.baseColorFactor;
-                            baseColor = glm::vec4(bc[0], bc[1], bc[2], bc[3]);
-                        }
-
-                        // Optional: transmission
-                        if (material.extensions.find("KHR_materials_transmission") != material.extensions.end())
-                        {
-                            auto& ext = material.extensions.at("KHR_materials_transmission");
-                            if (ext.Has("transmissionFactor"))
-                                transmission = static_cast<float>(ext.Get("transmissionFactor").Get<double>());
-                        }
-                    }
-
-                    // Then inside your vertex loop:
-                    v.baseColor = baseColor;
-                    v.transmission = transmission;
 
                     verticesOut.push_back(v);
                 }
@@ -1204,20 +1220,6 @@ namespace VanK
                 const auto& meshlet = geometry.meshlets[prim.meshletOffset + m];
                 vertexStart = std::min(vertexStart, meshlet.vertexOffset);
                 vertexCount += meshlet.meshletVerticesCount;
-            }
-
-            // Clamp to valid range just in case
-            if (vertexStart != UINT32_MAX && vertexStart + vertexCount <= geometry.vertices.size())
-            {
-                for (uint32_t vi = vertexStart; vi < vertexStart + vertexCount; ++vi)
-                {
-                    const Vertex& v = geometry.vertices[vi];
-                    if (v.transmission > 0.0f || v.baseColor.a < 1.0f)
-                    {
-                        isTransparent = true;
-                        break;
-                    }
-                }
             }
 
             primitiveDraws.push_back({primitiveId, prim.meshletCount, isTransparent});
