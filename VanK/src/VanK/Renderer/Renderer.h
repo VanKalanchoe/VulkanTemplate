@@ -136,6 +136,8 @@ namespace VanK
         inline static Ref<StorageBuffer> meshDrawBuffer ;
         inline static Ref<StorageBuffer> materialBuffer;
         
+        inline static Ref<StorageBuffer> lightsBuffer;
+        
         //2d quads, circle, text, line dont need meshlets 1 thread means 1 instance of it
         inline static Ref<StorageBuffer> quadBuffer ;
         inline static Ref<StorageBuffer> circleBuffer ;

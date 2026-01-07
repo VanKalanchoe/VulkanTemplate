@@ -48,6 +48,7 @@ namespace VanK
         uint64_t meshletPrimitives;
         uint64_t meshDraws;
         uint64_t materialBuffer;
+        uint64_t lightsBuffer;
     };
 
     struct Transform
@@ -200,12 +201,19 @@ namespace VanK
     {
         uint32_t albedoTexture{0};
         uint32_t normalTexture{0};
+        uint32_t metallicRoughnessTexture{0};
+        
         uint32_t specularTexture{0};
         uint32_t emissiveTexture{0};
+        uint32_t ambientOcclusionTexture{0};
 
         glm::vec4 diffuseFactor{1};
+        float metallicFactor{1};
+        float roughnessFactor{1};
+        
         glm::vec4 specularFactor{1};
         glm::vec3 emissiveFactor{0};
+        float ambientOcclusionFactor{1};
 
         bool transparent{false};
 
@@ -295,7 +303,8 @@ namespace VanK
         int imageIndex,
         const std::string& basePath,
         const tinygltf::Model& model,
-        bool generateMips = false
+        bool generateMips = false,
+        ImageFormat format = ImageFormat::RGBA8
     )
     {
         if (imageIndex < 0)
@@ -310,12 +319,12 @@ namespace VanK
 
         if (!img.uri.empty())
         {
-            Ref<Texture2D> tex = TextureImporter::LoadTexture2D(basePath + img.uri, {.GenerateMips = generateMips});
+            Ref<Texture2D> tex = TextureImporter::LoadTexture2D(basePath + img.uri, {.Format = format, .GenerateMips = generateMips});
             textureCache[key] = tex;
             return tex;
         }
 
-        if (img.bufferView >= 0)
+        /*if (img.bufferView >= 0)
         {
             const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
             const tinygltf::Buffer& buf = model.buffers[bv.buffer];
@@ -334,7 +343,7 @@ namespace VanK
             TextureSpecification spec{};
             spec.Width = w;
             spec.Height = h;
-            spec.Format = ImageFormat::RGBA8;
+            spec.Format = format;
             spec.GenerateMips = generateMips;
 
             Ref<Texture2D> tex = Texture2D::Create(
@@ -345,15 +354,17 @@ namespace VanK
             stbi_image_free(pixels);
             textureCache[key] = tex;
             return tex;
-        }
+        }*/
 
         return nullptr;
     }
 
-    static uint32_t BuildMaterial(
+    static uint32_t BuildMaterial
+    (
         const tinygltf::Material& gltfMat,
         const std::string& basePath,
-        const tinygltf::Model& model)
+        const tinygltf::Model& model
+    )
     {
         Material mat{};
 
@@ -367,7 +378,7 @@ namespace VanK
         {
             int texIndex = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
             albedoImage = model.textures[texIndex].source;
-            if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, true))
+            if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, false, ImageFormat::SRGBA8))
                 mat.albedoTexture = t->GetTextureIndex();
 
             if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() == 4)
@@ -385,7 +396,7 @@ namespace VanK
             {
                 int texIndex = ext.Get("diffuseTexture").Get("index").Get<int>();
                 albedoImage = model.textures[texIndex].source;
-                if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, true))
+                if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, false, ImageFormat::RGBA8))
                     mat.albedoTexture = t->GetTextureIndex();
             }
 
@@ -433,7 +444,7 @@ namespace VanK
             {
                 int texIndex = ext.Get("specularGlossinessTexture").Get("index").Get<int>();
                 int imgIndex = model.textures[texIndex].source;
-                if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
+                if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
                     mat.specularTexture = t->GetTextureIndex();
             }
         }
@@ -445,8 +456,23 @@ namespace VanK
         {
             int texIndex = gltfMat.normalTexture.index;
             int imgIndex = model.textures[texIndex].source;
-            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
+            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
                 mat.normalTexture = t->GetTextureIndex();
+        }
+        
+        // -----------------------------
+        // METALLIC / ROUGHNESS
+        // -----------------------------
+        mat.metallicFactor  = static_cast<float>(gltfMat.pbrMetallicRoughness.metallicFactor);
+        mat.roughnessFactor = static_cast<float>(gltfMat.pbrMetallicRoughness.roughnessFactor);
+
+        if (gltfMat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
+        {
+            int texIndex = gltfMat.pbrMetallicRoughness.metallicRoughnessTexture.index;
+            int imgIndex = model.textures[texIndex].source;
+
+            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
+                mat.metallicRoughnessTexture = t->GetTextureIndex();
         }
 
         // -----------------------------
@@ -466,8 +492,23 @@ namespace VanK
         {
             int texIndex = gltfMat.emissiveTexture.index;
             int imgIndex = model.textures[texIndex].source;
-            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false))
+            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::SRGBA8))
                 mat.emissiveTexture = t->GetTextureIndex();
+        }
+        
+        // -----------------------------
+        // AMBIENT OCCLUSION
+        // -----------------------------
+        mat.ambientOcclusionFactor = 1.0f;
+        if (gltfMat.occlusionTexture.index >= 0)
+        {
+            int texIndex = gltfMat.occlusionTexture.index;
+            int imgIndex = model.textures[texIndex].source;
+
+            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
+                mat.ambientOcclusionTexture = t->GetTextureIndex();
+
+            mat.ambientOcclusionFactor = static_cast<float>(gltfMat.occlusionTexture.strength);
         }
 
         // -----------------------------
@@ -1309,7 +1350,13 @@ namespace VanK
         }
     }
 
-
+    struct Lights
+    {
+        glm::vec3 lightPosition;
+        glm::vec3 lightColor;
+    };
+    std::vector<Lights> lights;
+    
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -1520,14 +1567,18 @@ namespace VanK
             0, 1, 2, // first triangle
             0, 2, 3 // second triangle
         };
-
-        ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());
+        
+        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
         //ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
         // ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf", pinkTexture->GetTextureIndex());
         // ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
-
-        SubmitModelDraw(bistro, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
+        //ModelHandle sponza = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
+        /*ModelHandle bhudda = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
+        ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");
+        ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/scene.gltf");
+        SubmitModelDraw(spheres, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
+        SubmitModelDraw(damagedHelmet, glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 0.0f, 0.0f)));
         /*SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f)));*/
         //SubmitModelDraw(monkey, glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)));
         uint64_t sceneBuffersize = sizeof(SceneDatas);
@@ -1578,9 +1629,12 @@ namespace VanK
         uint64_t lineBuffersize = sizeof(LineData) * 10;
         lineBuffer.reset(StorageBuffer::Create(lineBuffersize));
 
+        uint64_t lightsBuffersize = sizeof(Lights) * 10;
+        lightsBuffer.reset(StorageBuffer::Create(lightsBuffersize));
+        
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize +
             localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + materialBuffersize + quadBuffersize + circleBuffersize + textBuffersize +
-            lineBuffersize;
+            lineBuffersize + lightsBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
     }
 
@@ -1619,6 +1673,8 @@ namespace VanK
         meshDrawBuffer.reset();
 
         materialBuffer.reset();
+        
+        lightsBuffer.reset();
 
         quadBuffer.reset();
 
@@ -1724,9 +1780,17 @@ namespace VanK
         scene.emplace_back(scenesData);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, sceneBuffer, scene, SceneDatas, 0);
         scene.clear();
-
+        
         if (!done)
         {
+            //lights
+            lights.emplace_back(Lights{.lightPosition = glm::vec3(-10.0f, 10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition = glm::vec3(10.0f, 10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition = glm::vec3(-10.0f, -10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition = glm::vec3(10.0f, -10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, lightsBuffer, lights, Lights, 0);
+            lights.clear();
+            
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, geometry.vertices, Vertex, 0);
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, geometry.meshletVertices, uint32_t, 0);
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, geometry.meshletTriangles, uint8_t, 0);
@@ -1780,7 +1844,7 @@ namespace VanK
         {
             GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
             std::vector<VanKColorTargetInfo> colorAttachments;
-            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.1f, 0.1f, 0.1f, 1.0f}});
+            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.2f, 0.2f, 0.2f, 1.0f}});
             colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
 
             VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
@@ -1811,7 +1875,8 @@ namespace VanK
                 .meshletBuffer = meshletBuffer->GetBufferAddress(),
                 .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
                 .meshDraws = meshDrawBuffer->GetBufferAddress(),
-                .materialBuffer = materialBuffer->GetBufferAddress()
+                .materialBuffer = materialBuffer->GetBufferAddress(),
+                .lightsBuffer = lightsBuffer->GetBufferAddress(),
             };
 
             RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));

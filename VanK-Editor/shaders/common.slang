@@ -83,15 +83,22 @@ public struct Material
 {
     public uint32_t albedoTexture;
     public uint32_t normalTexture;
+    public uint32_t metallicRoughnessTexture;
+
     public uint32_t specularTexture;
     public uint32_t emissiveTexture;
+    public uint32_t ambientOcclusionTexture;
 
     public float4 diffuseFactor;
-    public float4 specularFacto;
+    public float metallicFactor;
+    public float roughnessFactor;
+
+    public float4 specularFactor;
     public float3 emissiveFactor;
+    public float ambientOcclusionFactor;
 
     public bool transparent;
-    public  float transmissionFactor;
+    public float transmissionFactor;
 };
 
 public struct MaterialData
@@ -190,3 +197,15 @@ public struct SceneData
 
     public bool FrustumCullEnabled;
 };
+
+
+public struct Lights
+{
+    public float3 lightPosition;
+    public float3 lightColor;
+};
+
+public struct LightData
+{
+    public Lights[] lights;
+}
