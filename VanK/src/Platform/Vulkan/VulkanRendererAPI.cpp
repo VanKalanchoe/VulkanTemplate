@@ -2051,7 +2051,7 @@ namespace  VanK
     }
 
     void VulkanRendererAPI::generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
-                                   uint32_t mipLevels)
+                                   uint32_t mipLevels, uint32_t layerCount)
     {
         // Check if image format supports linear blit-ing
         vk::FormatProperties formatProperties = physicalDevice.getFormatProperties(imageFormat);
@@ -2070,7 +2070,7 @@ namespace  VanK
         };
         barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
         barrier.subresourceRange.baseArrayLayer = 0;
-        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.layerCount = layerCount;
         barrier.subresourceRange.levelCount = 1;
 
         int32_t mipWidth = texWidth;
@@ -2096,8 +2096,8 @@ namespace  VanK
                 .srcSubresource = {}, .srcOffsets = offsets,
                 .dstSubresource = {}, .dstOffsets = dstOffsets
             };
-            blit.srcSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 1, 0, 1);
-            blit.dstSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i, 0, 1);
+            blit.srcSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i - 1, 0, layerCount);
+            blit.dstSubresource = vk::ImageSubresourceLayers(vk::ImageAspectFlagBits::eColor, i, 0, layerCount);
 
             commandBuffer->blitImage(image, vk::ImageLayout::eTransferSrcOptimal, image,
                                      vk::ImageLayout::eTransferDstOptimal, {blit}, vk::Filter::eLinear);

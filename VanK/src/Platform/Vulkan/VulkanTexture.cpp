@@ -168,20 +168,23 @@ namespace VanK
             
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
             
-            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels, layerCount);
             
             // Copy each mip level
             for (uint32_t i = 0; i < mipLevels; i++)
             {
-                ktx_size_t offset;
-                KTX_error_code result = ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, i, 0, 0, &offset);
                 uint32_t mipWidth = std::max(1u, texWidth >> i);
                 uint32_t mipHeight = std::max(1u, texHeight >> i);
             
-                VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer,local.image, mipWidth, mipHeight, offset, i);
+                for (uint32_t face = 0; face < layerCount; face++)
+                {
+                    ktx_size_t offset;
+                    KTX_error_code result = ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, i, 0, face, &offset);
+                    VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer,local.image, mipWidth, mipHeight, offset, i, face);
+                }
             }
             
-            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels, layerCount);
             
             utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
         }
@@ -211,12 +214,12 @@ namespace VanK
             // Copy data from staging buffer to texture image
             utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels, layerCount);
         
-            VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+            VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, texWidth, texHeight, 0, 0, 0);
             
             utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
             
             if (mipLevels > 1 && m_Specification.GenerateMips)
-                VulkanRendererAPI::Get().generateMipmaps(local.image, textureFormat, texWidth, texHeight, mipLevels);
+                VulkanRendererAPI::Get().generateMipmaps(local.image, textureFormat, texWidth, texHeight, mipLevels, layerCount);
         }
         
         // Create the texture view maybe make info here like createimage ?

@@ -592,12 +592,12 @@ namespace VanK
 
             void copyBufferToImage(std::unique_ptr<vk::raii::CommandBuffer>& commandBuffer, const Buffer& buffer, vk::raii::Image& image, uint32_t width,
                                          uint32_t height,
-                                         uint64_t offset = 0, uint32_t mipLevel = 0)
+                                         uint64_t offset = 0, uint32_t mipLevel = 0, uint32_t face = 0)
             {
                 vk::BufferImageCopy region
                 {
                     .bufferOffset = offset, .bufferRowLength = 0, .bufferImageHeight = 0,
-                    .imageSubresource = {vk::ImageAspectFlagBits::eColor, mipLevel, 0, 1},
+                    .imageSubresource = {vk::ImageAspectFlagBits::eColor, mipLevel, face, 1},
                     .imageOffset = {0, 0, 0},
                     .imageExtent = {width, height, 1}
                 };
@@ -1160,7 +1160,7 @@ namespace VanK
     
     public: //temp public
         void generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
-                             uint32_t mipLevels);
+                             uint32_t mipLevels, uint32_t layerCount = 1);
     private: 
         vk::SampleCountFlagBits getMaxUsableSampleCount();
 
