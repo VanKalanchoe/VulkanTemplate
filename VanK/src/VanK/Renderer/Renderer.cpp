@@ -19,8 +19,8 @@
 
 #include "MSDFData.h"
 #include "VanK/Asset/AssetManager.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
+/*#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>*/
 
 namespace VanK
 {
@@ -1544,6 +1544,7 @@ namespace VanK
         pinkTexture = TextureImporter::LoadTexture2D("", {.defaultColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)});
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
+        /*cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2");*/
 
         /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
@@ -1693,12 +1694,9 @@ namespace VanK
 
         s_VSyncChangeRequested = false; // reset
     };
-    static bool s_FlushedThisFrame = false;
 
     void Renderer::BeginSubmit()
     {
-        s_FlushedThisFrame = false;
-
         if (isEditor)
             RenderCommand::BeginFrame(VanK_Render_ImGui);
         else
@@ -1718,24 +1716,26 @@ namespace VanK
     {
         Flush();
 
-        uint64_t offset = 0;
-        void* mapPtr = m_TransferDownlaoadBuffer->MapTransferBuffer(sizeof(CulledData), 0, offset);
-        m_TransferDownlaoadBuffer->DownloadFromGPUBuffer(cmd, {0}, {cullBuffer.get(), 0, sizeof(CulledData)});
-        CulledData data;
-        std::memcpy(&data, mapPtr, sizeof(CulledData));
-        m_TransferDownlaoadBuffer->UnMapTransferBuffer();
-        ImGui::Begin("Mesh");
-        ImGui::SeparatorText("Culling Breakdown");
-        ImGui::Text("Frustum culled: %u", data.frustumCulled);
-        ImGui::Text("Backface culled: %u", data.backfaceCulled);
+        if (isEditor)
+        {
+            uint64_t offset = 0;
+            void* mapPtr = m_TransferDownlaoadBuffer->MapTransferBuffer(sizeof(CulledData), 0, offset);
+            m_TransferDownlaoadBuffer->DownloadFromGPUBuffer(cmd, {0}, {cullBuffer.get(), 0, sizeof(CulledData)});
+            CulledData data;
+            std::memcpy(&data, mapPtr, sizeof(CulledData));
+            m_TransferDownlaoadBuffer->UnMapTransferBuffer();
+            ImGui::Begin("Mesh");
+            ImGui::SeparatorText("Culling Breakdown");
+            ImGui::Text("Frustum culled: %u", data.frustumCulled);
+            ImGui::Text("Backface culled: %u", data.backfaceCulled);
 
-        ImGui::SeparatorText("Effective Results");
-        ImGui::Text("Total culled: %u", data.totalCulled);
-        //todo its not the actual rendererd stats
-        ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data.totalCulled, geometry.meshlets.size());
-        ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
-        ImGui::End();
-
+            ImGui::SeparatorText("Effective Results");
+            ImGui::Text("Total culled: %u", data.totalCulled);
+            //todo its not the actual rendererd stats
+            ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data.totalCulled, geometry.meshlets.size());
+            ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
+            ImGui::End();
+        }
         RenderCommand::SubmitRendering(cmd);
 
         RenderCommand::EndCommandBuffer(cmd);
@@ -1747,9 +1747,6 @@ namespace VanK
 
     void Renderer::Flush()
     {
-        VK_CORE_ASSERT(!s_FlushedThisFrame, "Flush called more than once per frame");
-        s_FlushedThisFrame = true;
-
         /*BeginSubmit();*/
 
         if (s_IsPipelineReloadFinished.exchange(false))

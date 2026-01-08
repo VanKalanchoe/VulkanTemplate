@@ -291,7 +291,7 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     }
 
     // Base color + texture
-    float4 albedo = mats.diffuseFactor; // in tutorial its float3 will see
+    float4 albedo = mats.diffuseFactor;
     if (mats.albedoTexture >= 0) // when converting i did al ltextures srgb idk if thats good
         albedo *= fromsrgb(texture[mats.albedoTexture].Sample(vertexInput.texcoords)); // could be wrong srgb or not
 
@@ -368,7 +368,7 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     // HDR tonemapping
     color = color / (color + float3(1.0));
     // gamma correct not needed becasue my swapchain is already srgb
-    /* color = pow(color, float3(1.0/2.2));  */
+    color = pow(color, float3(1.0/2.2)); 
  //(vertexInput.normals * 0.5 + 0.5
     return float4(color, 1.0);
 }

@@ -128,6 +128,9 @@ namespace VanK
                 // If the format is undefined, fall back to a reasonable default
                 textureFormat = vk::Format::eB8G8R8A8Srgb; // srgb ?
             }
+            
+            if (textureFormat == vk::Format::eR32G32B32Sfloat)
+                textureFormat = vk::Format::eR32G32B32A32Sfloat;
         }
         else
         {
@@ -136,6 +139,8 @@ namespace VanK
         }
     
         textureImageFormat = textureFormat;
+        
+        bool isCubeMap = ktx_texture->isCubemap;
     
         if (ktx_texture->numLevels > 1)
         {
@@ -147,8 +152,9 @@ namespace VanK
             // Create the texture image
             vk::ImageCreateInfo imageInfo
             {
+                .flags = isCubeMap ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlags(),
                 .imageType = vk::ImageType::e2D, .format = textureFormat,
-                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = 1,
+                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = isCubeMap ? 6u : 1u,
                 .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
                 .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 .sharingMode = vk::SharingMode::eExclusive
@@ -188,8 +194,9 @@ namespace VanK
             // Create the texture image
             vk::ImageCreateInfo imageInfo
             {
+                .flags = isCubeMap ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlags(),
                 .imageType = vk::ImageType::e2D, .format = textureFormat,
-                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = 1,
+                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = isCubeMap ? 6u : 1u,
                 .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
                 .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 .sharingMode = vk::SharingMode::eExclusive
