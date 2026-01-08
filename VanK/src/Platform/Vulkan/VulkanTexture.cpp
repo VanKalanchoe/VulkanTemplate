@@ -141,6 +141,7 @@ namespace VanK
         textureImageFormat = textureFormat;
         
         bool isCubeMap = ktx_texture->isCubemap;
+        uint32_t layerCount = isCubeMap ? 6u : 1u;
     
         if (ktx_texture->numLevels > 1)
         {
@@ -154,7 +155,7 @@ namespace VanK
             {
                 .flags = isCubeMap ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlags(),
                 .imageType = vk::ImageType::e2D, .format = textureFormat,
-                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = isCubeMap ? 6u : 1u,
+                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = layerCount,
                 .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
                 .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 .sharingMode = vk::SharingMode::eExclusive
@@ -196,7 +197,7 @@ namespace VanK
             {
                 .flags = isCubeMap ? vk::ImageCreateFlagBits::eCubeCompatible : vk::ImageCreateFlags(),
                 .imageType = vk::ImageType::e2D, .format = textureFormat,
-                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = isCubeMap ? 6u : 1u,
+                .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = layerCount,
                 .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
                 .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 .sharingMode = vk::SharingMode::eExclusive
@@ -208,7 +209,7 @@ namespace VanK
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
             
             // Copy data from staging buffer to texture image
-            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
+            utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels, layerCount);
         
             VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
             
@@ -219,7 +220,8 @@ namespace VanK
         }
         
         // Create the texture view maybe make info here like createimage ?
-        local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
+        vk::ImageViewType viewType = isCubeMap ? vk::ImageViewType::eCube : vk::ImageViewType::e2D;
+        local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels, layerCount, viewType);
         if (local.view == VK_NULL_HANDLE)
             std::cout << "VulkanTexture2D: Failed to create texture view!" << '\n';
         

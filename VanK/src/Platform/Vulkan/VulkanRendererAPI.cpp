@@ -2166,14 +2166,14 @@ namespace  VanK
 
     vk::raii::ImageView VulkanRendererAPI::createImageView(vk::raii::Image& image, vk::Format format,
                                                   vk::ImageAspectFlags aspectFlags,
-                                                  uint32_t mipLevels)
+                                                  uint32_t mipLevels, uint32_t layerCount, vk::ImageViewType viewType)
     {
         vk::ImageViewCreateInfo viewInfo
         {
             .image = image,
-            .viewType = vk::ImageViewType::e2D,
+            .viewType = viewType,
             .format = format,
-            .subresourceRange = {aspectFlags, 0, mipLevels, 0, 1}
+            .subresourceRange = {aspectFlags, 0, mipLevels, 0, layerCount}
         };
         return vk::raii::ImageView(device, viewInfo);
     }

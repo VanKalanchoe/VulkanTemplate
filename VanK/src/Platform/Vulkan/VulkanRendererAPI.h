@@ -267,12 +267,12 @@ namespace VanK
          * In the pipeline, the image must be in the correct layout to be used, and this function is used to transition the image to the correct layout.
         -*/
         
-        static void transitionImageLayout(const vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image &image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels)
+        static void transitionImageLayout(const vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image &image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels, uint32_t layerCount = 1)
         {
             vk::ImageMemoryBarrier barrier{
                 .oldLayout = oldLayout, .newLayout = newLayout,
                 .image = image,
-                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, 1}
+                .subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, mipLevels, 0, layerCount}
             };
 
             vk::PipelineStageFlags sourceStage;
@@ -1168,7 +1168,7 @@ namespace VanK
 
     public: //temp public
         vk::raii::ImageView createImageView(vk::raii::Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags,
-                                            uint32_t mipLevels);
+                                            uint32_t mipLevels, uint32_t layerCount = 1, vk::ImageViewType viewType = vk::ImageViewType::e2D);
     private: 
     public: //temp public
         void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples,
