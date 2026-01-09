@@ -41,7 +41,7 @@ namespace  VanK
     VulkanRendererAPI::~VulkanRendererAPI()
     {
         std::cout << "VulkanRendererAPI::~VulkanRendererAPI()" << std::endl;
-        VulkanRendererAPI::Shutdown();
+        VulkanRendererAPI::Shutdown(); // ???????
     }
 
     VulkanRendererAPI& VulkanRendererAPI::Get()
@@ -104,9 +104,8 @@ namespace  VanK
         ImGui::CreateContext();
         ImGui::StyleColorsDark();*/
         
-        /*// Acquiring the sampler which will be used for displaying the GBuffer
         const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
-        linearSampler = m_samplerPool.acquireSampler(info);*/
+        linearSampler = m_samplerPool.acquireSampler(info);
 
         ImGui_ImplSDL3_InitForVulkan(window);
         static VkFormat imageFormats[] = {static_cast<VkFormat>(swapChainSurfaceFormat.format)};
@@ -138,7 +137,7 @@ namespace  VanK
         {
             for (size_t d = 0; d < 1; ++d) // this is how many color attachments i have for now only color
             {
-                uiDescriptorSet[d] = ImGui_ImplVulkan_AddTexture(*linearSampler, *sceneImageView,
+                uiDescriptorSet[d] = ImGui_ImplVulkan_AddTexture(linearSampler, *sceneImageView,
                                                                  static_cast<VkImageLayout>(
                                                                      vk::ImageLayout::eShaderReadOnlyOptimal));
             }
@@ -217,7 +216,7 @@ namespace  VanK
         {
             uiDescriptorSet.resize(1);
             uiDescriptorSet[0] = ImGui_ImplVulkan_AddTexture(
-                *linearSampler,
+                linearSampler,
                 *sceneImageView,
                 static_cast<VkImageLayout>(vk::ImageLayout::eShaderReadOnlyOptimal));
         }
@@ -2144,7 +2143,7 @@ namespace  VanK
 
     void VulkanRendererAPI::createTextureSampler()
     {
-        vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
+        /*vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
         vk::SamplerCreateInfo samplerInfo
         {
             .magFilter = vk::Filter::eLinear,
@@ -2161,7 +2160,8 @@ namespace  VanK
             .minLod = 0.0f, // the higher this is the lower the resolution 0 is max res
             .maxLod = VK_LOD_CLAMP_NONE
         };
-        textureSampler = vk::raii::Sampler(device, samplerInfo);
+        /*textureSampler = vk::raii::Sampler(device, samplerInfo);#1#
+        textureSampler = m_samplerPool.acquireSampler(samplerInfo);*/
     }
 
     vk::raii::ImageView VulkanRendererAPI::createImageView(vk::raii::Image& image, vk::Format format,
@@ -2336,34 +2336,18 @@ namespace  VanK
             LOGW("updateGraphicsDescriptorSet: No textures to update, skipping descriptor set update");
             return;
         }
-        
-        /*// The sampler used for the texture
-        const vk::raii::Sampler sampler = m_samplerPool.acquireSampler({
-            .magFilter = vk::Filter::eLinear,
-            .minFilter = vk::Filter::eLinear,
-            .mipmapMode = vk::SamplerMipmapMode::eLinear,
-            .addressModeU = vk::SamplerAddressMode::eRepeat,
-            .addressModeV = vk::SamplerAddressMode::eRepeat,
-            .addressModeW = vk::SamplerAddressMode::eRepeat,
-            .maxLod = vk::LodClampNone,
-        });
-        DBG_VK_NAME(*sampler);
-        if (!*sampler) 
-        {
-            throw std::runtime_error("Sampler not valid, cannot update descriptor set");
-        }*/
     
         // Prepare imageInfos vector automatically sized to m_image's size
         std::vector<vk::DescriptorImageInfo> imageInfos;
         imageInfos.reserve(m_images.size()); // reserve for efficiency
 
         // The image info
-        for (size_t i = 0; i < m_images.size(); ++i)
+        for (auto& m_image : m_images)
         {
             imageInfos.push_back({
-                .sampler = textureSampler, // currently the same sampler maybe add them indivual in the future
-                .imageView = m_images[i].view,
-                .imageLayout = m_images[i].layout,
+                .sampler = m_image.sampler, // currently the same sampler maybe add them indivual in the future
+                .imageView = m_image.view,
+                .imageLayout = m_image.layout,
             });
         }
 

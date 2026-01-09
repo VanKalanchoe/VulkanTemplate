@@ -457,9 +457,10 @@ namespace VanK
         -*/
         struct ImageResource : Image
         {
-            vk::raii::ImageView view{ nullptr }; // Image view
+            vk::raii::ImageView view{nullptr}; // Image view
             vk::Extent2D extent{}; // Size of the image
             vk::ImageLayout layout{}; // Layout of the image (color attachment, shader read, ...)
+            vk::Sampler sampler{}; // reference not copy
         };
 
         /*- Not implemented here -*/
@@ -804,10 +805,7 @@ namespace VanK
         SamplerPool() = default;
         ~SamplerPool() = default;
         // Initialize the sampler pool with the device reference, then we can later acquire samplers
-        void init(vk::raii::Device& device)
-        {
-            m_device = &device;
-        }
+        void init(vk::raii::Device& device) { m_device = &device; }
 
         // Destroy internal resources and reset its initial state
         void deinit()
@@ -816,20 +814,17 @@ namespace VanK
         }
 
         // Get or create VkSampler based on VkSamplerCreateInfo
-        vk::raii::Sampler acquireSampler(const vk::SamplerCreateInfo& createInfo)
+        vk::Sampler acquireSampler(const vk::SamplerCreateInfo& createInfo)
         {
-            auto it = m_samplerMap.find(createInfo);
-            if (it != m_samplerMap.end())
+            if (auto it = m_samplerMap.find(createInfo); it != m_samplerMap.end())
             {
                 // If found, return existing sampler
-                return std::move(it->second); // return existing
+                return *it->second; // return existing
             }
 
             // Otherwise, create a new sampler
-            auto [newIt, inserted] = m_samplerMap.try_emplace(
-                createInfo, vk::raii::Sampler(*m_device, createInfo)
-            );
-            return std::move(newIt->second);
+            auto [newIt, inserted] = m_samplerMap.try_emplace(createInfo, vk::raii::Sampler(*m_device, createInfo));
+            return *newIt->second;
         }
 
         void releaseSampler(const vk::raii::Sampler& sampler)
@@ -855,6 +850,9 @@ namespace VanK
             std::size_t operator()(const vk::SamplerCreateInfo& info) const
             {
                 std::size_t seed = 0;
+                /*-- can be used outside of sampler pool to this function hashcombine
+                 * Combines hash values using the FNV-1a based algorithm 
+                -*/
                 auto hashCombine = [&](auto value)
                 {
                     seed ^= std::hash<decltype(value)>{}(value) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
@@ -887,12 +885,12 @@ namespace VanK
         };
 
         // Stores unique samplers with their corresponding VkSamplerCreateInfo
-        std::unordered_map<vk::SamplerCreateInfo, vk::raii::Sampler, SamplerCreateInfoHash, SamplerCreateInfoEqual>
-        m_samplerMap;
+        std::unordered_map<vk::SamplerCreateInfo, vk::raii::Sampler, SamplerCreateInfoHash, SamplerCreateInfoEqual> m_samplerMap;
 
         // Internal function to create a new VkSampler
         vk::raii::Sampler createSampler(const vk::SamplerCreateInfo& createInfo)
         {
+            ASSERT(m_device, "Initialization was missing");
             return vk::raii::Sampler(*m_device, createInfo);
         }
     };
@@ -929,11 +927,6 @@ namespace VanK
         void init()
         {
             initVulkan();
-
-            // Acquiring the sampler which will be used for displaying the GBuffer
-            const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
-            linearSampler = m_samplerPool.acquireSampler(info);
-            /*initImGui(); */// todo remove from here because if you dont need it dont init
         }
         
         uint32_t AddTextureToPool(utils::ImageResource&& imageResource);
@@ -991,6 +984,7 @@ namespace VanK
         void setFramebufferResized(bool resized) { framebufferResized = resized; }
         uint32_t getAPIVersion() const { return apiVersion; }
         vk::raii::Device& GetDevice() { return device; }
+        vk::raii::PhysicalDevice& GetPhysicalDevice() { return physicalDevice; }
         vk::raii::CommandPool& GetCommandPool() { return commandPool; }
         vk::raii::Queue GetQueue() { return queue; }
         utils::ResourceAllocator& GetAllocator() { return m_allocator; }
@@ -1010,6 +1004,7 @@ namespace VanK
         VanKPipelineStatistics getPipelineStatistics() override { return pipeStats; };
         void StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) override;
         void StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) override;
+        SamplerPool& getSamplerPool() { return m_samplerPool; }
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -1052,9 +1047,9 @@ namespace VanK
         vk::raii::ImageView entityColorImageView = nullptr;  // View for MSAA entity color
         
         SamplerPool m_samplerPool;
-        vk::raii::Sampler linearSampler = nullptr;
+        vk::Sampler linearSampler = nullptr;
     public: //change this to priavte later ebcause of vulkantexture class getimtextureid
-        vk::raii::Sampler textureSampler = nullptr;
+        /*vk::Sampler textureSampler = nullptr;*/
     private:
         vk::raii::DescriptorPool descriptorPool = nullptr;
         vk::raii::DescriptorPool uiDescriptorPool = nullptr; // imgui 

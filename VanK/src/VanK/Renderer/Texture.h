@@ -16,7 +16,56 @@ namespace VanK
         None = 0,
         RGB8,
         RGBA8,
-        SRGBA8
+        SRGBA8,
+        R16G16
+    };
+    
+    enum class VanKFilter
+    {
+        filterNearest,
+        filterLinear
+    };
+    
+    enum class VanKSamplerMipmapMode
+    {
+        mipmapModeNearest,
+        mipmapModeLinear
+    };
+    
+    enum class VanKSamplerAddressMode
+    {
+        addressModeRepeat,
+        addressModeMirrorRepeat,
+        addressModeClampToEdge,
+        addressModeClampToBorder,
+        addressModeMirrorClampToEdge,
+    };
+
+    enum class VanKCompareOp
+    {
+        compareOpNever,
+        compareOpLess,
+        compareOpEqual,
+        compareOpLessOrEqual,
+        compareOpGreater,
+        compareOpNotEqual,
+        compareOpGreaterOrEqual,
+        compareOpAlways
+    };
+    
+    struct VanKSamplerInfo
+    {
+        VanKFilter magFilter = VanKFilter::filterLinear;
+        VanKFilter minFilter = VanKFilter::filterLinear;
+        VanKSamplerMipmapMode mipmapMode = VanKSamplerMipmapMode::mipmapModeLinear;
+        VanKSamplerAddressMode addressModeU = VanKSamplerAddressMode::addressModeRepeat;
+        VanKSamplerAddressMode addressModeV = VanKSamplerAddressMode::addressModeRepeat;
+        VanKSamplerAddressMode addressModeW = VanKSamplerAddressMode::addressModeRepeat;
+        float mipLodBias = 0.0f;
+        bool anisotopyEnable = true;
+        bool compareEnable = false;
+        VanKCompareOp compareOp = VanKCompareOp::compareOpAlways;
+        float minLod = 0.0f;
     };
     
     struct TextureSpecification
@@ -29,6 +78,8 @@ namespace VanK
         bool FlipTexture = false;
         
         glm::vec4 defaultColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        
+        VanKSamplerInfo SamplerInfo;
         
         ktxTexture2* ktTexture = nullptr;
     };

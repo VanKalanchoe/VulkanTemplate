@@ -99,6 +99,7 @@ namespace VanK
         inline static VanKCullModeFlags cullMode = VanK_CULL_MODE_BACK_BIT;
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
+        inline static VanKSamplerInfo skyboxSampler;
         
         // Graphics Pipelines
         inline static VanKPipeLine m_MeshPipeline = {};
@@ -115,6 +116,10 @@ namespace VanK
         
         inline static VanKPipeLine m_MeshLinePipeline = {};
         inline static VanKGraphicsPipelineSpecification m_MeshLinePipelineSpecification = {};
+        
+        inline static VanKPipeLine m_MeshSkyBoxPipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_MeshSkyBoxPipelineSpecification = {};
+        
         // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawMeshTaskCommandPipeline = {};
         inline static VanKComputePipelineSpecification m_ComputeDrawMeshTaskCommandPipelineSpecification = {};
@@ -148,6 +153,6 @@ namespace VanK
         inline static Ref<StorageBuffer> localMeshTaskSubmitBuffer;
         inline static Ref<IndirectBuffer> meshTaskSubmitBuffer;
         
-        inline static Ref<Texture2D> whiteTexture, pinkTexture, vikingRoom, ChernoLogo, cubemap;
+        inline static Ref<Texture2D> whiteTexture, pinkTexture, vikingRoom, ChernoLogo, cubemap, BRDF2DLUT, irradianceMap, prefilterMap;
     };
 }

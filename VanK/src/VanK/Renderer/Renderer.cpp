@@ -150,6 +150,10 @@ namespace VanK
         float deltaTime{};
 
         bool FrustumCullEnabled{true};
+        
+        uint32_t brdflutTexture;
+        uint32_t irradianceTexture;
+        uint32_t prefilteredTexture;
     };
 
     static std::vector<SceneDatas> scene;
@@ -1298,6 +1302,12 @@ namespace VanK
         uint64_t bufferAddress;
         uint64_t sceneData;
     };
+    
+    struct PushConstantSkyBox
+    {
+        uint32_t MaterialIndex;
+        uint64_t sceneData;
+    };
 
     static void SubmitModelDraw(const ModelHandle& model, const glm::mat4& transform)
     {
@@ -1372,6 +1382,7 @@ namespace VanK
         auto MeshCircle = GetShaderLibrary().Load("MeshCircle", "MeshCircle.slang");
         auto MeshText = GetShaderLibrary().Load("MeshText", "MeshText.slang");
         auto MeshLine = GetShaderLibrary().Load("MeshLine", "MeshLine.slang");
+        auto SkyBox = GetShaderLibrary().Load("SkyBox", "SkyBox.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -1517,6 +1528,15 @@ namespace VanK
         m_MeshLinePipeline = RenderCommand::createGraphicsPipeline(m_MeshLinePipelineSpecification);
         RegisterPipelineForShaderWatcher("MeshLine", "MeshLine.slang", &m_MeshLinePipelineSpecification, nullptr, &m_MeshLinePipeline, VanKGraphics);
 
+        m_MeshSkyBoxPipelineSpecification = GraphicsPipelineSpecification;
+        m_MeshSkyBoxPipelineSpecification.PipelineType = VanK_Mesh;
+        m_MeshSkyBoxPipelineSpecification.ShaderStageCreateInfo.VanKShader = SkyBox;
+        m_MeshSkyBoxPipelineSpecification.DepthStateInfo.depthWriteEnable = false;
+        m_MeshSkyBoxPipelineSpecification.DepthStateInfo.VanKdepthCompareOp = VanK_COMPARE_OP_GREATER_OR_EQUAL;
+        m_MeshSkyBoxPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstantSkyBox)}};
+        m_MeshSkyBoxPipeline = RenderCommand::createGraphicsPipeline(m_MeshSkyBoxPipelineSpecification);
+        RegisterPipelineForShaderWatcher("SkyBox", "SkyBox.slang", &m_MeshSkyBoxPipelineSpecification, nullptr, &m_MeshSkyBoxPipeline, VanKGraphics);
+        
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
         {
@@ -1540,12 +1560,31 @@ namespace VanK
 
         WatchShaderFiles(); // has to be last after pipeline creation
 
+        //sampler
+        skyboxSampler = // remove make this defualt for all
+        {
+            .magFilter = VanKFilter::filterLinear,
+            .minFilter = VanKFilter::filterLinear,
+            .mipmapMode = VanKSamplerMipmapMode::mipmapModeLinear,
+            .addressModeU = VanKSamplerAddressMode::addressModeClampToEdge,
+            .addressModeV = VanKSamplerAddressMode::addressModeClampToEdge,
+            .addressModeW = VanKSamplerAddressMode::addressModeClampToEdge,
+            .mipLodBias = 0.0f, // only works if it has enoug miplevels is miplevel is max 1 then making this 10 crashes
+            .anisotopyEnable = true,
+            .compareEnable = false,
+            .compareOp = VanKCompareOp::compareOpAlways,
+            .minLod = 0.0f // the higher this is the lower the resolution 0 is max res
+        };
+        
         whiteTexture = TextureImporter::LoadTexture2D("");
         pinkTexture = TextureImporter::LoadTexture2D("", {.defaultColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)});
         vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
-        cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2");
-
+        cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2", {.SamplerInfo = skyboxSampler});
+        BRDF2DLUT = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/lol.ktx2", {.SamplerInfo = skyboxSampler});
+        irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/irradiance.ktx2", {.SamplerInfo = skyboxSampler});
+        prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/prefilter.ktx2", {.SamplerInfo = skyboxSampler});
+        
         /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
@@ -1773,7 +1812,11 @@ namespace VanK
         ScopeTimer timer("Renderer::DrawMeshShader");
 
         cullBuffer->Fill(cmd, 0, sizeof(CulledData), 0);
-
+        
+        scenesData.brdflutTexture = BRDF2DLUT->GetTextureIndex();
+        scenesData.irradianceTexture = irradianceMap->GetTextureIndex();
+        scenesData.prefilteredTexture = prefilterMap->GetTextureIndex();
+        
         scene.emplace_back(scenesData);
         UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, sceneBuffer, scene, SceneDatas, 0);
         scene.clear();
@@ -1953,6 +1996,23 @@ namespace VanK
                 RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
 
                 RenderCommand::DrawMeshTasks(cmd, lines.size(), 1, 1);
+            }
+            
+            // skybox always last
+            {
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshSkyBoxPipeline);
+
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+
+                PushConstantSkyBox pushSkyBox
+                {
+                    .MaterialIndex = cubemap->GetTextureIndex(),
+                    .sceneData = sceneBuffer->GetBufferAddress(),
+                };
+
+                RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushSkyBox, sizeof(PushConstantSkyBox));
+
+                RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
             }
 
             RenderCommand::EndRendering(cmd);

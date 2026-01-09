@@ -6,6 +6,71 @@
 
 namespace VanK
 {
+    vk::Filter ConvertToVkFilter(VanKFilter vankFilter)
+    {
+        switch (vankFilter)
+        {
+            case VanKFilter::filterNearest: return vk::Filter::eNearest;
+            case VanKFilter::filterLinear: return vk::Filter::eLinear;
+            default:
+            {
+                std::cout << "Invalid Filter" << '\n';
+                return vk::Filter::eLinear;
+            }
+        }
+    }
+    
+    vk::SamplerMipmapMode ConvertToVkSamplerMipmapMode(VanKSamplerMipmapMode vankMode)
+    {
+        switch (vankMode)
+        {
+            case VanKSamplerMipmapMode::mipmapModeNearest : return vk::SamplerMipmapMode::eNearest;
+            case VanKSamplerMipmapMode::mipmapModeLinear : return vk::SamplerMipmapMode::eLinear;
+            default:
+            {
+                std::cout << "Invalid Sampler Mipmap Mode" << '\n';
+                return vk::SamplerMipmapMode::eLinear;
+            }
+        }
+    }
+    
+    vk::SamplerAddressMode ConvertToVkSamplerAddressMode(VanKSamplerAddressMode vankMode)
+    {
+        switch (vankMode)
+        {
+            case VanKSamplerAddressMode::addressModeRepeat : return vk::SamplerAddressMode::eRepeat;
+            case VanKSamplerAddressMode::addressModeMirrorRepeat : return vk::SamplerAddressMode::eMirroredRepeat;
+            case VanKSamplerAddressMode::addressModeClampToEdge : return vk::SamplerAddressMode::eClampToEdge;
+            case VanKSamplerAddressMode::addressModeClampToBorder : return vk::SamplerAddressMode::eClampToBorder;
+            case VanKSamplerAddressMode::addressModeMirrorClampToEdge : return vk::SamplerAddressMode::eMirrorClampToEdge;
+            default:
+            {
+                std::cout << "Invalid Sampler Address Mode" << '\n';
+                return vk::SamplerAddressMode::eRepeat;
+            }
+        }
+    }
+    
+    vk::CompareOp ConvertToVkCompareOp(VanKCompareOp vankCompareOp)
+    {
+        switch (vankCompareOp)
+        {
+            case VanKCompareOp::compareOpNever : return vk::CompareOp::eNever;
+            case VanKCompareOp::compareOpLess : return vk::CompareOp::eLess;
+            case VanKCompareOp::compareOpEqual : return vk::CompareOp::eEqual;
+            case VanKCompareOp::compareOpLessOrEqual : return vk::CompareOp::eLessOrEqual;
+            case VanKCompareOp::compareOpGreater : return vk::CompareOp::eGreater;
+            case VanKCompareOp::compareOpNotEqual : return vk::CompareOp::eNotEqual;
+            case VanKCompareOp::compareOpGreaterOrEqual : return vk::CompareOp::eGreaterOrEqual;
+            case VanKCompareOp::compareOpAlways : return vk::CompareOp::eAlways;
+            default:
+            {
+                std::cout << "Invalid Sampler Compare Op" << '\n';
+                return vk::CompareOp::eNever;
+            }
+        }
+    }
+
     vk::Format ConvertImageFormat(ImageFormat format)
     {
         switch (format)
@@ -13,6 +78,7 @@ namespace VanK
             case ImageFormat::RGB8: return vk::Format::eB8G8R8Unorm;
             case ImageFormat::RGBA8: return vk::Format::eB8G8R8A8Unorm; //eR8G8B8A8Unorm
             case ImageFormat::SRGBA8: return vk::Format::eB8G8R8A8Srgb;
+            case ImageFormat::R16G16: return vk::Format::eR16G16Sfloat;
             default: return vk::Format::eUndefined;
         }
     }
@@ -29,6 +95,33 @@ namespace VanK
         }*/
         
         utils::ImageResource local{};
+        
+        // sampler
+        VanKSamplerInfo info = m_Specification.SamplerInfo;
+        vk::PhysicalDeviceProperties properties = instance.GetPhysicalDevice().getProperties();
+        vk::SamplerCreateInfo samplerInfo
+        {
+            .magFilter = ConvertToVkFilter(info.magFilter),
+            .minFilter = ConvertToVkFilter(info.minFilter),
+            .mipmapMode = ConvertToVkSamplerMipmapMode(info.mipmapMode),
+            .addressModeU = ConvertToVkSamplerAddressMode(info.addressModeU),
+            .addressModeV = ConvertToVkSamplerAddressMode(info.addressModeV),
+            .addressModeW = ConvertToVkSamplerAddressMode(info.addressModeW),
+            .mipLodBias = info.mipLodBias, // only works if it has enoug miplevels is miplevel is max 1 then making this 10 crashes
+            .anisotropyEnable = info.anisotopyEnable,
+            .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+            .compareEnable = info.compareEnable,
+            .compareOp = ConvertToVkCompareOp(info.compareOp),
+            .minLod = info.minLod, // the higher this is the lower the resolution 0 is max res
+            .maxLod = VK_LOD_CLAMP_NONE
+        };
+        auto textureSampler = instance.getSamplerPool().acquireSampler(samplerInfo);
+        local.sampler = textureSampler;
+        
+        /* not needed right now only with eclamptoborder im using edge
+         *hashCombine(info.borderColor);
+        hashCombine(info.unnormalizedCoordinates);
+        */
         
         // Determine the Vulkan format from KTX format
         vk::Format textureFormat;
@@ -81,7 +174,8 @@ namespace VanK
                 .imageType = vk::ImageType::e2D, .format = textureFormat,
                 .extent = {texWidth, texHeight, 1}, .mipLevels = mipLevels, .arrayLayers = 1,
                 .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
-                .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled, .sharingMode = vk::SharingMode::eExclusive
+                .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
+                .sharingMode = vk::SharingMode::eExclusive
             };
             
             local.image = instance.GetAllocator().createImage(imageInfo).image;
@@ -142,7 +236,7 @@ namespace VanK
         
         bool isCubeMap = ktx_texture->isCubemap;
         uint32_t layerCount = isCubeMap ? 6u : 1u;
-    
+        
         if (ktx_texture->numLevels > 1)
         {
             if (m_Specification.GenerateMips)
@@ -246,7 +340,7 @@ namespace VanK
 
     VulkanTexture2D::~VulkanTexture2D()
     {
-        std::cout << "Destroying: " << m_Specification.Name << std::endl;
+        std::cout << "Destroying: " << m_Specification.Name << '\n';
         
         auto& instance = VulkanRendererAPI::Get();
         
@@ -287,25 +381,29 @@ namespace VanK
 
     ImTextureID VulkanTexture2D::getImTextureID()
     {
+        auto& instance = VulkanRendererAPI::Get();
+        
         // If ImGui Vulkan backend is NOT available, return stored handle or nullptr
-        if (!VulkanRendererAPI::Get().isImGuiInit())
+        if (!instance.isImGuiInit())
             return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
 
         // If a handle already exists, return it
         if (m_ImGuiHandle)
             return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
 
+        auto& image = instance.GetImageSource(m_TextureIndex);
+        
         // Validate that the renderer Vulkan objects are still alive
-        if (!*VulkanRendererAPI::Get().textureSampler)
+        if (!image.sampler)
             return 0;
 
-        auto view = *VulkanRendererAPI::Get().GetImageSource(m_TextureIndex).view;
+        auto view = *image.view;
         if (!view)
             return 0;
 
         // Create descriptor for ImGui
         m_ImGuiHandle = ImGui_ImplVulkan_AddTexture(
-            *VulkanRendererAPI::Get().textureSampler,
+            image.sampler,
             view,
             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
         );

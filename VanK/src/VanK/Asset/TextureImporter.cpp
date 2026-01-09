@@ -43,7 +43,7 @@ namespace VanK
 
     Ref<Texture2D> TextureImporter::LoadTexture2D(const std::filesystem::path& path, const TextureSpecification& spec)
     {
-        std::vector<std::filesystem::path> paths{ path };
+        std::vector paths{ path };
         
         return LoadTexture2D(paths, spec);
     }
