@@ -1,5 +1,8 @@
 #include "TextureImporter.h"
 
+#define STB_IMAGE_IMPLEMENTATION
+#include <stb_image.h>
+
 #include "VanK/Core/logger.h"
 #include "VanK/Debug/Instrumentor.h"
 #include "VanK/Project/Project.h"
@@ -45,7 +48,41 @@ namespace VanK
     {
         std::vector paths{ path };
         
+        if (path.extension() == ".png" || path.extension() == ".jpg" || path.extension() == ".jpeg")
+            return LoadImageTexture(path, spec);
+        
         return LoadTexture2D(paths, spec);
+    }
+    
+    Ref<Texture2D> TextureImporter::LoadImageTexture(const std::filesystem::path& path, TextureSpecification spec)
+    {
+        if (spec.FlipTexture)
+            stbi_set_flip_vertically_on_load(true);
+        
+        int w, h, c;
+        stbi_uc *pixels = stbi_load(path.string().c_str(), &w, &h, &c, STBI_rgb_alpha);
+        
+        if (!pixels)
+            throw std::runtime_error("failed to load texture image!");
+
+        spec.Width  = w;
+        spec.Height = h;
+
+        Buffer data(w * h * 4);
+        memcpy(data.Data, pixels, data.Size);
+        
+        /*int pixelCount = w * h;
+        for (int i = 0; i < pixelCount; ++i)
+        {
+            std::swap(data.Data[i*4 + 0], data.Data[i*4 + 2]); // swap R <-> B
+        }*/
+
+        Ref<Texture2D> tex = Texture2D::Create(spec, data);
+
+        stbi_image_free(pixels);
+        data.Release();
+
+        return tex;
     }
     
     Ref<Texture2D> TextureImporter::LoadTexture2D(const std::vector<std::filesystem::path>& path, TextureSpecification spec)

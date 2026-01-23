@@ -153,6 +153,6 @@ namespace VanK
         inline static Ref<StorageBuffer> localMeshTaskSubmitBuffer;
         inline static Ref<IndirectBuffer> meshTaskSubmitBuffer;
         
-        inline static Ref<Texture2D> whiteTexture, pinkTexture, vikingRoom, ChernoLogo, cubemap, BRDF2DLUT, irradianceMap, prefilterMap;
+        inline static Ref<Texture2D> whiteTexture, pinkTexture, vikingRoom, ChernoLogo, cubemap, BRDF2DLUT, irradianceMap, prefilterMap, rustedIron, rustedIronMetalRough, rustedIronNormal;
     };
 }

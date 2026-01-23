@@ -36,6 +36,7 @@ public struct MeshletPrimitive
 public struct MeshDraw
 {
     public column_major float4x4 modelMatrix;
+    public column_major float3x3 normalMatrix;
     public uint64_t  primitiveID;
 };
 
@@ -196,6 +197,10 @@ public struct SceneData
     public float deltaTime;
 
     public bool FrustumCullEnabled;
+
+    public uint32_t brdflutTexture;
+    public uint32_t irradianceTexture;
+    public uint32_t prefilteredTexture;
 };
 
 

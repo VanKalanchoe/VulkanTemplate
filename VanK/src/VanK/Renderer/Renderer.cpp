@@ -16,6 +16,7 @@
 
 #include <meshoptimizer.h>
 #include <glm/gtc/type_ptr.inl>
+#include <glm/gtx/rotate_vector.hpp>
 
 #include "MSDFData.h"
 #include "VanK/Asset/AssetManager.h"
@@ -251,6 +252,7 @@ namespace VanK
     {
         // because this can change every frame needs to be uploaded every frame
         glm::mat4 modelMatrix;
+        glm::mat3 normalMatrix;
         uint64_t primitiveID;
     };
 
@@ -308,7 +310,8 @@ namespace VanK
         const std::string& basePath,
         const tinygltf::Model& model,
         bool generateMips = false,
-        ImageFormat format = ImageFormat::RGBA8
+        ImageFormat format = ImageFormat::RGBA8,
+        bool flipTexture = false
     )
     {
         if (imageIndex < 0)
@@ -323,7 +326,7 @@ namespace VanK
 
         if (!img.uri.empty())
         {
-            Ref<Texture2D> tex = TextureImporter::LoadTexture2D(basePath + img.uri, {.Format = format, .GenerateMips = generateMips});
+            Ref<Texture2D> tex = TextureImporter::LoadTexture2D(basePath + img.uri, {.Format = format, .GenerateMips = generateMips, .FlipTexture = flipTexture});
             textureCache[key] = tex;
             return tex;
         }
@@ -377,19 +380,20 @@ namespace VanK
         // -----------------------------
         mat.diffuseFactor = glm::vec4(1.0f); // default white
         int albedoImage = -1;
+        
+        if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() == 4)
+        {
+            const auto& bc = gltfMat.pbrMetallicRoughness.baseColorFactor;
+            mat.diffuseFactor = glm::vec4(bc[0], bc[1], bc[2], bc[3]);
+        }
 
         if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0) // New PBR (Metallic-Roughness)
         {
             int texIndex = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
             albedoImage = model.textures[texIndex].source;
-            if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, false, ImageFormat::SRGBA8))
+            
+            if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, false, ImageFormat::SRGBA8, true))
                 mat.albedoTexture = t->GetTextureIndex();
-
-            if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() == 4)
-            {
-                const auto& bc = gltfMat.pbrMetallicRoughness.baseColorFactor;
-                mat.diffuseFactor = glm::vec4(bc[0], bc[1], bc[2], bc[3]);
-            }
         }
         else if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness")) // Old PBR
         {
@@ -482,7 +486,7 @@ namespace VanK
         // -----------------------------
         // EMISSIVE
         // -----------------------------
-        mat.emissiveFactor = glm::vec3(1.0f); // default white
+        mat.emissiveFactor = glm::vec3(0.0f); // default white
         if (gltfMat.emissiveFactor.size() == 3)
         {
             mat.emissiveFactor = glm::vec3(
@@ -534,8 +538,7 @@ namespace VanK
         materials.push_back(mat);
         return static_cast<uint32_t>(materials.size() - 1);
     }
-
-
+    
     static void TraverseNode(
         std::string& basePath,
         const tinygltf::Model& model,
@@ -1339,6 +1342,7 @@ namespace VanK
                 vertexStart = std::min(vertexStart, meshlet.vertexOffset);
                 vertexCount += meshlet.meshletVerticesCount;
             }
+            std::cout << std::dec << "Color: " << materials[prim.materialIndex].diffuseFactor;
 
             primitiveDraws.push_back({primitiveId, prim.meshletCount, isTransparent});
         }
@@ -1353,7 +1357,7 @@ namespace VanK
         // Submit draws in sorted order
         for (const auto& pd : primitiveDraws)
         {
-            meshDraws.emplace_back(MeshDraw{transform, pd.primitiveId});
+            meshDraws.emplace_back(MeshDraw{transform, glm::transpose(glm::inverse(glm::mat3(transform))), pd.primitiveId});
             meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{
                 (pd.meshletCount + 64 - 1) / 64, 1, 1
             });
@@ -1578,12 +1582,23 @@ namespace VanK
         
         whiteTexture = TextureImporter::LoadTexture2D("");
         pinkTexture = TextureImporter::LoadTexture2D("", {.defaultColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)});
-        vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2");
+        vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2", {.FlipTexture = true});
         ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
+        BRDF2DLUT = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/lol.ktx2", {.FlipTexture = true, .SamplerInfo = skyboxSampler});
+        /*
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2", {.SamplerInfo = skyboxSampler});
-        BRDF2DLUT = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/lol.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/irradiance.ktx2", {.SamplerInfo = skyboxSampler});
         prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/prefilter.ktx2", {.SamplerInfo = skyboxSampler});
+        */
+        cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSky.ktx2", {.SamplerInfo = skyboxSampler});
+        irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyIrradiance.ktx2", {.SamplerInfo = skyboxSampler});
+        prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyPrefilter.ktx2", {.SamplerInfo = skyboxSampler});
+        
+        /*
+        rustedIron = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/rustediron1-alt2-bl/rustediron2_basecolor.ktx2");
+        rustedIronMetalRough = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/rustediron1-alt2-bl/metalRough.ktx2");
+        rustedIronNormal = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/rustediron1-alt2-bl/rustediron2_normal.ktx2");
+        */
         
         /*bool ret = loader.LoadBinaryFromFile(&model, &err, &warn, MODEL_PATH);*/
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
@@ -1611,14 +1626,23 @@ namespace VanK
         /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
         //ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
-        // ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf", pinkTexture->GetTextureIndex());
-        // ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");
-        //ModelHandle sponza = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");
+        /*ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
+        materials.back().albedoTexture = vikingRoom->GetTextureIndex();*/
+        /*ModelHandle monkey = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Suzanne_monkey/Suzanne.gltf");*/
+        /*ModelHandle sponza = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Sponza/Sponza.gltf");*/
         /*ModelHandle bhudda = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
-        ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");
-        ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/scene.gltf");
-        SubmitModelDraw(spheres, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));
-        SubmitModelDraw(damagedHelmet, glm::translate(glm::mat4(1.0f), glm::vec3(-1.0f, 0.0f, 0.0f)));
+        /*ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");*/
+        /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/cornell_box/scene.gltf");*/
+        ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");
+        /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
+        /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
+        /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
+        SubmitModelDraw(spheres, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
+        /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
+        materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
+        materials.back().normalTexture = rustedIronNormal->GetTextureIndex();*/
+        /*SubmitModelDraw(bhudda, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));*/
+        /*SubmitModelDraw(gun, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)));*/
         /*SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f)));*/
         //SubmitModelDraw(monkey, glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)));
         uint64_t sceneBuffersize = sizeof(SceneDatas);
@@ -1824,12 +1848,12 @@ namespace VanK
         if (!done)
         {
             //lights
-            lights.emplace_back(Lights{.lightPosition = glm::vec3(-10.0f, 10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
-            lights.emplace_back(Lights{.lightPosition = glm::vec3(10.0f, 10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
-            lights.emplace_back(Lights{.lightPosition = glm::vec3(-10.0f, -10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
-            lights.emplace_back(Lights{.lightPosition = glm::vec3(10.0f, -10.0f, 10.0f), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition =  glm::rotate(glm::vec3(-10.0f, 10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(10.0f, 10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(-10.0f, -10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(10.0f, -10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, lightsBuffer, lights, Lights, 0);
-            lights.clear();
+            lights.clear(); 
             
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, geometry.vertices, Vertex, 0);
             UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, geometry.meshletVertices, uint32_t, 0);

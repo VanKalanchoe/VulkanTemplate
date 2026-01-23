@@ -71,7 +71,7 @@ namespace VanK
         }
     }
 
-    vk::Format ConvertImageFormat(ImageFormat format)
+    /*vk::Format ConvertImageFormat(ImageFormat format)
     {
         switch (format)
         {
@@ -80,6 +80,17 @@ namespace VanK
             case ImageFormat::SRGBA8: return vk::Format::eB8G8R8A8Srgb;
             case ImageFormat::R16G16: return vk::Format::eR16G16Sfloat;
             default: return vk::Format::eUndefined;
+        }
+    }*/
+    vk::Format ConvertImageFormat(ImageFormat format)
+    {
+        switch (format)
+        {
+        case ImageFormat::RGB8: return vk::Format::eR8G8B8A8Unorm;
+        case ImageFormat::RGBA8: return vk::Format::eR8G8B8A8Unorm; //eR8G8B8A8Unorm
+        case ImageFormat::SRGBA8: return vk::Format::eR8G8B8A8Srgb;
+        case ImageFormat::R16G16: return vk::Format::eR16G16Sfloat;
+        default: return vk::Format::eUndefined;
         }
     }
 
@@ -220,7 +231,7 @@ namespace VanK
             if (textureFormat == vk::Format::eUndefined)
             {
                 // If the format is undefined, fall back to a reasonable default
-                textureFormat = vk::Format::eB8G8R8A8Srgb; // srgb ?
+                textureFormat = vk::Format::eR8G8B8A8Srgb; // srgb ?
             }
             
             if (textureFormat == vk::Format::eR32G32B32Sfloat)
@@ -229,7 +240,7 @@ namespace VanK
         else
         {
             // For KTX1 files or if we can't determine the format, use a reasonable default
-            textureFormat = vk::Format::eB8G8R8A8Srgb;
+            textureFormat = vk::Format::eR8G8B8A8Srgb;
         }
     
         textureImageFormat = textureFormat;

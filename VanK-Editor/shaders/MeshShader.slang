@@ -169,7 +169,7 @@ void meshMain
         vertices[i].position = clipPos;
         vertices[i].worldPos = worldPos;
         vertices[i].texcoords = v.texcoords;
-        vertices[i].normals = v.normals;
+        vertices[i].normals = mul(pushConstant.meshDrawBuffer->meshDraw[drawID].normalMatrix, v.normals); // might need rotation of model ?
         vertices[i].tangents = v.tangents;
         vertices[i].materialIndex = pushConstant.meshletPrimitive->primitives[primitiveID].materialIndex;
     }
@@ -188,6 +188,9 @@ void meshMain
 
 [[vk::binding(0, 0)]]
 Sampler2D texture[];
+
+[[vk::binding(0, 0)]]
+SamplerCube cubes[];
 
 float3 tosrgb(float3 c)
 {
@@ -218,12 +221,12 @@ static const float PI = 3.14159265359;
 float3 getNormalFromMap(uint32_t normalTextureIndex, float2 texCoord, float4 worldPos, float3 normals)
 {
     // If no normal map (-1), just return the vertex normal in world space
-    if (normalTextureIndex < 1)
+    if (normalTextureIndex == 0)
     {
         return normalize(normals);
     }
 
-    float3 tangentNormal = texture[normalTextureIndex].Sample(texCoord).xyz * 2.0 - 1.0;
+    float3 tangentNormal = texture[normalTextureIndex].Sample(texCoord).rgb * 2.0 - 1.0;
 
     float3 Q1  = ddx(worldPos.rgb);
     float3 Q2  = ddy(worldPos.rgb);
@@ -235,7 +238,7 @@ float3 getNormalFromMap(uint32_t normalTextureIndex, float2 texCoord, float4 wor
     float3 B  = -normalize(cross(N, T));
     float3x3 TBN = float3x3(T, B, N);
 
-    return normalize(mul(TBN, tangentNormal));
+    return normalize(mul(tangentNormal, TBN));
 }
 // ----------------------------------------------------------------------------
 float DistributionGGX(float3 N, float3 H, float roughness)
@@ -278,42 +281,77 @@ float3 fresnelSchlick(float cosTheta, float3 F0)
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 // ----------------------------------------------------------------------------
+float3 fresnelSchlickRoughness(float cosTheta, float3 F0, float roughness)
+{
+    return F0 + (max(float3(1.0 - roughness), F0) - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}   
+// ----------------------------------------------------------------------------
+float3 PBRNeutralToneMapping( float3 color ) {
+  const float startCompression = 0.8 - 0.04;
+  const float desaturation = 0.15;
 
+  float x = min(color.r, min(color.g, color.b));
+  float offset = x < 0.08 ? x - 6.25 * x * x : 0.04;
+  color -= offset;
+
+  float peak = max(color.r, max(color.g, color.b));
+  if (peak < startCompression) return color;
+
+  const float d = 1. - startCompression;
+  float newPeak = 1. - d * d / (peak + d - startCompression);
+  color *= newPeak / peak;
+
+  float g = 1. - 1. / (desaturation * (peak - newPeak) + 1.);
+  return lerp(color, newPeak * float3(1, 1, 1), g);
+}
+// ----------------------------------------------------------------------------
+float3 ACESFilm(float3 x)
+{
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+}
+// ----------------------------------------------------------------------------
 [shader("pixel")]
 float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 {
     Material mats = pushConstant.materialBuffer->materials[vertexInput.materialIndex];
 
     float3 emissive = mats.emissiveFactor; // constant color
-    if (mats.emissiveTexture >= 0)
+    if (mats.emissiveTexture != 0)
     {
-        emissive *= fromsrgb(texture[mats.emissiveTexture].Sample(vertexInput.texcoords)).rgb;
+        emissive *= /* fromsrgb */(texture[mats.emissiveTexture].Sample(vertexInput.texcoords)).rgb;
     }
 
     // Base color + texture
     float4 albedo = mats.diffuseFactor;
-    if (mats.albedoTexture >= 0) // when converting i did al ltextures srgb idk if thats good
-        albedo *= fromsrgb(texture[mats.albedoTexture].Sample(vertexInput.texcoords)); // could be wrong srgb or not
+    if (mats.albedoTexture != 0) // when converting i did al ltextures srgb idk if thats good
+        albedo *= /* fromsrgb */(texture[mats.albedoTexture].Sample(vertexInput.texcoords)); // could be wrong srgb or not
 
     float metallic = mats.metallicFactor;
     float roughness = mats.roughnessFactor;
-    if(mats.metallicRoughnessTexture >= 0)
+    float4 mrT;
+    if(mats.metallicRoughnessTexture != 0)
     {
-       float4 mrT = texture[mats.metallicRoughnessTexture].Sample(vertexInput.texcoords);
+        mrT = texture[mats.metallicRoughnessTexture].Sample(vertexInput.texcoords);
        metallic  *= mrT.b;
        roughness *= mrT.g;
     }
 
     float ambientOcclusion = mats.ambientOcclusionFactor;
-    if(mats.ambientOcclusionFactor >= 0)
+    if(mats.ambientOcclusionFactor != 0)
     {
         float4 aoT = texture[mats.ambientOcclusionTexture].Sample(vertexInput.texcoords);
         ambientOcclusion *= aoT.r;
     }
 
-    /* float3 N = normalize(vertexInput.normals); */
+  /*float3 N = normalize(vertexInput.normals); */
     float3 N = getNormalFromMap(mats.normalTexture, vertexInput.texcoords, vertexInput.worldPos, vertexInput.normals);
-    float3 V = normalize(pushConstant.sceneData->cameraWorldPos.rgb - vertexInput.worldPos.rgb);
+    float3 V = normalize(pushConstant.sceneData->cameraWorldPos.xyz - vertexInput.worldPos.xyz);
+    float3 R = reflect(-V, N);
 
     // calculate reflectance at normal incidence; if dia-electric (like plastic) use F0 
     // of 0.04 and if it's a metal, use the albedo color as F0 (metallic workflow)  
@@ -322,12 +360,12 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 
     // reflectance equation
     float3 Lo = float3(0.0);
-    for(int i = 0; i < 4; ++i)
+    for(int i = 0; i < 0; ++i)
     {
         // calculate per-light radiance
-        float3 L = normalize(pushConstant.lightingBuffer->lights[i].lightPosition - vertexInput.worldPos.rgb);
+        float3 L = normalize(pushConstant.lightingBuffer->lights[i].lightPosition - vertexInput.worldPos.xyz);
         float3 H = normalize(V + L);
-        float distance = length(pushConstant.lightingBuffer->lights[i].lightPosition - vertexInput.worldPos.rgb);
+        float distance = length(pushConstant.lightingBuffer->lights[i].lightPosition - vertexInput.worldPos.xyz);
         float attenuation = 1.0 / (distance * distance);
         float3 radiance = pushConstant.lightingBuffer->lights[i].lightColor * attenuation;
 
@@ -356,19 +394,43 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 
         // add to outgoing radiance Lo
         Lo += (kD * albedo.rgb / PI + specular) * radiance * NdotL;  // note that we already multiplied the BRDF by the Fresnel (kS) so we won't multiply by kS again
-    
     }
 
-    // ambient lighting (note that the next IBL tutorial will replace 
-    // this ambient lighting with environment lighting).
-    float3 ambient = float3(0.03) * albedo.rgb * ambientOcclusion;
+    // ambient lighting (we now use IBL as the ambient term)
+    float3 F = fresnelSchlickRoughness(max(dot(N, V), 0.0), F0, roughness);
+
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+    kD *= 1.0 - metallic;
+    /* N.z = -N.z; */
+    float3 irradiance = cubes[pushConstant.sceneData->irradianceTexture].Sample(N).rgb;
+    float3 diffuse = irradiance * albedo.rgb;
+
+    // sample both the pre-filter map and the BRDF lut and combine them together as per the Split-Sum approximation to get the IBL specular part.
+    const float MAX_REFLECTION_LOD = 7.0; // log2(prefilterresolution)
+    R.z = -R.z;
+    float3 prefilteredColor = cubes[pushConstant.sceneData->prefilteredTexture].SampleLevel(R, roughness * MAX_REFLECTION_LOD).rgb;
+    float2 brdf = texture[pushConstant.sceneData->brdflutTexture].Sample(float2(max(dot(N, V), 0.0), roughness)).rg;
+    float3 specular = prefilteredColor * (F * brdf.x + brdf.y);
+
+    float iblIntensity = 1.0;
+    float3 ambient = (kD * diffuse + specular) * ambientOcclusion * iblIntensity;
 
     float3 color = ambient + Lo + emissive;
 
+    float exposure = 1.0; // start here, tweak in UI later
+    color *= exposure;
+
     // HDR tonemapping
     color = color / (color + float3(1.0));
-    // gamma correct not needed becasue my swapchain is already srgb
-    color = pow(color, float3(1.0/2.2)); 
- //(vertexInput.normals * 0.5 + 0.5
+    
+   /*  color = PBRNeutralToneMapping(color); */
+    /* color = ACESFilm(color); */
+
+    // gamma correct already because of srgb swapchain format
+    /* color = pow(color, float3(1.0/2.2));  */
+    
+    //normalize(vertexInput.normals) * 0.5 + 0.5
+
     return float4(color, 1.0);
 }
