@@ -346,17 +346,29 @@ namespace  VanK
 
             auto features = device.template getFeatures2
             <
-                vk::PhysicalDeviceFeatures2, vk::PhysicalDeviceVulkan13Features,
+                vk::PhysicalDeviceFeatures2,
+                vk::PhysicalDeviceVulkan12Features,
+                vk::PhysicalDeviceVulkan13Features,
                 vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
                 vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
-                vk::PhysicalDeviceMeshShaderFeaturesEXT
+                vk::PhysicalDeviceMeshShaderFeaturesEXT,
+                vk::PhysicalDeviceAccelerationStructureFeaturesKHR,
+                vk::PhysicalDeviceRayQueryFeaturesKHR
             >();
-            bool supportsRequiredFeatures = features.template get<vk::PhysicalDeviceFeatures2>().features.
-                                                     samplerAnisotropy &&
-                features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
-                features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
-                features.template get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>().timelineSemaphore;    
-                features.template get<vk::PhysicalDeviceMeshShaderFeaturesEXT>().meshShader;
+            bool supportsRequiredFeatures = 
+                                            features.template get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy &&
+                                            features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+                                            features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
+                                            features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingSampledImageUpdateAfterBind &&
+                                            features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingPartiallyBound &&
+                                            features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingVariableDescriptorCount &&
+                                            features.template get<vk::PhysicalDeviceVulkan12Features>().runtimeDescriptorArray &&
+                                            features.template get<vk::PhysicalDeviceVulkan12Features>().shaderSampledImageArrayNonUniformIndexing &&
+                                            features.template get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress &&
+                                            features.template get<vk::PhysicalDeviceAccelerationStructureFeaturesKHR>().accelerationStructure &&
+                                            features.template get<vk::PhysicalDeviceRayQueryFeaturesKHR>().rayQuery;
+                                            features.template get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>().timelineSemaphore &&
+                                            features.template get<vk::PhysicalDeviceMeshShaderFeaturesEXT>().meshShader;
             
             return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
         });
@@ -400,7 +412,9 @@ namespace  VanK
             vk::PhysicalDeviceVulkan13Features,
             vk::PhysicalDeviceVulkan14Features,
             vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-            vk::PhysicalDeviceMeshShaderFeaturesEXT
+            vk::PhysicalDeviceMeshShaderFeaturesEXT,
+            vk::PhysicalDeviceAccelerationStructureFeaturesKHR, 
+            vk::PhysicalDeviceRayQueryFeaturesKHR
         >
         featureChain =
         {
@@ -424,6 +438,8 @@ namespace  VanK
             {.maintenance5 = true, .pushDescriptor = true},
             {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
             {.taskShader = true, .meshShader = true},
+            {.accelerationStructure = true},                                                                                                                                                                                                                                          // vk::PhysicalDeviceAccelerationStructureFeaturesKHR
+            {.rayQuery = true}   
         };
         
         requiredDeviceExtension.push_back(VK_EXT_MESH_SHADER_EXTENSION_NAME);
