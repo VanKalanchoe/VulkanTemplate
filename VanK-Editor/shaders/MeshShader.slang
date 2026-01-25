@@ -407,7 +407,7 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     float3 diffuse = irradiance * albedo.rgb;
 
     // sample both the pre-filter map and the BRDF lut and combine them together as per the Split-Sum approximation to get the IBL specular part.
-    const float MAX_REFLECTION_LOD = 7.0; // log2(prefilterresolution)
+    const float MAX_REFLECTION_LOD = log2(1024); // log2(prefilterresolution)
     R.z = -R.z;
     float3 prefilteredColor = cubes[pushConstant.sceneData->prefilteredTexture].SampleLevel(R, roughness * MAX_REFLECTION_LOD).rgb;
     float2 brdf = texture[pushConstant.sceneData->brdflutTexture].Sample(float2(max(dot(N, V), 0.0), roughness)).rg;

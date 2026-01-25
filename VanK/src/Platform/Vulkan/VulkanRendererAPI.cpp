@@ -974,14 +974,19 @@ namespace  VanK
         
         auto [result, acquiredImageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
         
+        // Due to VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS being defined, eErrorOutOfDateKHR can be checked as a result
+        // here and does not need to be caught by an exception.
         if (result == vk::Result::eErrorOutOfDateKHR)
         {
             recreateSwapChain();
             return;
         }
         
+        // On other success codes than eSuccess and eSuboptimalKHR we just throw an exception.
+        // On any error code, aquireNextImage already threw an exception.
         if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
         {
+            assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
             throw std::runtime_error("failed to acquire swap chain image!");
         }
         

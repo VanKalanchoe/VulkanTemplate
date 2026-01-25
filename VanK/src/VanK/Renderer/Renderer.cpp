@@ -471,8 +471,8 @@ namespace VanK
         // -----------------------------
         // METALLIC / ROUGHNESS
         // -----------------------------
-        mat.metallicFactor  = static_cast<float>(gltfMat.pbrMetallicRoughness.metallicFactor);
-        mat.roughnessFactor = static_cast<float>(gltfMat.pbrMetallicRoughness.roughnessFactor);
+        mat.metallicFactor  = static_cast<float>(gltfMat.pbrMetallicRoughness.metallicFactor) == 0.0f ? 1.0f : static_cast<float>(gltfMat.pbrMetallicRoughness.metallicFactor); // im not sure if this makes sense 
+        mat.roughnessFactor = static_cast<float>(gltfMat.pbrMetallicRoughness.roughnessFactor) == 0.0f ? 1.0f : static_cast<float>(gltfMat.pbrMetallicRoughness.roughnessFactor); // atleast it fixes the reflectivenes for now 
 
         if (gltfMat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
         {
@@ -1593,6 +1593,13 @@ namespace VanK
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSky.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyIrradiance.ktx2", {.SamplerInfo = skyboxSampler});
         prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyPrefilter.ktx2", {.SamplerInfo = skyboxSampler});
+        
+        /*
+        cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/nightSky/nightSkyCube.ktx2", {.SamplerInfo = skyboxSampler});
+        irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/nightSky/nightSkyIrradiance.ktx2", {.SamplerInfo = skyboxSampler});
+        prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/nightSky/nightSkyPrefilter.ktx2", {.SamplerInfo = skyboxSampler});
+        */
+        
         
         /*
         rustedIron = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/rustediron1-alt2-bl/rustediron2_basecolor.ktx2");
