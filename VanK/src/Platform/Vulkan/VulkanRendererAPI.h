@@ -959,13 +959,17 @@ namespace VanK
         void DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
-        void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride);
+        void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void EndRendering(VanKCommandBuffer cmd) override;
         void SubmitRendering(VanKCommandBuffer cmd) override;
         VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers) override;
         void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void EndComputePass(VanKComputePass* computePass) override;
+        void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
+        void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives) override;
+        void updateTopLevelAS(const glm::mat4 &model) override;
+        void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
     public:
         struct PipelineResource
         {
@@ -1053,10 +1057,13 @@ namespace VanK
     private:
         vk::raii::DescriptorPool descriptorPool = nullptr;
         vk::raii::DescriptorPool uiDescriptorPool = nullptr; // imgui 
+        vk::raii::DescriptorPool raytraceDescriptorPool = nullptr; // acceleration structure 
         std::vector<vk::raii::DescriptorSet> descriptorSets;
         std::vector<VkDescriptorSet> uiDescriptorSet{}; // imgui
+        std::vector<vk::raii::DescriptorSet> raytraceDescriptorSet{}; // acceleration structure 
         vk::raii::DescriptorSetLayout descriptorSetLayout = nullptr;
         vk::raii::DescriptorSetLayout commonDescriptorSetLayout = nullptr;
+        vk::raii::DescriptorSetLayout raytraceDescriptorSetLayout = nullptr;
 
         vk::raii::CommandPool commandPool = nullptr;
         std::vector<vk::raii::CommandBuffer> commandBuffers;
@@ -1104,7 +1111,12 @@ namespace VanK
             vk::KHRSpirv14ExtensionName,
             vk::KHRSynchronization2ExtensionName,
             vk::KHRCreateRenderpass2ExtensionName,
-            vk::EXTDescriptorIndexingExtensionName
+            vk::EXTDescriptorIndexingExtensionName,
+            vk::EXTMeshShaderExtensionName,
+            vk::KHRAccelerationStructureExtensionName,
+            vk::KHRBufferDeviceAddressExtensionName,
+            vk::KHRDeferredHostOperationsExtensionName,
+            vk::KHRRayQueryExtensionName
         };
 
         void initVulkan();

@@ -1,3 +1,4 @@
+#include "shaderIO.h"
 import common;
 
 struct VertexOutput
@@ -21,11 +22,11 @@ struct PushConstant
 {
     SceneData* sceneData;
     CulledData* culledData;
-    VertexData* vertexBuffer;
+    Vertex* vertexBuffer;
     MeshletVerticesData* meshletVerticesBuffer;
     MeshletTrianglesData* meshletTrianglesBuffer;
     MeshletData* meshletBuffer;
-    MeshletPrimitiveData* meshletPrimitive;
+    MeshletPrimitive* meshletPrimitive;
     MeshDrawData* meshDrawBuffer;
     MaterialData* materialBuffer;
     LightData* lightingBuffer;
@@ -63,7 +64,7 @@ void taskMain
     uint drawIndex = drawID;
     uint primitiveID = (uint)pushConstant.meshDrawBuffer->meshDraw[drawIndex].primitiveID;
     uint32_t groupMeshletOffset = (gid.x * TASK_SHADER_DISPATCH_X);
-    uint32_t totalMeshlets = pushConstant.meshletPrimitive->primitives[primitiveID].meshletCount; // currently Drawn meshletCount
+    uint32_t totalMeshlets = pushConstant.meshletPrimitive[primitiveID].meshletCount; // currently Drawn meshletCount
 
     // thread 0 populates shared information for mesh shader
     if (gtid.x == 0) 
@@ -81,7 +82,7 @@ void taskMain
 
     if (threadMeshletOffset < groupMeshletCount) 
     {
-        uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset + pushConstant.meshletPrimitive->primitives[primitiveID].meshletOffset; // offset to the previous one in the global buffer
+        uint32_t meshletIndex = groupMeshletOffset + threadMeshletOffset + pushConstant.meshletPrimitive[primitiveID].meshletOffset; // offset to the previous one in the global buffer
         Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIndex];
 
         // Transform to world space
@@ -142,7 +143,7 @@ void meshMain
 {
     uint drawID = sharedPayload.drawID;
     uint primitiveID = sharedPayload.primitiveID;
-    uint baseOffset = pushConstant.meshletPrimitive->primitives[primitiveID].meshletOffset;
+    uint baseOffset = pushConstant.meshletPrimitive[primitiveID].meshletOffset;
     uint meshletIdx = baseOffset + sharedPayload.groupMeshletOffset + sharedPayload.meshletIndices[groupId.x];
     Meshlet meshlet = pushConstant.meshletBuffer->meshlets[meshletIdx];
     float4x4 viewProj = pushConstant.sceneData->viewProj;
@@ -161,7 +162,7 @@ void meshMain
     for (uint i = instanceIndex; i < meshlet.meshletVerticesCount; i += MESH_SHADER_DISPATCH_X) 
     {
         uint localVertexIndex = pushConstant.meshletVerticesBuffer->meshletVertices[meshlet.meshletVerticesOffset + i].vertexIndex;
-        Vertex v = pushConstant.vertexBuffer->vertices[meshlet.vertexOffset + localVertexIndex];
+        Vertex v = pushConstant.vertexBuffer[meshlet.vertexOffset + localVertexIndex];
         
         float4 worldPos = mul(pushConstant.meshDrawBuffer->meshDraw[drawID].modelMatrix, float4(v.position, 1.0));
         float4 clipPos = mul(viewProj, worldPos);
@@ -171,7 +172,7 @@ void meshMain
         vertices[i].texcoords = v.texcoords;
         vertices[i].normals = mul(pushConstant.meshDrawBuffer->meshDraw[drawID].normalMatrix, v.normals); // might need rotation of model ?
         vertices[i].tangents = v.tangents;
-        vertices[i].materialIndex = pushConstant.meshletPrimitive->primitives[primitiveID].materialIndex;
+        vertices[i].materialIndex = pushConstant.meshletPrimitive[primitiveID].materialIndex;
     }
 
     for (uint i = instanceIndex; i < meshlet.meshletTriangleCount; i += MESH_SHADER_DISPATCH_X) 
@@ -191,6 +192,10 @@ Sampler2D texture[];
 
 [[vk::binding(0, 0)]]
 SamplerCube cubes[];
+
+// TASK04: Acceleration structure binding
+[[vk::binding(0,2)]]
+RaytracingAccelerationStructure accelerationStructure;
 
 float3 tosrgb(float3 c)
 {
@@ -315,6 +320,54 @@ float3 ACESFilm(float3 x)
     return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
 }
 // ----------------------------------------------------------------------------
+float3 Uncharted2Tonemap(float3 color)
+{
+	float A = 0.15;
+	float B = 0.50;
+	float C = 0.10;
+	float D = 0.20;
+	float E = 0.02;
+	float F = 0.30;
+	float W = 11.2;
+	return ((color*(A*color+C*B)+D*E)/(color*(A*color+B)+D*F))-E/F;
+}
+// ----------------------------------------------------------------------------
+float3 ToEnvSpace(float3 v)
+{
+    // Vulkan world → Blender cubemap space
+    return float3(v.x, v.y, -v.z);
+}
+// ----------------------------------------------------------------------------
+
+static const float3 lightDir = float3(-6.0, 6.0, 0.0);
+
+// Small epsilon to avoid self-intersection
+static const float EPSILON = 0.01;
+
+// TASK05: Implement ray query shadows
+bool in_shadow(float3 P)
+{
+// Build the shadow ray from the world position toward the light
+    RayDesc shadowRayDesc;
+    shadowRayDesc.Origin = P;
+    shadowRayDesc.Direction = normalize(lightDir);
+    shadowRayDesc.TMin = EPSILON;
+    shadowRayDesc.TMax = 1e4;
+    
+        // Initialize a ray query for shadows
+        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
+                 RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
+        let rayFlags = RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
+                 RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+           sq.TraceRayInline(accelerationStructure, rayFlags, 0xFF, shadowRayDesc);
+           
+               sq.Proceed();      
+     // If the shadow ray intersects an opaque triangle, we consider the pixel in shadow
+        bool hit = (sq.CommittedStatus() == COMMITTED_TRIANGLE_HIT);
+    
+        return hit;
+}
+
 [shader("pixel")]
 float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 {
@@ -403,27 +456,38 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     float3 kD = 1.0 - kS;
     kD *= 1.0 - metallic;
     /* N.z = -N.z; */
-    float3 irradiance = cubes[pushConstant.sceneData->irradianceTexture].Sample(N).rgb;
+    float3 N_env = ToEnvSpace(N);
+    float3 irradiance = cubes[pushConstant.sceneData->irradianceTexture].Sample(N_env).rgb;
     float3 diffuse = irradiance * albedo.rgb;
 
     // sample both the pre-filter map and the BRDF lut and combine them together as per the Split-Sum approximation to get the IBL specular part.
-    const float MAX_REFLECTION_LOD = log2(1024); // log2(prefilterresolution)
-    R.z = -R.z;
-    float3 prefilteredColor = cubes[pushConstant.sceneData->prefilteredTexture].SampleLevel(R, roughness * MAX_REFLECTION_LOD).rgb;
+    const float MAX_REFLECTION_LOD = log2(512); // log2(prefilterresolution)
+    float3 R_env = ToEnvSpace(R);
+    float3 prefilteredColor = cubes[pushConstant.sceneData->prefilteredTexture].SampleLevel(R_env, roughness * MAX_REFLECTION_LOD).rgb;
     float2 brdf = texture[pushConstant.sceneData->brdflutTexture].Sample(float2(max(dot(N, V), 0.0), roughness)).rg;
     float3 specular = prefilteredColor * (F * brdf.x + brdf.y);
 
     float iblIntensity = 1.0;
     float3 ambient = (kD * diffuse + specular) * ambientOcclusion * iblIntensity;
 
+    float3 P = vertexInput.worldPos.xyz;
+
+    bool inShadow = in_shadow(P);
+
+    // Darken if in shadow
+    if(inShadow)
+    {
+        albedo.rgb *= 0.2;
+    }
+
     float3 color = ambient + Lo + emissive;
 
     float exposure = 1.0; // start here, tweak in UI later
-    color *= exposure;
 
     // HDR tonemapping
     color = color / (color + float3(1.0));
-    
+    /* color = Uncharted2Tonemap(color * exposure);
+	color = color * (1.0f / Uncharted2Tonemap((11.2f).xxx)); */
    /*  color = PBRNeutralToneMapping(color); */
     /* color = ACESFilm(color); */
 
@@ -432,5 +496,5 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     
     //normalize(vertexInput.normals) * 0.5 + 0.5
 
-    return float4(color, 1.0);
+    return float4(albedo.rgb, 1.0);
 }

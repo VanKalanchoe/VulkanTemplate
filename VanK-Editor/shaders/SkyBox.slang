@@ -94,6 +94,17 @@ void meshMain(
 
 [[vk::binding(0, 0)]]
 SamplerCube texture[];
+float3 Uncharted2Tonemap(float3 color)
+{
+	float A = 0.15;
+	float B = 0.50;
+	float C = 0.10;
+	float D = 0.20;
+	float E = 0.02;
+	float F = 0.30;
+	float W = 11.2;
+	return ((color*(A*color+C*B)+D*E)/(color*(A*color+B)+D*F))-E/F;
+}
 
 [shader("pixel")]
 float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
@@ -103,9 +114,13 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 
     float3 envColor = texture[pushConstant.materialIndex].SampleLevel(dir, 0.0).rgb;
 
-    // HDR tonemap and gamma correct
+    // HDR tonemap and 
     envColor = envColor / (envColor + float3(1.0));
-  /*   envColor = pow(envColor, float3(1.0/2.2));  */
+    /* envColor = Uncharted2Tonemap(envColor); */
+    /* envColor = envColor * (1.0f / Uncharted2Tonemap((11.2f).xxx)); */
+
+    //gamma correct
+    /*   envColor = pow(envColor, float3(1.0/2.2));  */
 
     return float4(envColor, 1.0); // pink
 }

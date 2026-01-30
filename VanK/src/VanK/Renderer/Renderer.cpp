@@ -168,13 +168,13 @@ namespace VanK
         uint32_t totalCulled{0};
     };
 
-    struct Vertex
+    /*struct Vertex
     {
         glm::vec3 position{0.0f};
         glm::vec2 texcoords{0.0f};
         glm::vec3 normals{0.0f};
         glm::vec4 tangents{0.0f};
-    };
+    };*/
 
     struct Meshlet
     {
@@ -192,6 +192,7 @@ namespace VanK
         uint32_t meshletTriangleCount;
     };
 
+    /*
     struct MeshletPrimitive
     {
         uint32_t meshletOffset{0};
@@ -200,7 +201,7 @@ namespace VanK
         uint32_t padding1{0};
         // {3} center, {1} radius
         glm::vec4 boundingSphere{};
-    };
+    };*/
 
     struct Material
     {
@@ -261,11 +262,12 @@ namespace VanK
     struct Geometry
     {
         // only needs to be updated once a new model is added so no need for upload every frame
-        std::vector<Vertex> vertices{};
+        std::vector<shaderio::Vertex> vertices{};
+        std::vector<uint32_t> indices{};
         std::vector<uint32_t> meshletVertices{};
         std::vector<uint8_t> meshletTriangles{};
         std::vector<Meshlet> meshlets{};
-        std::vector<MeshletPrimitive> primitives{};
+        std::vector<shaderio::MeshletPrimitive> primitives{};
     };
 
     static Geometry geometry;
@@ -300,7 +302,7 @@ namespace VanK
         return localTransform;
     }
 
-    static std::vector<Vertex> primitiveVertices{};
+    static std::vector<shaderio::Vertex> primitiveVertices{};
     static std::vector<uint32_t> primitiveIndices{};
     static std::unordered_map<std::string, Ref<Texture2D>> textureCache;
 
@@ -471,8 +473,8 @@ namespace VanK
         // -----------------------------
         // METALLIC / ROUGHNESS
         // -----------------------------
-        mat.metallicFactor  = static_cast<float>(gltfMat.pbrMetallicRoughness.metallicFactor) == 0.0f ? 1.0f : static_cast<float>(gltfMat.pbrMetallicRoughness.metallicFactor); // im not sure if this makes sense 
-        mat.roughnessFactor = static_cast<float>(gltfMat.pbrMetallicRoughness.roughnessFactor) == 0.0f ? 1.0f : static_cast<float>(gltfMat.pbrMetallicRoughness.roughnessFactor); // atleast it fixes the reflectivenes for now 
+        mat.metallicFactor  = static_cast<float>(gltfMat.pbrMetallicRoughness.metallicFactor);
+        mat.roughnessFactor = static_cast<float>(gltfMat.pbrMetallicRoughness.roughnessFactor);
 
         if (gltfMat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
         {
@@ -544,7 +546,7 @@ namespace VanK
         const tinygltf::Model& model,
         int nodeIndex,
         const glm::mat4& parentTransform,
-        std::vector<Vertex>& verticesOut,
+        std::vector<shaderio::Vertex>& verticesOut,
         std::vector<uint32_t>& indicesOut,
         uint32_t& materialIndex
     )
@@ -616,7 +618,7 @@ namespace VanK
                     const float* pos = reinterpret_cast<const float*>(bufferStart + i * stride);
                     glm::vec4 p(pos[0], pos[1], pos[2], 1.0f);
 
-                    Vertex v{};
+                    shaderio::Vertex v{};
                     v.position = glm::vec3(worldTransform * p); // <--- APPLY WORLD TRANSFORM HERE
 
                     if (hasTexCoords)
@@ -708,16 +710,16 @@ namespace VanK
                     primitiveIndices.size(),
                     primitiveVertices.data(),
                     primitiveVertices.size(),
-                    sizeof(Vertex)
+                    sizeof(shaderio::Vertex)
                 );
 
-                std::vector<Vertex> remappedVertices(vertexCount);
-                meshopt_remapVertexBuffer(remappedVertices.data(), primitiveVertices.data(), primitiveVertices.size(), sizeof(Vertex), remap.data());
+                std::vector<shaderio::Vertex> remappedVertices(vertexCount);
+                meshopt_remapVertexBuffer(remappedVertices.data(), primitiveVertices.data(), primitiveVertices.size(), sizeof(shaderio::Vertex), remap.data());
                 std::vector<uint32_t> remappedIndices(primitiveIndices.size());
                 meshopt_remapIndexBuffer(remappedIndices.data(), primitiveIndices.data(), primitiveIndices.size(), remap.data());
 
                 meshopt_optimizeVertexCache(remappedIndices.data(), remappedIndices.data(), primitiveIndices.size(), vertexCount);
-                meshopt_optimizeVertexFetch(remappedVertices.data(), remappedIndices.data(), primitiveIndices.size(), remappedVertices.data(), vertexCount, sizeof(Vertex));
+                meshopt_optimizeVertexFetch(remappedVertices.data(), remappedIndices.data(), primitiveIndices.size(), remappedVertices.data(), vertexCount, sizeof(shaderio::Vertex));
 
                 primitiveVertices = remappedVertices;
                 primitiveIndices = remappedIndices;
@@ -734,7 +736,7 @@ namespace VanK
                 std::vector<uint32_t> primitiveVertexPositions;
                 meshlets.resize(meshopt_buildMeshlets(&meshlets[0], &meshletVertices[0], &meshletTriangles[0],
                                                       primitiveIndices.data(), primitiveIndices.size(),
-                                                      reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(Vertex),
+                                                      reinterpret_cast<const float*>(primitiveVertices.data()), primitiveVertices.size(), sizeof(shaderio::Vertex),
                                                       maxVertices, maxTriangles, 0.f));
 
                 // Optimize each meshlet's micro index buffer/vertex layout individually
@@ -756,12 +758,12 @@ namespace VanK
                 meshopt_Bounds primitiveBounds = meshopt_computeSphereBounds(
                     reinterpret_cast<const float*>(primitiveVertices.data()), // float3 position at offset 0
                     primitiveVertices.size(), // vertex count
-                    sizeof(Vertex), // vertex stride
+                    sizeof(shaderio::Vertex), // vertex stride
                     nullptr, // no per-vertex radii
                     0
                 );
 
-                MeshletPrimitive prim{};
+                shaderio::MeshletPrimitive prim{};
                 prim.meshletOffset = static_cast<uint32_t>(geometry.meshlets.size());
                 prim.meshletCount = static_cast<uint32_t>(meshlets.size());
                 prim.boundingSphere = glm::vec4(
@@ -785,6 +787,12 @@ namespace VanK
                     prim.materialIndex = materialIndex;
                 }
 
+                prim.firstVertex = static_cast<uint32_t>(geometry.vertices.size());
+                prim.vertexCount = static_cast<uint32_t>(primitiveVertices.size());
+                prim.indexOffset = static_cast<uint32_t>(geometry.indices.size());
+                prim.indexCount  = static_cast<uint32_t>(primitiveIndices.size());
+                prim.maxVertex   = prim.firstVertex + prim.vertexCount - 1;
+                
                 geometry.primitives.emplace_back(prim);
 
                 // ------------------------------------------------------------
@@ -801,6 +809,12 @@ namespace VanK
                     geometry.vertices.end(),
                     primitiveVertices.begin(),
                     primitiveVertices.end()
+                );
+                
+                geometry.indices.insert(
+                    geometry.indices.end(),
+                    primitiveIndices.begin(),
+                    primitiveIndices.end()
                 );
 
                 geometry.meshletVertices.insert(
@@ -823,7 +837,7 @@ namespace VanK
                         meshlet.triangle_count,
                         reinterpret_cast<const float*>(primitiveVertices.data()),
                         primitiveVertices.size(),
-                        sizeof(Vertex)
+                        sizeof(shaderio::Vertex)
                     );
 
                     geometry.meshlets.push_back({
@@ -854,7 +868,7 @@ namespace VanK
     }
 
 
-    static ModelHandle LoadMeshModel(std::string path, uint32_t materialIndex = 0, std::vector<Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
+    static ModelHandle LoadMeshModel(std::string path, uint32_t materialIndex = 0, std::vector<shaderio::Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
     {
         uint64_t firstPrimitive = geometry.primitives.size();
 
@@ -1312,6 +1326,80 @@ namespace VanK
         uint64_t sceneData;
     };
 
+    struct ModelPrimitive
+    {
+        uint64_t primitiveId;
+        uint32_t meshletCount;
+        bool transparent;
+    };
+    
+    struct RuntimeModel
+    {
+        ModelHandle handle;
+        std::vector<ModelPrimitive> primitives;
+    };
+    
+    RuntimeModel BuildRuntimeModel(const ModelHandle& model)
+    {
+        RuntimeModel rm{};
+        rm.handle = model;
+
+        for (uint64_t i = 0; i < model.primitiveCount; ++i)
+        {
+            uint64_t primitiveId = model.firstPrimitive + i;
+            const auto& prim = geometry.primitives[primitiveId];
+
+            bool transparent = false;
+            // (later: check material alphaMode / factor)
+
+            rm.primitives.push_back({
+                primitiveId,
+                prim.meshletCount,
+                transparent
+            });
+        }
+
+        return rm;
+    }
+    
+    void SubmitModel(
+    const RuntimeModel& model,
+    const glm::mat4& transform)
+    {
+        for (const auto& prim : model.primitives)
+        {
+            meshDraws.emplace_back(MeshDraw{
+                transform,
+                glm::transpose(glm::inverse(glm::mat3(transform))),
+                prim.primitiveId
+            });
+
+            meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{
+                (prim.meshletCount + 63) / 64,
+                1, 1
+            });
+        }
+    }
+    
+    void SubmitModelPrimitive(
+    const RuntimeModel& model,
+    uint32_t primitiveIndex,
+    const glm::mat4& transform)
+    {
+        const auto& prim = model.primitives[primitiveIndex];
+
+        meshDraws.emplace_back(MeshDraw{
+            transform,
+            glm::transpose(glm::inverse(glm::mat3(transform))),
+            prim.primitiveId
+        });
+
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{
+            (prim.meshletCount + 63) / 64,
+            1, 1
+        });
+    }
+    
     static void SubmitModelDraw(const ModelHandle& model, const glm::mat4& transform)
     {
         struct PrimitiveDraw
@@ -1370,7 +1458,7 @@ namespace VanK
         glm::vec3 lightColor;
     };
     std::vector<Lights> lights;
-    
+    RuntimeModel runtimePlant;
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -1616,7 +1704,7 @@ namespace VanK
         //bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, "E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
 
         // this makes no sense anway for 2d i want to use different shader anyway so i can build the quad in mesh shader directly no ?
-        std::vector<Vertex> quadVertices =
+        std::vector<shaderio::Vertex> quadVertices =
         {
             {{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}},
             {{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}},
@@ -1645,7 +1733,8 @@ namespace VanK
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
         /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
         /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
-        SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
+        runtimePlant = BuildRuntimeModel(plantOnTable);
+        //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
         materials.back().normalTexture = rustedIronNormal->GetTextureIndex();*/
@@ -1662,8 +1751,11 @@ namespace VanK
         uint64_t m_TransferDownlaoadBuffersize = sizeof(CulledData);
         m_TransferDownlaoadBuffer.reset(TransferBuffer::Create(m_TransferDownlaoadBuffersize, VanKTransferBufferUsageDownload));
 
-        uint64_t vertexBuffersize = sizeof(Vertex) * geometry.vertices.size();
+        uint64_t vertexBuffersize = sizeof(shaderio::Vertex) * geometry.vertices.size();
         vertexBuffer.reset(StorageBuffer::Create(vertexBuffersize));
+        
+        uint64_t indexBuffersize = sizeof(uint32_t) * geometry.indices.size();
+        indexBuffer.reset(StorageBuffer::Create(indexBuffersize));
 
         uint64_t meshletVerticesBuffersize = sizeof(uint32_t) * geometry.meshletVertices.size();
         meshletVerticesBuffer.reset(StorageBuffer::Create(meshletVerticesBuffersize));
@@ -1680,7 +1772,7 @@ namespace VanK
         uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10000;
         meshTaskSubmitBuffer.reset(IndirectBuffer::Create(meshTaskSubmitBuffersize));
 
-        uint64_t meshletPrimitiveBuffersize = sizeof(MeshletPrimitive) * 10000;
+        uint64_t meshletPrimitiveBuffersize = sizeof(shaderio::MeshletPrimitive) * 10000;
         meshletPrimitiveBuffer.reset(StorageBuffer::Create(meshletPrimitiveBuffersize));
 
         uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10000;
@@ -1704,7 +1796,7 @@ namespace VanK
         uint64_t lightsBuffersize = sizeof(Lights) * 10;
         lightsBuffer.reset(StorageBuffer::Create(lightsBuffersize));
         
-        uint64_t transferSize = sceneBuffersize + vertexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize +
+        uint64_t transferSize = sceneBuffersize + vertexBuffersize + indexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize +
             localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + materialBuffersize + quadBuffersize + circleBuffersize + textBuffersize +
             lineBuffersize + lightsBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
@@ -1729,6 +1821,8 @@ namespace VanK
         m_TransferDownlaoadBuffer.reset();
 
         vertexBuffer.reset();
+        
+        indexBuffer.reset();
 
         meshletVerticesBuffer.reset();
 
@@ -1781,14 +1875,17 @@ namespace VanK
         circles.clear();
         texts.clear();
         lines.clear();
+        meshDraws.clear();
+        meshTasks.clear();
     }
-
+   
     void Renderer::EndSubmit()
     {
         Flush();
 
         if (isEditor)
         {
+            //wrap this in a download function like the upload function to make it nicer
             uint64_t offset = 0;
             void* mapPtr = m_TransferDownlaoadBuffer->MapTransferBuffer(sizeof(CulledData), 0, offset);
             m_TransferDownlaoadBuffer->DownloadFromGPUBuffer(cmd, {0}, {cullBuffer.get(), 0, sizeof(CulledData)});
@@ -1802,7 +1899,7 @@ namespace VanK
 
             ImGui::SeparatorText("Effective Results");
             ImGui::Text("Total culled: %u", data.totalCulled);
-            //todo its not the actual rendererd stats
+            //todo its not the actual rendererd stats its just total so need to substract somehow
             ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data.totalCulled, geometry.meshlets.size());
             ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
             ImGui::End();
@@ -1842,17 +1939,17 @@ namespace VanK
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
-
-        cullBuffer->Fill(cmd, 0, sizeof(CulledData), 0);
+         cullBuffer->Fill(cmd, 0, sizeof(CulledData), 0);
         
         scenesData.brdflutTexture = BRDF2DLUT->GetTextureIndex();
         scenesData.irradianceTexture = irradianceMap->GetTextureIndex();
         scenesData.prefilteredTexture = prefilterMap->GetTextureIndex();
         
         scene.emplace_back(scenesData);
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, sceneBuffer, scene, SceneDatas, 0);
+        m_TransferBuffer->Upload(cmd, *sceneBuffer, scene, 0);
         scene.clear();
         
+     
         if (!done)
         {
             //lights
@@ -1860,36 +1957,53 @@ namespace VanK
             lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(10.0f, 10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
             lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(-10.0f, -10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
             lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(10.0f, -10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, lightsBuffer, lights, Lights, 0);
+            m_TransferBuffer->Upload(cmd, *lightsBuffer, lights, 0);
             lights.clear(); 
             
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, vertexBuffer, geometry.vertices, Vertex, 0);
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletVerticesBuffer, geometry.meshletVertices, uint32_t, 0);
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletTrianglesBuffer, geometry.meshletTriangles, uint8_t, 0);
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletBuffer, geometry.meshlets, Meshlet, 0);
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshletPrimitiveBuffer, geometry.primitives, MeshletPrimitive, 0);
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, materialBuffer, materials, Material, 0);
-
-            //multiple meshes---
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, meshDrawBuffer, meshDraws, MeshDraw, 0);
-            /*meshDraws.clear();*/
-            UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, localMeshTaskSubmitBuffer, meshTasks, VanKDrawMeshTasksIndirectCommand, 0);
+            m_TransferBuffer->Upload(cmd, *vertexBuffer, geometry.vertices, 0, false);
+            
+            m_TransferBuffer->Upload(cmd, *indexBuffer, geometry.indices, 0, false);
+            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives);
+            
+            m_TransferBuffer->Upload(cmd, *meshletVerticesBuffer, geometry.meshletVertices, 0);
+            
+            m_TransferBuffer->Upload(cmd, *meshletTrianglesBuffer, geometry.meshletTriangles, 0);
+            
+            m_TransferBuffer->Upload(cmd, *meshletBuffer, geometry.meshlets, 0);
+            
+            m_TransferBuffer->Upload(cmd, *meshletPrimitiveBuffer, geometry.primitives, 0);
+            
+            m_TransferBuffer->Upload(cmd, *materialBuffer, materials, 0);
+            
             //----------
             done = true;
         }
+        
+        static auto startTime = std::chrono::high_resolution_clock::now();
+
+        auto  currentTime = std::chrono::high_resolution_clock::now();
+        float time        = std::chrono::duration<float>(currentTime - startTime).count();
+        
+        glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) * rotate(glm::mat4(1.0f), time * 0.1f * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        SubmitModel(runtimePlant, transform);
+        // has to be done after createAccelerationStructures is called once maybe add a check or so
+        RenderCommand::updateTopLevelAS(transform);
+        //multiple meshes---
+            
+        m_TransferBuffer->Upload(cmd, *meshDrawBuffer, meshDraws, 0);
+        /*meshDraws.clear();*/
+            
+        m_TransferBuffer->Upload(cmd, *localMeshTaskSubmitBuffer, meshTasks, 0);
 
         //quads
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, quadBuffer, quads, QuadData, 0);
-
+        m_TransferBuffer->Upload(cmd, *quadBuffer, quads, 0);
         //circles
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, circleBuffer, circles, CircleData, 0);
-
+        m_TransferBuffer->Upload(cmd, *circleBuffer, circles, 0);
         //texts
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, textBuffer, texts, TextData, 0);
-
+        m_TransferBuffer->Upload(cmd, *textBuffer, texts, 0);
         //lines
-        UploadBufferToGpuWithTransferRing(cmd, m_TransferBuffer, lineBuffer, lines, LineData, 0);
-
+        m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
+        
         {
             GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
             /*RenderCommand::StartTimeStamp(cmd, lol);*/
@@ -1912,7 +2026,7 @@ namespace VanK
 
             /*RenderCommand::StopTimeStamp(cmd, lol);*/
         }
-
+        
         {
             GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
             std::vector<VanKColorTargetInfo> colorAttachments;
@@ -1934,9 +2048,9 @@ namespace VanK
             RenderCommand::SetCullMode(cmd, cullMode);
 
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
-
+            
             RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
+            
             TaskMeshPipelinePushConstant pushData
             {
                 .sceneData = sceneBuffer->GetBufferAddress(),

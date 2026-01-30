@@ -219,6 +219,16 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->EndComputePass(computePass);
         }
         
+        static void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives)
+        {
+            if (s_RendererAPI) s_RendererAPI->createAccelerationStructures(vertexBuffer, indexBuffer, primitives);
+        }
+        
+        static void updateTopLevelAS(const glm::mat4 &model)
+        {
+            if (s_RendererAPI) s_RendererAPI->updateTopLevelAS(model);
+        }
+        
         static int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y)
         {
             return s_RendererAPI ? s_RendererAPI->ReadEntityIDAtPixel(x, y) : -1;

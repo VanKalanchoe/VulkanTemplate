@@ -192,8 +192,17 @@ namespace VanK
         virtual void* MapTransferBuffer(uint64_t size, uint64_t alignment, uint64_t& outOffset) = 0;
         virtual void UnMapTransferBuffer() = 0;
 
-        virtual void UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) = 0;
+        virtual void UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion, bool runtime = true) = 0;
         virtual void DownloadFromGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) = 0;
+        virtual void UploadRaw(VanKCommandBuffer& cmd, VanKBuffer& dstBuffer, const void* vecData, uint64_t dataSize, uint64_t alignment, uint64_t dstOffset, bool runtime = true) = 0;
+        template <class T>
+        void Upload(VanKCommandBuffer& cmd, VanKBuffer& dstBuffer, const std::vector<T>& vecData, uint64_t dstOffset, bool runtime = true)
+        {
+            if (vecData.empty())
+                return;
+
+            UploadRaw(cmd, dstBuffer, vecData.data(), vecData.size() * sizeof(T), alignof(T), dstOffset, runtime);
+        }
         
         static TransferBuffer* Create(uint64_t size, VanKTransferBufferUsage usage);
     };

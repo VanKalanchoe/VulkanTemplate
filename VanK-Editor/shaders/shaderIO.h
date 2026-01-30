@@ -1,4 +1,3 @@
-
 #ifndef HOST_DEVICE_H
 #define HOST_DEVICE_H
 
@@ -20,5 +19,34 @@ STATIC_CONST int LBindTextures = 0;
 // Set 1
 STATIC_CONST int LSetScene      = 1;
 STATIC_CONST int LBindSceneInfo = 0;
+
+struct Vertex
+{
+    vec3 position;
+    vec2 texcoords;
+    vec3 normals;
+    vec4 tangents;
+};
+
+struct MeshletPrimitive
+{
+    // Meshlet data (raster)
+    uint32_t meshletOffset;
+    uint32_t meshletCount;
+    
+    // Material
+    uint32_t materialIndex;
+    uint32_t padding1;
+    
+    // Ray tracing / classic geometry
+    uint32_t firstVertex;
+    uint32_t vertexCount;
+    uint32_t indexOffset;
+    uint32_t indexCount;
+    uint32_t maxVertex;
+
+    // {3} center, {1} radius
+    vec4 boundingSphere;
+};
 
 #endif  // HOST_DEVICE_H

@@ -1,12 +1,12 @@
 module common;
 
-public struct Vertex
+/* public struct Vertex
 {
     public float3 position;
     public float2 texcoords;
     public float3 normals;
     public float4 tangents;
-}
+} */
 
 public struct Meshlet
 {
@@ -24,7 +24,7 @@ public struct Meshlet
     public uint32_t meshletTriangleCount;
 };
 
-public struct MeshletPrimitive
+/* public struct MeshletPrimitive
 {
     public uint32_t meshletOffset;
     public uint32_t meshletCount;
@@ -32,7 +32,7 @@ public struct MeshletPrimitive
     public uint32_t bHasTransparent;
     public float4 boundingSphere;
 };
-
+ */
 public struct MeshDraw
 {
     public column_major float4x4 modelMatrix;
@@ -50,16 +50,16 @@ public struct MeshletTriangleIndex
     public uint8_t triangleIndex;
 }
 
-public struct VertexData 
+/* public struct VertexData 
 {
     public Vertex[] vertices;
 };
-
-public struct MeshletPrimitiveData 
+ */
+/* public struct MeshletPrimitiveData 
 {
     public MeshletPrimitive[] primitives;
 }
-
+ */
 public struct MeshDrawData 
 {
     public MeshDraw[] meshDraw;

@@ -2,6 +2,7 @@
 
 #include "VanK/Core/core.h"
 #include "VanK/Renderer/RenderCommand.h"
+#include "VanK/Renderer/Renderer.h"
 
 namespace VanK
 {
@@ -196,7 +197,7 @@ namespace VanK
         m_transferBuffer.buffer.getAllocation().unmap();
     }
 
-    void VulkanTransferBuffer::UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion)
+    void VulkanTransferBuffer::UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion, bool runtime)
     {
         if (bufferRegion.size == 0)
             return; // or skip the copy safely
@@ -207,39 +208,91 @@ namespace VanK
             return;
         }
 
-        // Add a barrier to make sure nothing was writing to it, before updating its content
-        utils::cmdBufferMemoryBarrier
-        (
-            Unwrap(cmd),
-            static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
-            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader,
-            vk::PipelineStageFlagBits2::eTransfer
-        );
-
-        vk::BufferCopy2 copyRegion;
-        copyRegion.srcOffset = location.offset;
-        copyRegion.dstOffset = bufferRegion.offset;
-        copyRegion.size = bufferRegion.size;
-        //maybe copyregion array idk
-
-        const vk::CopyBufferInfo2 copyBufferInfo
+        if (runtime)
         {
-            .srcBuffer = m_transferBuffer.buffer,
-            .dstBuffer = static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
-            .regionCount = 1,
-            .pRegions = &copyRegion
-        };
+            // Add a barrier to make sure nothing was writing to it, before updating its content
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(cmd),
+                static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                vk::PipelineStageFlagBits2::eMeshShaderEXT | vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+                vk::PipelineStageFlagBits2::eTransfer,
+                vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR
+            );
 
-        Unwrap(cmd).copyBuffer2(copyBufferInfo);
+            vk::BufferCopy2 copyRegion;
+            copyRegion.srcOffset = location.offset;
+            copyRegion.dstOffset = bufferRegion.offset;
+            copyRegion.size = bufferRegion.size;
+            //maybe copyregion array idk
 
-        // Add barrier to make sure the buffer is updated before the fragment shader uses it
-        utils::cmdBufferMemoryBarrier
-        (
-            Unwrap(cmd),
-            static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
-            vk::PipelineStageFlagBits2::eTransfer,
-            vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader
-        );
+            const vk::CopyBufferInfo2 copyBufferInfo
+            {
+                .srcBuffer = m_transferBuffer.buffer,
+                .dstBuffer = static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
+                .regionCount = 1,
+                .pRegions = &copyRegion
+            };
+
+            Unwrap(cmd).copyBuffer2(copyBufferInfo);
+
+            // Add barrier to make sure the buffer is updated before the fragment shader uses it
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(cmd),
+                static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eTransfer,
+                vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                vk::PipelineStageFlagBits2::eMeshShaderEXT | vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+                vk::AccessFlagBits2::eTransferWrite,
+                vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR
+            );
+        }
+        else
+        {
+            auto& instance = VulkanRendererAPI::Get();
+            auto command = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
+            // Add a barrier to make sure nothing was writing to it, before updating its content
+            utils::cmdBufferMemoryBarrier
+            (
+                *command,
+                static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                vk::PipelineStageFlagBits2::eMeshShaderEXT | vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+                vk::PipelineStageFlagBits2::eTransfer,
+                vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR
+            );
+
+            vk::BufferCopy2 copyRegion;
+            copyRegion.srcOffset = location.offset;
+            copyRegion.dstOffset = bufferRegion.offset;
+            copyRegion.size = bufferRegion.size;
+            //maybe copyregion array idk
+
+            const vk::CopyBufferInfo2 copyBufferInfo
+            {
+                .srcBuffer = m_transferBuffer.buffer,
+                .dstBuffer = static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
+                .regionCount = 1,
+                .pRegions = &copyRegion
+            };
+
+            command->copyBuffer2(copyBufferInfo);
+
+            // Add barrier to make sure the buffer is updated before the fragment shader uses it
+            utils::cmdBufferMemoryBarrier
+            (
+                *command,
+                static_cast<VkBuffer>(bufferRegion.buffer->GetNativeHandle()),
+                vk::PipelineStageFlagBits2::eTransfer,
+                vk::PipelineStageFlagBits2::eVertexShader | vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eTaskShaderEXT |
+                vk::PipelineStageFlagBits2::eMeshShaderEXT | vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+                vk::AccessFlagBits2::eTransferWrite,
+                vk::AccessFlagBits2::eShaderRead | vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR
+            );
+            utils::endSingleTimeCommands(*command, instance.GetQueue());
+        }
     }
 
     void VulkanTransferBuffer::DownloadFromGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion)
@@ -296,6 +349,19 @@ namespace VanK
             vk::PipelineStageFlagBits2::eTransfer,
             vk::PipelineStageFlagBits2::eHost
         );
+    }
+    
+    void VulkanTransferBuffer::UploadRaw(VanKCommandBuffer& cmd, VanKBuffer& dstBuffer, const void* vecData, uint64_t dataSize, uint64_t alignment, uint64_t dstOffset, bool runtime)
+    {
+        uint64_t offset = 0;
+        
+        void* dataPtr = MapTransferBuffer(dataSize, alignment, offset);
+        
+        memcpy(dataPtr, vecData, dataSize);
+        
+        UnMapTransferBuffer();
+        
+        UploadToGPUBuffer(cmd, VanKTransferBufferLocation{.offset = offset}, VanKBufferRegion{.buffer = &dstBuffer, .offset = dstOffset, .size = dataSize}, runtime);
     }
 
     VulkanUniformBuffer::VulkanUniformBuffer(uint64_t size) : m_size(size)
@@ -360,7 +426,8 @@ namespace VanK
         m_storageBuffer = instance.GetAllocator().createBuffer
         (
             size,
-            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferSrc | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress,
+            vk::BufferUsageFlagBits2::eStorageBuffer | vk::BufferUsageFlagBits2::eTransferSrc | vk::BufferUsageFlagBits2::eTransferDst | vk::BufferUsageFlagBits2::eShaderDeviceAddress |
+            vk::BufferUsageFlagBits2::eAccelerationStructureBuildInputReadOnlyKHR,
             vma::MemoryUsage::eGpuOnly
         );
         DBG_VK_NAME(m_storageBuffer.buffer);
@@ -382,11 +449,12 @@ namespace VanK
     void VulkanStorageBuffer::Unbind() const
     {
     }
-
+    
     void VulkanStorageBuffer::Upload(const void* data, size_t size, size_t offset)
     {
+
     }
-    
+
     void VulkanStorageBuffer::Fill(VanKCommandBuffer cmd, uint64_t dstOffset, uint64_t size, uint32_t data)
     {
         Unwrap(cmd).fillBuffer(m_storageBuffer.buffer, dstOffset, size, data);
@@ -425,7 +493,7 @@ namespace VanK
     void VulkanIndirectBuffer::Upload(const void* data, size_t size, size_t offset)
     {
     }
-    
+
     void VulkanIndirectBuffer::Fill(VanKCommandBuffer cmd, uint64_t dstOffset, uint64_t size, uint32_t data)
     {
         Unwrap(cmd).fillBuffer(m_indirectBuffer.buffer, dstOffset, size, data);

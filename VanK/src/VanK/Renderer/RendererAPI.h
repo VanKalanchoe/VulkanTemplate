@@ -441,6 +441,12 @@ namespace VanK
         None = 0, Vulkan = 1, Metal = 2
     };
     
+    namespace shaderio
+    {
+        using namespace glm;
+        #include "shaderIO.h"
+    }
+    
     class RendererAPI
     {
     public:
@@ -485,6 +491,8 @@ namespace VanK
         virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {}, std::span<Ref<IndirectBuffer>> countBuffers = {}) = 0;
         virtual void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
         virtual void EndComputePass(VanKComputePass* computePass) = 0;
+        virtual void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives) = 0;
+        virtual void updateTopLevelAS(const glm::mat4 &model) = 0;
         virtual int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;
         virtual void setEnableTimeStamp(bool temp) = 0;

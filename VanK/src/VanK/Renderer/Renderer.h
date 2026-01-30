@@ -23,7 +23,7 @@ namespace VanK
                 VanKBufferRegion{.buffer = targetBuffer.get(), .offset = 0, .size = dataSize}); \
             } while(0)
 
-        #define UploadBufferToGpuWithTransferRing(cmd, ringBuffer, targetBuffer, vector, ElementType, dstOffset) \
+        #define UploadBufferToGpuWithTransferRing(cmd, ringBuffer, targetBuffer, vector, ElementType, dstOffset, runtime) \
             do { \
                 if (!vector.empty()) { \
                     uint64_t offset; \
@@ -32,7 +32,7 @@ namespace VanK
                     memcpy(dataPtr, vector.data(), dataSize); \
                     ringBuffer->UnMapTransferBuffer(); \
                     ringBuffer->UploadToGPUBuffer(cmd, VanKTransferBufferLocation{.offset = offset}, \
-                    VanKBufferRegion{.buffer = targetBuffer.get(), .offset = dstOffset, .size = dataSize}); \
+                    VanKBufferRegion{.buffer = targetBuffer.get(), .offset = dstOffset, .size = dataSize}, runtime); \
                 } \
             } while(0)
         
@@ -134,6 +134,7 @@ namespace VanK
         inline static Ref<StorageBuffer> cullBuffer ;
         inline static Ref<TransferBuffer> m_TransferDownlaoadBuffer;
         inline static Ref<StorageBuffer> vertexBuffer ;
+        inline static Ref<StorageBuffer> indexBuffer ;
         inline static Ref<StorageBuffer> meshletVerticesBuffer ;
         inline static Ref<StorageBuffer> meshletTrianglesBuffer ;
         inline static Ref<StorageBuffer> meshletBuffer ;
