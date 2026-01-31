@@ -1296,7 +1296,7 @@ namespace  VanK
             m_currentComputePipelineLayout = layoutToBind;
     }
 #ifndef LAB_TASK_LEVEL
-#	define LAB_TASK_LEVEL 10
+#	define LAB_TASK_LEVEL 11
 #endif
 
 #define LAB_TASK_AS_BUILD_AND_BIND 4
