@@ -43,12 +43,14 @@ namespace VanK
         uint64_t sceneData;
         uint64_t culledDataBuffer;
         uint64_t vertexBuffer;
+        uint64_t indexBuffer;
         uint64_t meshletVerticesBuffer;
         uint64_t meshletTrianglesBuffer;
         uint64_t meshletBuffer;
         uint64_t meshletPrimitives;
         uint64_t meshDraws;
         uint64_t materialBuffer;
+        uint64_t instanceLutBuffer;
         uint64_t lightsBuffer;
     };
 
@@ -203,7 +205,7 @@ namespace VanK
         glm::vec4 boundingSphere{};
     };*/
 
-    struct Material
+    /*struct Material
     {
         uint32_t albedoTexture{0};
         uint32_t normalTexture{0};
@@ -224,10 +226,11 @@ namespace VanK
         bool transparent{false};
 
         float transmissionFactor{0}; // 0 = opaque, 1 = full transparent
-    };
+    };*/
 
-    static std::vector<Material> materials;
-
+    static std::vector<shaderio::Material> materials;
+    static std::vector<shaderio::InstanceLUT> instanceLUTs;
+    
     struct ModelHandle
     {
         uint64_t firstPrimitive;
@@ -375,7 +378,26 @@ namespace VanK
         const tinygltf::Model& model
     )
     {
-        Material mat{};
+        shaderio::Material mat{};
+        mat.albedoTexture = 0;
+        mat.normalTexture = 0;
+        mat.metallicRoughnessTexture = 0;
+        
+        mat.specularTexture = 0;
+        mat.emissiveTexture = 0;
+        mat.ambientOcclusionTexture = 0;
+        
+        mat.diffuseFactor = glm::vec4(1.0f);
+        mat.metallicFactor = 1.0f;
+        mat.roughnessFactor = 1.0f;
+        
+        mat.specularFactor = glm::vec4(1.0f);
+        mat.emissiveFactor = glm::vec3(0.0f);
+        mat.ambientOcclusionFactor = 1.0f;
+        
+        mat.transparent = false;
+        
+        mat.transmissionFactor = 0; // 0 = opaque, 1 = full transparent
 
         // -----------------------------
         // BASE COLOR / DIFFUSE
@@ -772,6 +794,24 @@ namespace VanK
                     primitiveBounds.center[2],
                     primitiveBounds.radius
                 );
+                
+                bool alphaCut = false;
+
+                // Use node name
+                if (!node.name.empty() && node.name.find("nettle_plant") != std::string::npos)
+                {
+                    alphaCut = true;
+                }
+
+                // Or if you want to check mesh name as well
+                if (node.mesh >= 0)
+                {
+                    const tinygltf::Mesh& mesh = model.meshes[node.mesh];
+                    if (!mesh.name.empty() && mesh.name.find("nettle_plant") != std::string::npos)
+                    {
+                        alphaCut = true;
+                    }
+                }
 
                 if (primitive.material >= 0)
                 {
@@ -781,6 +821,9 @@ namespace VanK
                         basePath,
                         model
                     );
+                    
+                    if (alphaCut)
+                        materials[prim.materialIndex].transparent = true;
                 }
                 else
                 {
@@ -1330,7 +1373,6 @@ namespace VanK
     {
         uint64_t primitiveId;
         uint32_t meshletCount;
-        bool transparent;
     };
     
     struct RuntimeModel
@@ -1348,14 +1390,10 @@ namespace VanK
         {
             uint64_t primitiveId = model.firstPrimitive + i;
             const auto& prim = geometry.primitives[primitiveId];
-
-            bool transparent = false;
-            // (later: check material alphaMode / factor)
-
+            
             rm.primitives.push_back({
                 primitiveId,
-                prim.meshletCount,
-                transparent
+                prim.meshletCount
             });
         }
 
@@ -1778,8 +1816,11 @@ namespace VanK
         uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10000;
         meshDrawBuffer.reset(StorageBuffer::Create(meshDrawBuffersize));
 
-        uint64_t materialBuffersize = sizeof(Material) * 10000;
+        uint64_t materialBuffersize = sizeof(shaderio::Material) * 10000;
         materialBuffer.reset(StorageBuffer::Create(materialBuffersize));
+        
+        uint64_t instanceLutsBuffersize = sizeof(shaderio::InstanceLUT) * 10000;
+        instanceLutsBuffer.reset(StorageBuffer::Create(instanceLutsBuffersize));
 
         uint64_t quadBuffersize = sizeof(QuadData) * 10;
         quadBuffer.reset(StorageBuffer::Create(quadBuffersize));
@@ -1797,8 +1838,8 @@ namespace VanK
         lightsBuffer.reset(StorageBuffer::Create(lightsBuffersize));
         
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + indexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize +
-            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + materialBuffersize + quadBuffersize + circleBuffersize + textBuffersize +
-            lineBuffersize + lightsBuffersize;
+            localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + materialBuffersize + instanceLutsBuffersize + quadBuffersize + circleBuffersize +
+            textBuffersize + lineBuffersize + lightsBuffersize;
         m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
     }
 
@@ -1839,6 +1880,8 @@ namespace VanK
         meshDrawBuffer.reset();
 
         materialBuffer.reset();
+        
+        instanceLutsBuffer.reset();
         
         lightsBuffer.reset();
 
@@ -1948,12 +1991,11 @@ namespace VanK
         scene.emplace_back(scenesData);
         m_TransferBuffer->Upload(cmd, *sceneBuffer, scene, 0);
         scene.clear();
-        
      
         if (!done)
         {
             //lights
-            lights.emplace_back(Lights{.lightPosition =  glm::rotate(glm::vec3(-10.0f, 10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
+            lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(-10.0f, 10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
             lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(10.0f, 10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
             lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(-10.0f, -10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
             lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(10.0f, -10.0f, 10.0f),  glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor =  glm::vec3(300.0f, 300.0f, 300.0f)});
@@ -1963,7 +2005,10 @@ namespace VanK
             m_TransferBuffer->Upload(cmd, *vertexBuffer, geometry.vertices, 0, false);
             
             m_TransferBuffer->Upload(cmd, *indexBuffer, geometry.indices, 0, false);
-            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives);
+            
+            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives, materials, instanceLUTs);
+            
+            m_TransferBuffer->Upload(cmd, *instanceLutsBuffer, instanceLUTs, 0);
             
             m_TransferBuffer->Upload(cmd, *meshletVerticesBuffer, geometry.meshletVertices, 0);
             
@@ -1984,7 +2029,7 @@ namespace VanK
         auto  currentTime = std::chrono::high_resolution_clock::now();
         float time        = std::chrono::duration<float>(currentTime - startTime).count();
         
-        glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) * rotate(glm::mat4(1.0f), time * 0.1f * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+        glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f))/* * rotate(glm::mat4(1.0f), time * 0.1f * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/;
         SubmitModel(runtimePlant, transform);
         // has to be done after createAccelerationStructures is called once maybe add a check or so
         RenderCommand::updateTopLevelAS(transform);
@@ -2056,12 +2101,14 @@ namespace VanK
                 .sceneData = sceneBuffer->GetBufferAddress(),
                 .culledDataBuffer = cullBuffer->GetBufferAddress(),
                 .vertexBuffer = vertexBuffer->GetBufferAddress(),
+                .indexBuffer = indexBuffer->GetBufferAddress(),
                 .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
                 .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
                 .meshletBuffer = meshletBuffer->GetBufferAddress(),
                 .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
                 .meshDraws = meshDrawBuffer->GetBufferAddress(),
                 .materialBuffer = materialBuffer->GetBufferAddress(),
+                .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
                 .lightsBuffer = lightsBuffer->GetBufferAddress(),
             };
 

@@ -80,7 +80,7 @@ public struct MeshletTrianglesData
     public MeshletTriangleIndex[] meshletTriangles;
 };
 
-public struct Material
+/* public struct Material
 {
     public uint32_t albedoTexture;
     public uint32_t normalTexture;
@@ -100,13 +100,13 @@ public struct Material
 
     public bool transparent;
     public float transmissionFactor;
-};
+}; */
 
-public struct MaterialData
+/* public struct MaterialData
 {
     public Material[] materials;
 }
-
+ */
 public struct Quads
 {
     public column_major float4x4 modelMatrix;

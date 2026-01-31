@@ -141,6 +141,7 @@ namespace VanK
         inline static Ref<StorageBuffer> meshletPrimitiveBuffer ;
         inline static Ref<StorageBuffer> meshDrawBuffer ;
         inline static Ref<StorageBuffer> materialBuffer;
+         inline static Ref<StorageBuffer> instanceLutsBuffer;
         
         inline static Ref<StorageBuffer> lightsBuffer;
         

@@ -1296,7 +1296,7 @@ namespace  VanK
             m_currentComputePipelineLayout = layoutToBind;
     }
 #ifndef LAB_TASK_LEVEL
-#	define LAB_TASK_LEVEL 6
+#	define LAB_TASK_LEVEL 9
 #endif
 
 #define LAB_TASK_AS_BUILD_AND_BIND 4
@@ -1318,6 +1318,17 @@ namespace  VanK
     vk::raii::Buffer                   tlasScratchBuffer = nullptr;
     vk::raii::DeviceMemory             tlasScratchMemory = nullptr;
     vk::raii::AccelerationStructureKHR tlas              = nullptr;
+    
+    /*
+    struct InstanceLUT
+    {
+        uint32_t materialID;
+        uint32_t indexBufferOffset;
+    };
+    std::vector<InstanceLUT> instanceLUTs;
+    vk::raii::Buffer         instanceLUTBuffer       = nullptr;
+    vk::raii::DeviceMemory   instanceLUTBufferMemory = nullptr;
+    */
     
     void VulkanRendererAPI::BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement)
     {
@@ -2299,11 +2310,34 @@ namespace  VanK
         buffer.bindMemory(bufferMemory, 0);
     }
     
+    /*void VulkanRendererAPI::createInstanceLUTBuffer()
+    {
+#if LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
+        // TASK09: build a buffer to store the instance look-up table
+        vk::DeviceSize bufferSize = sizeof(InstanceLUT) * instanceLUTs.size();
+
+        vk::raii::Buffer       stagingBuffer({});
+        vk::raii::DeviceMemory stagingBufferMemory({});
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+        void *dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
+        memcpy(dataStaging, instanceLUTs.data(), bufferSize);
+        stagingBufferMemory.unmapMemory();
+
+        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
+                     vk::MemoryPropertyFlagBits::eDeviceLocal, instanceLUTBuffer, instanceLUTBufferMemory);
+
+        copyBuffer(stagingBuffer, instanceLUTBuffer, bufferSize);
+#endif        // LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
+    }*/
+    
     void VulkanRendererAPI::createAccelerationStructures
     (
         const StorageBuffer& vertexBuffer,
         const StorageBuffer& indexBuffer,
-        std::vector<shaderio::MeshletPrimitive>& primitives
+        std::vector<shaderio::MeshletPrimitive>& primitives,
+        std::vector<shaderio::Material>& materials,
+        std::vector<shaderio::InstanceLUT>& instanceLUTs
     )
     {
 #if LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
@@ -2327,6 +2361,7 @@ namespace  VanK
 		for (size_t i = 0; i < primitives.size(); ++i)
 		{
 			const auto &submesh = primitives[i];
+		    const auto &mat = materials[i];
 
 			// Prepare the geometry data
 			auto trianglesData = vk::AccelerationStructureGeometryTrianglesDataKHR{
@@ -2345,7 +2380,8 @@ namespace  VanK
 			    .flags        = vk::GeometryFlagBitsKHR::eOpaque};
 #	if LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
 			// TASK07
-			blasGeometry.flags = (submesh.alphaCut) ? vk::GeometryFlagsKHR(0) : vk::GeometryFlagBitsKHR::eOpaque;
+		    std::cout << "transparent: " << mat.transparent << '\n';
+			blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagsKHR(0) : vk::GeometryFlagBitsKHR::eOpaque;
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
 
 			vk::AccelerationStructureBuildGeometryInfoKHR blasBuildGeometryInfo{
@@ -2432,7 +2468,7 @@ namespace  VanK
 			// TASK09: store the instance look-up table entry
 			instances[i].instanceCustomIndex = static_cast<uint32_t>(i);
 
-			instanceLUTs.push_back({static_cast<uint32_t>(submesh.materialID), submesh.indexOffset});
+			instanceLUTs.push_back({static_cast<uint32_t>(submesh.materialIndex), submesh.indexOffset});
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
 		}
 

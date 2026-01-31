@@ -20,6 +20,35 @@ STATIC_CONST int LBindTextures = 0;
 STATIC_CONST int LSetScene      = 1;
 STATIC_CONST int LBindSceneInfo = 0;
 
+struct InstanceLUT
+{
+    uint32_t materialID;
+    uint32_t indexBufferOffset;
+};
+
+struct Material
+{
+    uint32_t albedoTexture;
+    uint32_t normalTexture;
+    uint32_t metallicRoughnessTexture;
+    
+    uint32_t specularTexture;
+    uint32_t emissiveTexture;
+    uint32_t ambientOcclusionTexture;
+
+    vec4 diffuseFactor;
+    float metallicFactor;
+    float roughnessFactor;
+    
+    vec4 specularFactor;
+    vec3 emissiveFactor;
+    float ambientOcclusionFactor;
+
+    bool transparent;
+
+    float transmissionFactor; // 0 = opaque, 1 = full transparent
+};
+
 struct Vertex
 {
     vec3 position;

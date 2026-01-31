@@ -23,12 +23,14 @@ struct PushConstant
     SceneData* sceneData;
     CulledData* culledData;
     Vertex* vertexBuffer;
+    uint32_t* indexBuffer;
     MeshletVerticesData* meshletVerticesBuffer;
     MeshletTrianglesData* meshletTrianglesBuffer;
     MeshletData* meshletBuffer;
     MeshletPrimitive* meshletPrimitive;
     MeshDrawData* meshDrawBuffer;
-    MaterialData* materialBuffer;
+    Material* materialBuffer;
+    InstanceLUT* instanceLutBuffer;
     LightData* lightingBuffer;
 };
 
@@ -344,8 +346,26 @@ static const float3 lightDir = float3(-6.0, 6.0, 0.0);
 // Small epsilon to avoid self-intersection
 static const float EPSILON = 0.01;
 
+float2 intersection_uv(uint instanceID, uint primIndex, float2 barycentrics, InstanceLUT* instanceLUTBuffer, Vertex* vertexBuffer, uint32_t* indexBuffer) {
+    uint indexOffset = instanceLUTBuffer[NonUniformResourceIndex(instanceID)].indexBufferOffset;
+
+    uint i0 = indexBuffer[indexOffset + (primIndex * 3 + 0)];
+    uint i1 = indexBuffer[indexOffset + (primIndex * 3 + 1)];
+    uint i2 = indexBuffer[indexOffset + (primIndex * 3 + 2)];
+
+    float2 uv0 = vertexBuffer[i0].texcoords;
+    float2 uv1 = vertexBuffer[i1].texcoords;
+    float2 uv2 = vertexBuffer[i2].texcoords;
+
+    float w0 = 1.0 - barycentrics.x - barycentrics.y;
+    float w1 = barycentrics.x;
+    float w2 = barycentrics.y;
+
+    return w0 * uv0 + w1 * uv1 + w2 * uv2;
+}
+
 // TASK05: Implement ray query shadows
-bool in_shadow(float3 P)
+bool in_shadow(float3 P, InstanceLUT* instanceLUTBuffer, Vertex* vertexBuffer ,uint32_t* indexBuffer)
 {
 // Build the shadow ray from the world position toward the light
     RayDesc shadowRayDesc;
@@ -359,9 +379,27 @@ bool in_shadow(float3 P)
                  RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
         let rayFlags = RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
                  RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+                 
            sq.TraceRayInline(accelerationStructure, rayFlags, 0xFF, shadowRayDesc);
            
-               sq.Proceed();      
+               while (sq.Proceed())
+        {
+            uint instanceID = sq.CandidateRayInstanceCustomIndex();
+            uint primIndex = sq.CandidatePrimitiveIndex();
+
+            float2 uv = intersection_uv(instanceID, primIndex, sq.CandidateTriangleBarycentrics(), instanceLUTBuffer, vertexBuffer, indexBuffer);
+
+            uint materialID = instanceLUTBuffer[NonUniformResourceIndex(instanceID)].materialID;
+            float4 intersection_color = texture[NonUniformResourceIndex(materialID)].SampleLevel(uv, 0);
+
+            if (intersection_color.a < 0.5) {
+                // If the triangle is transparent, we continue to trace
+                // to find the next opaque triangle.
+            } else {
+                // If we hit an opaque triangle, we stop tracing.
+                sq.CommitNonOpaqueTriangleHit();
+            }
+        }    
      // If the shadow ray intersects an opaque triangle, we consider the pixel in shadow
         bool hit = (sq.CommittedStatus() == COMMITTED_TRIANGLE_HIT);
     
@@ -371,7 +409,7 @@ bool in_shadow(float3 P)
 [shader("pixel")]
 float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 {
-    Material mats = pushConstant.materialBuffer->materials[vertexInput.materialIndex];
+    Material mats = pushConstant.materialBuffer[vertexInput.materialIndex];
 
     float3 emissive = mats.emissiveFactor; // constant color
     if (mats.emissiveTexture != 0)
@@ -383,6 +421,19 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     float4 albedo = mats.diffuseFactor;
     if (mats.albedoTexture != 0) // when converting i did al ltextures srgb idk if thats good
         albedo *= /* fromsrgb */(texture[mats.albedoTexture].Sample(vertexInput.texcoords)); // could be wrong srgb or not
+
+    float3 P = vertexInput.worldPos.xyz;
+
+    bool inShadow = in_shadow(P, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer);
+
+    if(albedo.a < 0.5)
+        discard;
+
+    // Darken if in shadow
+    if(inShadow)
+    {
+        albedo.rgb *= 0.2;
+    }
 
     float metallic = mats.metallicFactor;
     float roughness = mats.roughnessFactor;
@@ -469,16 +520,6 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 
     float iblIntensity = 1.0;
     float3 ambient = (kD * diffuse + specular) * ambientOcclusion * iblIntensity;
-
-    float3 P = vertexInput.worldPos.xyz;
-
-    bool inShadow = in_shadow(P);
-
-    // Darken if in shadow
-    if(inShadow)
-    {
-        albedo.rgb *= 0.2;
-    }
 
     float3 color = ambient + Lo + emissive;
 
