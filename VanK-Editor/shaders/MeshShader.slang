@@ -348,10 +348,11 @@ static const float EPSILON = 0.01;
 
 float2 intersection_uv(uint instanceID, uint primIndex, float2 barycentrics, InstanceLUT* instanceLUTBuffer, Vertex* vertexBuffer, uint32_t* indexBuffer) {
     uint indexOffset = instanceLUTBuffer[NonUniformResourceIndex(instanceID)].indexBufferOffset;
+    uint vertexOffset = instanceLUTBuffer[NonUniformResourceIndex(instanceID)].firstVertex;
 
-    uint i0 = indexBuffer[indexOffset + (primIndex * 3 + 0)];
-    uint i1 = indexBuffer[indexOffset + (primIndex * 3 + 1)];
-    uint i2 = indexBuffer[indexOffset + (primIndex * 3 + 2)];
+    uint i0 = indexBuffer[indexOffset + (primIndex * 3 + 0)] + vertexOffset;
+    uint i1 = indexBuffer[indexOffset + (primIndex * 3 + 1)] + vertexOffset;
+    uint i2 = indexBuffer[indexOffset + (primIndex * 3 + 2)] + vertexOffset;
 
     float2 uv0 = vertexBuffer[i0].texcoords;
     float2 uv1 = vertexBuffer[i1].texcoords;
@@ -365,45 +366,56 @@ float2 intersection_uv(uint instanceID, uint primIndex, float2 barycentrics, Ins
 }
 
 // TASK05: Implement ray query shadows
-bool in_shadow(float3 P, InstanceLUT* instanceLUTBuffer, Vertex* vertexBuffer ,uint32_t* indexBuffer)
+bool in_shadow(float3 P, InstanceLUT* instanceLUTBuffer, Vertex* vertexBuffer, uint32_t* indexBuffer, Material* materialBuffer)
 {
-// Build the shadow ray from the world position toward the light
+   // Build the shadow ray from the world position toward the light
     RayDesc shadowRayDesc;
     shadowRayDesc.Origin = P;
     shadowRayDesc.Direction = normalize(lightDir);
     shadowRayDesc.TMin = EPSILON;
     shadowRayDesc.TMax = 1e4;
-    
-        // Initialize a ray query for shadows
-        RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
-                 RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
-        let rayFlags = RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
-                 RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
-                 
-           sq.TraceRayInline(accelerationStructure, rayFlags, 0xFF, shadowRayDesc);
-           
-               while (sq.Proceed())
+
+    // Initialize a ray query for shadows
+    RayQuery<RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
+             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH> sq;
+    let rayFlags = RAY_FLAG_SKIP_PROCEDURAL_PRIMITIVES |
+             RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH;
+
+    sq.TraceRayInline(accelerationStructure, rayFlags, 0xFF, shadowRayDesc);
+
+    while (sq.Proceed())
+    {
+        uint instanceID = sq.CandidateRayInstanceCustomIndex();
+        uint primIndex = sq.CandidatePrimitiveIndex();
+
+        float2 uv = intersection_uv(instanceID, primIndex, sq.CandidateTriangleBarycentrics(), instanceLUTBuffer, vertexBuffer, indexBuffer);
+        
+        // Get material ID from instance LUT
+        uint materialID = instanceLUTBuffer[NonUniformResourceIndex(instanceID)].materialID;
+        
+        // Get the material from the material buffer
+        Material mat = materialBuffer[NonUniformResourceIndex(materialID)];
+        
+        // Sample the albedo texture to check alpha - USE mat.albedoTexture, NOT materialID!
+        float4 intersectionColor = mat.diffuseFactor;
+        if (mat.albedoTexture != 0)
         {
-            uint instanceID = sq.CandidateRayInstanceCustomIndex();
-            uint primIndex = sq.CandidatePrimitiveIndex();
+            intersectionColor *= texture[NonUniformResourceIndex(mat.albedoTexture)].SampleLevel(uv, 0);
+        }
 
-            float2 uv = intersection_uv(instanceID, primIndex, sq.CandidateTriangleBarycentrics(), instanceLUTBuffer, vertexBuffer, indexBuffer);
+        if (intersectionColor.a < 0.5) {
+            // If the triangle is transparent, we continue to trace
+            // to find the next opaque triangle.
+        } else {
+            // If we hit an opaque triangle, we stop tracing.
+            sq.CommitNonOpaqueTriangleHit();
+        }
+    }
 
-            uint materialID = instanceLUTBuffer[NonUniformResourceIndex(instanceID)].materialID;
-            float4 intersection_color = texture[NonUniformResourceIndex(materialID)].SampleLevel(uv, 0);
+    // If the shadow ray intersects an opaque triangle, we consider the pixel in shadow
+    bool hit = (sq.CommittedStatus() == COMMITTED_TRIANGLE_HIT);
 
-            if (intersection_color.a < 0.5) {
-                // If the triangle is transparent, we continue to trace
-                // to find the next opaque triangle.
-            } else {
-                // If we hit an opaque triangle, we stop tracing.
-                sq.CommitNonOpaqueTriangleHit();
-            }
-        }    
-     // If the shadow ray intersects an opaque triangle, we consider the pixel in shadow
-        bool hit = (sq.CommittedStatus() == COMMITTED_TRIANGLE_HIT);
-    
-        return hit;
+    return hit;
 }
 
 [shader("pixel")]
@@ -423,11 +435,13 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
         albedo *= /* fromsrgb */(texture[mats.albedoTexture].Sample(vertexInput.texcoords)); // could be wrong srgb or not
 
     float3 P = vertexInput.worldPos.xyz;
-
-    bool inShadow = in_shadow(P, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer);
-
+    
     if(albedo.a < 0.5)
         discard;
+    
+    bool inShadow = in_shadow(P, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer, pushConstant.materialBuffer);
+
+   
 
     // Darken if in shadow
     if(inShadow)

@@ -1296,7 +1296,7 @@ namespace  VanK
             m_currentComputePipelineLayout = layoutToBind;
     }
 #ifndef LAB_TASK_LEVEL
-#	define LAB_TASK_LEVEL 9
+#	define LAB_TASK_LEVEL 10
 #endif
 
 #define LAB_TASK_AS_BUILD_AND_BIND 4
@@ -2361,7 +2361,7 @@ namespace  VanK
 		for (size_t i = 0; i < primitives.size(); ++i)
 		{
 			const auto &submesh = primitives[i];
-		    const auto &mat = materials[i];
+		    const auto &mat = materials[submesh.materialIndex];
 
 			// Prepare the geometry data
 			auto trianglesData = vk::AccelerationStructureGeometryTrianglesDataKHR{
@@ -2380,7 +2380,6 @@ namespace  VanK
 			    .flags        = vk::GeometryFlagBitsKHR::eOpaque};
 #	if LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
 			// TASK07
-		    std::cout << "transparent: " << mat.transparent << '\n';
 			blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagsKHR(0) : vk::GeometryFlagBitsKHR::eOpaque;
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
 
@@ -2468,7 +2467,7 @@ namespace  VanK
 			// TASK09: store the instance look-up table entry
 			instances[i].instanceCustomIndex = static_cast<uint32_t>(i);
 
-			instanceLUTs.push_back({static_cast<uint32_t>(submesh.materialIndex), submesh.indexOffset});
+			instanceLUTs.push_back({static_cast<uint32_t>(submesh.materialIndex), submesh.indexOffset, submesh.firstVertex});
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
 		}
 

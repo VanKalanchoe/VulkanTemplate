@@ -794,24 +794,6 @@ namespace VanK
                     primitiveBounds.center[2],
                     primitiveBounds.radius
                 );
-                
-                bool alphaCut = false;
-
-                // Use node name
-                if (!node.name.empty() && node.name.find("nettle_plant") != std::string::npos)
-                {
-                    alphaCut = true;
-                }
-
-                // Or if you want to check mesh name as well
-                if (node.mesh >= 0)
-                {
-                    const tinygltf::Mesh& mesh = model.meshes[node.mesh];
-                    if (!mesh.name.empty() && mesh.name.find("nettle_plant") != std::string::npos)
-                    {
-                        alphaCut = true;
-                    }
-                }
 
                 if (primitive.material >= 0)
                 {
@@ -821,9 +803,6 @@ namespace VanK
                         basePath,
                         model
                     );
-                    
-                    if (alphaCut)
-                        materials[prim.materialIndex].transparent = true;
                 }
                 else
                 {
@@ -2008,7 +1987,7 @@ namespace VanK
             
             RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives, materials, instanceLUTs);
             
-            m_TransferBuffer->Upload(cmd, *instanceLutsBuffer, instanceLUTs, 0);
+            m_TransferBuffer->Upload(cmd, *instanceLutsBuffer, instanceLUTs, 0, false);
             
             m_TransferBuffer->Upload(cmd, *meshletVerticesBuffer, geometry.meshletVertices, 0);
             
