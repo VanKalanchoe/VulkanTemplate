@@ -429,7 +429,14 @@ void apply_reflection(float3 P, float3 N, inout float4 baseColor, InstanceLUT* i
             intersectionColor *= texture[NonUniformResourceIndex(mat.albedoTexture)].SampleLevel(uv, 0);
         }
 
-        baseColor.rgb = lerp(baseColor.rgb, intersectionColor.rgb, 0.7);
+        baseColor.rgb = lerp(baseColor.rgb, intersectionColor.rgb, 1);
+    }
+    else 
+    {
+        float3 R_env = ToEnvSpace(reflect(-normalize(camPos.xyz - P), N));
+        float3 skyColor = cubes[5].Sample(R_env).rgb;
+
+        baseColor.rgb = lerp(baseColor.rgb, skyColor, 1);
     }
 }
 
@@ -509,7 +516,7 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     if(albedo.a < 0.5)
         discard;
 
-    if(mats.metallicFactor == 1 && mats.roughnessFactor == 0)
+    if(mats.metallicFactor > 0)
         apply_reflection(P, NR, albedo, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer, pushConstant.materialBuffer, pushConstant.sceneData.cameraWorldPos);
 
     bool inShadow = in_shadow(P, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer, pushConstant.materialBuffer);
