@@ -1,0 +1,96 @@
+struct SpriteComputeData
+{
+    float3 Position;
+        float _pad0;
+        float3 Rotation;
+        float _pad1;
+        //float w, h, padding_a, padding_b;
+       float2 Size;
+        float2 _pad2;     // 8 bytes padding
+        float3 Scale;
+        float _pad3;
+        float4 Color;
+        //float r, g, b, a;
+        float2 tilePosition;
+        float2 tileSize;
+        float2 tileMultiplier;
+        float2 atlasSize;
+        float3 _pad4;
+        int EntityID;
+};
+
+struct SpriteVertex
+{
+    float4 Position;
+    float2 Texcoord;
+    float4 Color;
+    int EntityID;
+};
+
+StructuredBuffer<SpriteComputeData> ComputeBuffer : register(t0, space0);
+RWStructuredBuffer<SpriteVertex> VertexBuffer : register(u0, space1);
+
+[numthreads(64, 1, 1)]
+void main(uint3 GlobalInvocationID : SV_DispatchThreadID)
+{
+    uint n = GlobalInvocationID.x;
+
+    SpriteComputeData sprite = ComputeBuffer[n];
+
+    float4x4 Scale = float4x4(
+        float4(sprite.Scale.x, 0.0f, 0.0f, 0.0f),
+        float4(0.0f, sprite.Scale.y, 0.0f, 0.0f),
+        float4(0.0f, 0.0f, 1.0f, 0.0f),
+        float4(0.0f, 0.0f, 0.0f, 1.0f)
+    );
+
+    // Rotation matrix (2D rotation, affects x and y only)
+    float cx = cos(sprite.Rotation.x);
+    float sx = sin(sprite.Rotation.x);
+    float cy = cos(sprite.Rotation.y);
+    float sy = sin(sprite.Rotation.y);
+    float cz = cos(sprite.Rotation.z);
+    float sz = sin(sprite.Rotation.z);
+
+    float4x4 Rotation = float4x4(
+    float4( cz * cy,              -sz * cy,         sy,       0.0f ),
+    float4( cz * sy * sx + sz * cx, -sz * sy * sx + cz * cx, -cy * sx,  0.0f ),
+    float4( -cz * sy * cx - sz * sx, sz * sy * cx - cz * sx,  cy * cx,   0.0f ),
+    float4( 0.0f,                  0.0f,              0.0f,     1.0f )
+);
+
+    float4x4 Translation = float4x4(
+        float4(1.0f, 0.0f, 0.0f, 0.0f),
+        float4(0.0f, 1.0f, 0.0f, 0.0f),
+        float4(0.0f, 0.0f, 1.0f, 0.0f),
+        float4(sprite.Position.x, sprite.Position.y, sprite.Position.z, 1.0f)
+    );
+
+    float4x4 Model = mul(Scale, mul(Rotation, Translation));
+
+     // Define the quad vertices in local space (centered at origin, then scaled)
+    float4 topLeft = float4(mul(-0.5, sprite.Size.x), mul(0.5, sprite.Size.y), 0.0, 1.0);
+    float4 topRight = float4(mul(0.5, sprite.Size.x), mul(0.5, sprite.Size.y), 0.0, 1.0);
+    float4 bottomLeft = float4(mul(-0.5, sprite.Size.x), mul(-0.5, sprite.Size.y), 0.0, 1.0);
+    float4 bottomRight = float4(mul(0.5, sprite.Size.x), mul(-0.5, sprite.Size.y), 0.0, 1.0);
+
+    VertexBuffer[n * 4u + 0].Position = mul(topLeft, Model);
+    VertexBuffer[n * 4u + 1].Position = mul(bottomLeft, Model);
+    VertexBuffer[n * 4u + 2].Position = mul(bottomRight, Model);
+    VertexBuffer[n * 4u + 3].Position = mul(topRight, Model);
+
+    VertexBuffer[n * 4u + 0].Texcoord = float2(0.0f, 1.0f);
+    VertexBuffer[n * 4u + 1].Texcoord = float2(0.0f, 0.0f);
+    VertexBuffer[n * 4u + 2].Texcoord = float2(1.0f, 0.0f);
+    VertexBuffer[n * 4u + 3].Texcoord = float2(1.0f, 1.0f);
+
+    VertexBuffer[n * 4u + 0].Color = sprite.Color;
+    VertexBuffer[n * 4u + 1].Color = sprite.Color;
+    VertexBuffer[n * 4u + 2].Color = sprite.Color;
+    VertexBuffer[n * 4u + 3].Color = sprite.Color;
+
+    VertexBuffer[n * 4u + 0].EntityID = sprite.EntityID;
+    VertexBuffer[n * 4u + 1].EntityID = sprite.EntityID;
+    VertexBuffer[n * 4u + 2].EntityID = sprite.EntityID;
+    VertexBuffer[n * 4u + 3].EntityID = sprite.EntityID;
+}

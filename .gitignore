@@ -2,4 +2,6 @@
 /VanK/vendor/vcpkg
 VanK/vendor/slang
 .DS_Store
-assets
+
+# Ignore root-level assets folder only
+/assets
