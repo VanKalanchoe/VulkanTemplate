@@ -60,6 +60,11 @@ namespace VanK
         {
             return s_RendererAPI ? s_RendererAPI->createComputeShaderPipeline(computePipelineSpecification) : nullptr;
         }
+        
+        static VanKPipeLine createRayTracingPipeline(VanKRaytracingPipelineSpecification raytracingPipelineSpecification)
+        {
+            return s_RendererAPI ? s_RendererAPI->createRayTracingPipeline(raytracingPipelineSpecification) : nullptr;
+        }
 
         static void DestroyAllPipelines()
         {

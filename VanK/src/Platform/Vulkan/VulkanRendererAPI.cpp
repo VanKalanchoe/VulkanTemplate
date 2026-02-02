@@ -27,7 +27,7 @@ printf("\n");                                                                   
 #include "VanK/Core/core.h"
 #include "VanK/Core/logger.h"
 
-namespace  VanK
+namespace VanK
 {
     VulkanRendererAPI::VulkanRendererAPI() = default;
 
@@ -104,7 +104,7 @@ namespace  VanK
         /*IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGui::StyleColorsDark();*/
-        
+
         const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
         linearSampler = m_samplerPool.acquireSampler(info);
 
@@ -156,31 +156,31 @@ namespace  VanK
     {
         // Clear the pool on the renderer side so it doesn't hold dangling references
         m_images.clear();
-        
+
         sceneImage.clear();
         sceneImageView.clear();
-        
+
         colorImage.clear();
         colorImageView.clear();
-        
+
         depthImage.clear();
         depthImageView.clear();
-        
+
         entityColorImage.clear();
         entityColorImageView.clear();
-        
+
         entityImage.clear();
         entityImageView.clear();
 
         // Clean up entity readback buffer
-        entityReadbackBuffer.buffer.clear();  // Add this line
-        
+        entityReadbackBuffer.buffer.clear(); // Add this line
+
         m_samplerPool.deinit();
-        
+
         queryStatisticsBuffer.buffer.clear(); // statistics
-        
+
         queryTimeStepBuffer.buffer.clear(); // timestamp
-        
+
         m_allocator.deinit();
     }
 
@@ -192,16 +192,16 @@ namespace  VanK
         createSwapChain();
         createImageViews();
     }
-    
+
     void VulkanRendererAPI::recreateImages()
     {
         device.waitIdle();
-        
+
         // Recreate offscreen buffers to match viewport size
-        createSceneResources();//scene evertyhing drawn into this
-        createColorResources();//msaa
-        createDepthResources();//depth
-        createEntityResources();//entity
+        createSceneResources(); //scene evertyhing drawn into this
+        createColorResources(); //msaa
+        createDepthResources(); //depth
+        createEntityResources(); //entity
         createEntityColorResources();
         sceneImageInitialized = false;
         entityImageInitialized = false;
@@ -234,7 +234,7 @@ namespace  VanK
             .apiVersion = vk::ApiVersion14
         };
         apiVersion = vk::ApiVersion14;
-    
+
         // Get the required layers
         std::vector<char const*> requiredLayers;
         if (enableValidationLayers)
@@ -354,23 +354,25 @@ namespace  VanK
                 vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR,
                 vk::PhysicalDeviceMeshShaderFeaturesEXT,
                 vk::PhysicalDeviceAccelerationStructureFeaturesKHR,
-                vk::PhysicalDeviceRayQueryFeaturesKHR
+                vk::PhysicalDeviceRayQueryFeaturesKHR,
+                vk::PhysicalDeviceRayTracingPipelineFeaturesKHR
             >();
-            bool supportsRequiredFeatures = 
-                                            features.template get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy &&
-                                            features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
-                                            features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
-                                            features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingSampledImageUpdateAfterBind &&
-                                            features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingPartiallyBound &&
-                                            features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingVariableDescriptorCount &&
-                                            features.template get<vk::PhysicalDeviceVulkan12Features>().runtimeDescriptorArray &&
-                                            features.template get<vk::PhysicalDeviceVulkan12Features>().shaderSampledImageArrayNonUniformIndexing &&
-                                            features.template get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress &&
-                                            features.template get<vk::PhysicalDeviceAccelerationStructureFeaturesKHR>().accelerationStructure &&
-                                            features.template get<vk::PhysicalDeviceRayQueryFeaturesKHR>().rayQuery;
-                                            features.template get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>().timelineSemaphore &&
-                                            features.template get<vk::PhysicalDeviceMeshShaderFeaturesEXT>().meshShader;
-            
+            bool supportsRequiredFeatures =
+                features.template get<vk::PhysicalDeviceFeatures2>().features.samplerAnisotropy &&
+                features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
+                features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
+                features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingSampledImageUpdateAfterBind &&
+                features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingPartiallyBound &&
+                features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingVariableDescriptorCount &&
+                features.template get<vk::PhysicalDeviceVulkan12Features>().runtimeDescriptorArray &&
+                features.template get<vk::PhysicalDeviceVulkan12Features>().shaderSampledImageArrayNonUniformIndexing &&
+                features.template get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress &&
+                features.template get<vk::PhysicalDeviceAccelerationStructureFeaturesKHR>().accelerationStructure &&
+                features.template get<vk::PhysicalDeviceRayQueryFeaturesKHR>().rayQuery &&
+                features.template get<vk::PhysicalDeviceRayTracingPipelineFeaturesKHR>().rayTracingPipeline &&
+                features.template get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>().timelineSemaphore &&
+                features.template get<vk::PhysicalDeviceMeshShaderFeaturesEXT>().meshShader;
+
             return supportsVulkan1_3 && supportsGraphics && supportsAllRequiredExtensions && supportsRequiredFeatures;
         });
         if (devIter != devices.end())
@@ -391,7 +393,7 @@ namespace  VanK
         for (uint32_t qfpIndex = 0; qfpIndex < queueFamilyProperties.size(); qfpIndex++)
         {
             if ((queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eGraphics &&
-                queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eCompute) &&
+                    queueFamilyProperties[qfpIndex].queueFlags & vk::QueueFlagBits::eCompute) &&
                 physicalDevice.getSurfaceSupportKHR(qfpIndex, *surface))
             {
                 // found a queue family that supports both graphics and present
@@ -406,42 +408,49 @@ namespace  VanK
 
         // query for Vulkan 1.3 features
         vk::StructureChain
-        <
-            vk::PhysicalDeviceFeatures2,
-            vk::PhysicalDeviceVulkan11Features,
-            vk::PhysicalDeviceVulkan12Features,
-            vk::PhysicalDeviceVulkan13Features,
-            vk::PhysicalDeviceVulkan14Features,
-            vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
-            vk::PhysicalDeviceMeshShaderFeaturesEXT,
-            vk::PhysicalDeviceAccelerationStructureFeaturesKHR, 
-            vk::PhysicalDeviceRayQueryFeaturesKHR
-        >
-        featureChain =
-        {
-            {.features = {.independentBlend = true, .sampleRateShading = true, .multiDrawIndirect = true, .wideLines = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true,.shaderInt64 = true, }}, // vk::PhysicalDeviceFeatures2
-            {.shaderDrawParameters = true},
+            <
+                vk::PhysicalDeviceFeatures2,
+                vk::PhysicalDeviceVulkan11Features,
+                vk::PhysicalDeviceVulkan12Features,
+                vk::PhysicalDeviceVulkan13Features,
+                vk::PhysicalDeviceVulkan14Features,
+                vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+                vk::PhysicalDeviceMeshShaderFeaturesEXT,
+                vk::PhysicalDeviceAccelerationStructureFeaturesKHR,
+                vk::PhysicalDeviceRayQueryFeaturesKHR,
+                vk::PhysicalDeviceRayTracingPipelineFeaturesKHR
+            >
+            featureChain =
             {
-                .drawIndirectCount = true,
-                .shaderInt8 = true,
-                .descriptorIndexing = true, 
-                .shaderSampledImageArrayNonUniformIndexing = true,
-                .descriptorBindingSampledImageUpdateAfterBind = true,
-                .descriptorBindingUpdateUnusedWhilePending = true,
-                .descriptorBindingPartiallyBound = true,
-                .descriptorBindingVariableDescriptorCount = true,
-                .runtimeDescriptorArray = true,
-                .scalarBlockLayout = true,
-                .timelineSemaphore = true,
-                .bufferDeviceAddress = true
-            },
-            {.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
-            {.maintenance5 = true, .pushDescriptor = true},
-            {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
-            {.taskShader = true, .meshShader = true},
-            {.accelerationStructure = true},                                                                                                                                                                                                                                          // vk::PhysicalDeviceAccelerationStructureFeaturesKHR
-            {.rayQuery = true}   
-        };
+                {
+                    .features = {
+                        .independentBlend = true, .sampleRateShading = true, .multiDrawIndirect = true, .wideLines = true, .samplerAnisotropy = true, .pipelineStatisticsQuery = true,
+                        .shaderInt64 = true,
+                    }
+                }, // vk::PhysicalDeviceFeatures2
+                {.shaderDrawParameters = true},
+                {
+                    .drawIndirectCount = true,
+                    .shaderInt8 = true,
+                    .descriptorIndexing = true,
+                    .shaderSampledImageArrayNonUniformIndexing = true,
+                    .descriptorBindingSampledImageUpdateAfterBind = true,
+                    .descriptorBindingUpdateUnusedWhilePending = true,
+                    .descriptorBindingPartiallyBound = true,
+                    .descriptorBindingVariableDescriptorCount = true,
+                    .runtimeDescriptorArray = true,
+                    .scalarBlockLayout = true,
+                    .timelineSemaphore = true,
+                    .bufferDeviceAddress = true
+                },
+                {.synchronization2 = true, .dynamicRendering = true}, // vk::PhysicalDeviceVulkan13Features
+                {.maintenance5 = true, .pushDescriptor = true},
+                {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
+                {.taskShader = true, .meshShader = true},
+                {.accelerationStructure = true}, // vk::PhysicalDeviceAccelerationStructureFeaturesKHR
+                {.rayQuery = true},
+                {.rayTracingPipeline = true},
+            };
 
         // create a Device
         float queuePriority = 0.5f;
@@ -460,7 +469,7 @@ namespace  VanK
         DBG_VK_NAME(*device);
 
         debugUtilInitialize(device);
-        
+
         queue = vk::raii::Queue(device, queueIndex, 0);
         DBG_VK_NAME(*queue);
     }
@@ -479,9 +488,9 @@ namespace  VanK
     {
         auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
         swapChainExtent = chooseSwapExtent(surfaceCapabilities);
-        
+
         swapChainSurfaceFormat = chooseSwapSurfaceFormat(physicalDevice.getSurfaceFormatsKHR(*surface));
-        
+
         vk::SwapchainCreateInfoKHR swapChainCreateInfo{
             .surface = *surface,
             .minImageCount = chooseSwapMinImageCount(surfaceCapabilities),
@@ -498,7 +507,7 @@ namespace  VanK
         };
         swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
         DBG_VK_NAME(*swapChain);
-        
+
         swapChainImages = swapChain.getImages();
     }
 
@@ -541,7 +550,7 @@ namespace  VanK
         case ShaderDataType::Int3: return vk::Format::eR32G32B32Sint;
         case ShaderDataType::Int4: return vk::Format::eR32G32B32A32Sint;
         case ShaderDataType::Bool: return vk::Format::eR8Uint; // or VK_FORMAT_R32_UINT if you want 4 bytes
-            // Add Mat3/Mat4 if you want to support them as arrays of vec3/vec4
+        // Add Mat3/Mat4 if you want to support them as arrays of vec3/vec4
         default: return vk::Format::eUndefined;
         }
     }
@@ -572,7 +581,7 @@ namespace  VanK
     {
         // Add the texture to the image vector
         m_images.emplace_back(std::move(imageResource));
-        
+
         // Update the descriptor set to include the new texture
         updateGraphicsDescriptorSet();
 
@@ -588,22 +597,22 @@ namespace  VanK
             VK_CORE_WARN("Attempted to remove texture from empty pool");
             return;
         }
-        
+
         if (index >= m_images.size())
         {
             VK_CORE_WARN("Attempted to remove texture at invalid index: %u (max: %zu)", index, m_images.size());
             return;
         }
-        
+
         // Destroy the texture resource
         m_allocator.destroyImageResource(m_images[index]);
-        
+
         // Remove the texture from the image vector
         m_images.erase(m_images.begin() + index);
-        
+
         // Update the descriptor set to include the new texture
-        updateGraphicsDescriptorSet(); 
-        
+        updateGraphicsDescriptorSet();
+
         VK_CORE_INFO("Removed texture at index %u, remaining textures: %zu", index, m_images.size());
     }
 
@@ -611,12 +620,12 @@ namespace  VanK
     {
         vk::raii::Pipeline tempPipeline = VK_NULL_HANDLE;
         vk::raii::PipelineLayout tempPipelineLayout = VK_NULL_HANDLE;
-        
+
         auto specShader = pipelineSpecification.ShaderStageCreateInfo.VanKShader;
         auto vkShader = dynamic_cast<VulkanShader*>(specShader);
-        
+
         std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-        std::vector<std::string> entryNames;  // only need to keep names alive
+        std::vector<std::string> entryNames; // only need to keep names alive
         entryNames.reserve(4); // needs to be reserved or string changes to random bs
 
         auto addStage = [&](vk::ShaderStageFlagBits stage)
@@ -635,7 +644,7 @@ namespace  VanK
                 .pName = entryNames.back().c_str()
             });
         };
-        
+
         addStage(vk::ShaderStageFlagBits::eVertex);
         addStage(vk::ShaderStageFlagBits::eFragment);
         addStage(vk::ShaderStageFlagBits::eTaskEXT);
@@ -647,7 +656,7 @@ namespace  VanK
         if (!pipelineSpecification.VertexInputStateCreateInfo.VanKBufferLayout.GetElements().empty())
         {
             vertexInput = BufferLayoutToVertexInput(pipelineSpecification.VertexInputStateCreateInfo.VanKBufferLayout);
-            
+
             vertexInputInfo.vertexBindingDescriptionCount = static_cast<uint32_t>(vertexInput.bindings.size());
             vertexInputInfo.pVertexBindingDescriptions = vertexInput.bindings.data();
             vertexInputInfo.vertexAttributeDescriptionCount = static_cast<uint32_t>(vertexInput.attributes.size());
@@ -661,13 +670,13 @@ namespace  VanK
             vertexInputInfo.vertexAttributeDescriptionCount = 0;
             vertexInputInfo.pVertexAttributeDescriptions = nullptr;
         }
-        
+
         vk::PipelineInputAssemblyStateCreateInfo inputAssembly
         {
             .topology = ConvertToVkPrimitiveTopology(pipelineSpecification.InputAssemblyStateCreateInfo.VanKPrimitive),
             .primitiveRestartEnable = vk::False
         };
-        
+
         vk::PipelineViewportStateCreateInfo viewportState
         {
             .viewportCount = 0,
@@ -675,7 +684,7 @@ namespace  VanK
             .scissorCount = 0,
             .pScissors = nullptr
         };
-        
+
         // The rasterizer is used to convert the primitives into fragments, and how it will appear
         vk::PipelineRasterizationStateCreateInfo rasterizer
         {
@@ -683,14 +692,14 @@ namespace  VanK
             .frontFace = ConvertToVkFrontFace(pipelineSpecification.RasterizationStateCreateInfo.VanKFrontFace),
             .depthBiasEnable = vk::True,
         };
-        
+
         vk::PipelineMultisampleStateCreateInfo multisampling // todo expose this as api
         {
             .rasterizationSamples = pipelineSpecification.MultisampleStateCreateInfo.sampleCount == VanK_SAMPLE_COUNT_1_BIT ? vk::SampleCountFlagBits::e1 : msaaSamples,
             .sampleShadingEnable = pipelineSpecification.MultisampleStateCreateInfo.sampleShadingEnable,
             .minSampleShading = pipelineSpecification.MultisampleStateCreateInfo.minSampleShading, // min fraction for sample shading; closer to one is smoother
         };
-        
+
         // Instruct how the depth buffer will be used
         vk::PipelineDepthStencilStateCreateInfo depthStencil
         {
@@ -700,7 +709,7 @@ namespace  VanK
             .depthBoundsTestEnable = vk::False,
             .stencilTestEnable = vk::False
         };
-        
+
         /*--
          * The color blending is used to blend the color of the fragment with the color already in the framebuffer (all channel)
          * Here we enable blending, such that the alpha channel is used to blend the color with the color already in the framebuffer.
@@ -709,7 +718,7 @@ namespace  VanK
          * Without blending, everything can be set to 0, except colorWriteMask, which needs to be set.
         */
         std::vector<vk::PipelineColorBlendAttachmentState> colorBlendAttachments;
-        for ( auto ColorBlendAttachment : pipelineSpecification.ColorBlendStateCreateInfo.VanKColorBlendAttachmentState)
+        for (auto ColorBlendAttachment : pipelineSpecification.ColorBlendStateCreateInfo.VanKColorBlendAttachmentState)
         {
             vk::PipelineColorBlendAttachmentState tempcolorBlendAttachment{
                 .blendEnable = ColorBlendAttachment.blendEnable, // No blending for entity ID buffer
@@ -730,7 +739,7 @@ namespace  VanK
             .logicOp = vk::LogicOp::eCopy, // Don't care
             .attachmentCount = uint32_t(colorBlendAttachments.size()),
             .pAttachments = colorBlendAttachments.data()
-       };
+        };
 
         std::vector dynamicStates =
         {
@@ -739,7 +748,7 @@ namespace  VanK
             vk::DynamicState::eLineWidth,
             vk::DynamicState::eCullMode
         };
-        
+
         vk::PipelineDynamicStateCreateInfo dynamicState
         {
             .dynamicStateCount = static_cast<uint32_t>(dynamicStates.size()), .pDynamicStates = dynamicStates.data()
@@ -757,9 +766,9 @@ namespace  VanK
         vk::ShaderStageFlags stageFlags = (pipelineSpecification.PipelineType == VanK_Mesh) ? ConvertToVkShaderStageFlagBits(VanKMesh) : ConvertToVkShaderStageFlagBits(VanKGraphics);
         for (const auto pushRange : pipelineSpecification.PipelineLayoutInfo.PushConstants)
         {
-            vkPushConstants.push_back(vk::PushConstantRange{ stageFlags, pushRange.Offset, pushRange.Size});
+            vkPushConstants.push_back(vk::PushConstantRange{stageFlags, pushRange.Offset, pushRange.Size});
         }
-        
+
         vk::PipelineLayoutCreateInfo pipelineLayoutInfo
         {
             .setLayoutCount = setLayouts.size(),
@@ -770,15 +779,15 @@ namespace  VanK
 
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
         DBG_VK_NAME(*tempPipelineLayout);
-        
+
         // Dynamic rendering: provide what the pipeline will render to
         std::vector<vk::Format> colorFormats;
         for (auto format : pipelineSpecification.RenderingCreateInfo.VanKColorAttachmentFormats)
         {
             colorFormats.emplace_back(ConvertToVkColorFormat(format));
         }
-        
-        vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain = 
+
+        vk::StructureChain<vk::GraphicsPipelineCreateInfo, vk::PipelineRenderingCreateInfo> pipelineCreateInfoChain =
         {
             {
                 .stageCount = static_cast<uint32_t>(shaderStages.size()),
@@ -803,7 +812,7 @@ namespace  VanK
 
         tempPipeline = vk::raii::Pipeline(device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>());
         DBG_VK_NAME(*tempPipeline);
-        
+
         PipelineResource resource;
         resource.pipeline = std::move(tempPipeline);
         resource.layout = std::move(tempPipelineLayout);
@@ -813,7 +822,7 @@ namespace  VanK
         auto rawHandle = *resource.pipeline; // raw VkPipeline before moving
         m_currentGraphicPipelineLayout = *resource.layout;
         m_PipelineResources.emplace(rawHandle, std::move(resource));
-        
+
         return Wrap(rawHandle);
     }
 
@@ -821,7 +830,7 @@ namespace  VanK
     {
         vk::raii::Pipeline tempPipeline = VK_NULL_HANDLE;
         vk::raii::PipelineLayout tempPipelineLayout = VK_NULL_HANDLE;
-        
+
         auto specShader = dynamic_cast<VulkanShader*>(computePipelineSpecification.ComputePipelineCreateInfo.VanKShader);
         std::string computeEntryName = specShader->GetShaderEntryName(vk::ShaderStageFlagBits::eCompute);
         auto& compute = specShader->GetShaderModule(vk::ShaderStageFlagBits::eCompute);
@@ -841,13 +850,13 @@ namespace  VanK
             commonDescriptorSetLayout, // <-- This is your new, shared layout
             raytraceDescriptorSetLayout
         };
-        
+
         std::vector<vk::PushConstantRange> vkPushConstants;
         vkPushConstants.reserve(computePipelineSpecification.ComputePipelineLayoutInfo.PushConstants.size());
         vk::ShaderStageFlags stageFlags = ConvertToVkShaderStageFlagBits(VanKCompute);
         for (const auto pushRange : computePipelineSpecification.ComputePipelineLayoutInfo.PushConstants)
         {
-            vkPushConstants.push_back(vk::PushConstantRange{ stageFlags, pushRange.Offset, pushRange.Size});
+            vkPushConstants.push_back(vk::PushConstantRange{stageFlags, pushRange.Offset, pushRange.Size});
         }
 
         // The pipeline layout is used to pass data to the pipeline, anything with "layout" in the shader
@@ -858,8 +867,8 @@ namespace  VanK
             .pushConstantRangeCount = static_cast<uint32_t>(vkPushConstants.size()),
             .pPushConstantRanges = vkPushConstants.data(),
         };
-        
-        tempPipelineLayout = vk::raii::PipelineLayout( device, pipelineLayoutInfo );
+
+        tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
         DBG_VK_NAME(*tempPipelineLayout);
 
         // Creating the pipeline to run the compute shader
@@ -868,9 +877,9 @@ namespace  VanK
             .stage = computeShaderStageInfo,
             .layout = tempPipelineLayout
         };
-        tempPipeline = vk::raii::Pipeline( device, nullptr, pipelineInfo );
+        tempPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
         DBG_VK_NAME(*tempPipeline);
-        
+
         PipelineResource resource;
         resource.pipeline = std::move(tempPipeline);
         resource.layout = std::move(tempPipelineLayout);
@@ -880,6 +889,246 @@ namespace  VanK
         auto rawHandle = *resource.pipeline; // raw VkPipeline before moving
         m_currentComputePipelineLayout = *resource.layout;
         m_PipelineResources.emplace(rawHandle, std::move(resource));
+
+        return Wrap(rawHandle);
+    }
+
+    utils::Buffer m_sbtBuffer;
+
+    std::vector<uint8_t> m_shaderHandles;
+    vk::StridedDeviceAddressRegionKHR m_raygenRegion{};
+    vk::StridedDeviceAddressRegionKHR m_missRegion{};
+    vk::StridedDeviceAddressRegionKHR m_hitRegion{};
+    vk::StridedDeviceAddressRegionKHR m_callableRegion{};
+
+    void VulkanRendererAPI::createShaderBindingTable(const VkRayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline)
+    {
+        m_allocator.destroyBuffer(std::move(m_sbtBuffer)); // Cleanup when re-creating
+
+        vk::StructureChain
+            <
+                vk::PhysicalDeviceProperties2,
+                vk::PhysicalDeviceRayTracingPipelinePropertiesKHR,
+                vk::PhysicalDeviceAccelerationStructurePropertiesKHR
+            >
+            props =
+                physicalDevice.getProperties2
+                <
+                    vk::PhysicalDeviceProperties2,
+                    vk::PhysicalDeviceRayTracingPipelinePropertiesKHR,
+                    vk::PhysicalDeviceAccelerationStructurePropertiesKHR
+                >();
+
+        const auto& rtProps =
+            props.get<vk::PhysicalDeviceRayTracingPipelinePropertiesKHR>();
+
+        uint32_t handleSize = rtProps.shaderGroupHandleSize;
+        uint32_t handleAlignment = rtProps.shaderGroupHandleAlignment;
+        uint32_t baseAlignment = rtProps.shaderGroupBaseAlignment;
+        uint32_t groupCount = rtPipelineInfo.groupCount;
+
+        // Get shader group handles
+        size_t dataSize = handleSize * groupCount;
+        m_shaderHandles.resize(dataSize);
+        m_shaderHandles = rtPipeline.getRayTracingShaderGroupHandlesKHR<uint8_t>(0, groupCount, dataSize);
+
+        // Calculate SBT buffer size with proper alignment
+        auto alignUp = [](uint32_t size, uint32_t alignment) { return (size + alignment - 1) & ~(alignment - 1); };
+        uint32_t raygenSize = alignUp(handleSize, handleAlignment);
+        uint32_t missSize = alignUp(handleSize, handleAlignment);
+        uint32_t hitSize = alignUp(handleSize, handleAlignment);
+        uint32_t callableSize = 0; // No callable shaders in this tutorial
+
+        // Ensure each region starts at a baseAlignment boundary
+        uint32_t raygenOffset = 0;
+        uint32_t missOffset = alignUp(raygenSize, baseAlignment);
+        uint32_t hitOffset = alignUp(missOffset + missSize, baseAlignment);
+        uint32_t callableOffset = alignUp(hitOffset + hitSize, baseAlignment);
+
+        size_t bufferSize = callableOffset + callableSize;
+
+        // Create SBT buffer
+        m_sbtBuffer = m_allocator.createBuffer
+        (
+            bufferSize,
+            vk::BufferUsageFlagBits2::eShaderBindingTableKHR,
+            vma::MemoryUsage::eAutoPreferDevice,
+            vma::AllocationCreateFlagBits::eMapped | vma::AllocationCreateFlagBits::eHostAccessRandom
+        );
+
+        // Populate SBT buffer
+        uint8_t* pData = static_cast<uint8_t*>(m_sbtBuffer.mapping);
+
+        // Ray generation shader (group 0)
+        memcpy(pData + raygenOffset, m_shaderHandles.data() + 0 * handleSize, handleSize);
+        m_raygenRegion.deviceAddress = m_sbtBuffer.address + raygenOffset;
+        m_raygenRegion.stride = raygenSize;
+        m_raygenRegion.size = raygenSize;
+
+        // Miss shader (group 1)
+        memcpy(pData + missOffset, m_shaderHandles.data() + 1 * handleSize, handleSize);
+        m_missRegion.deviceAddress = m_sbtBuffer.address + missOffset;
+        m_missRegion.stride = missSize;
+        m_missRegion.size = missSize;
+
+        // Hit shader (group 2)
+        memcpy(pData + hitOffset, m_shaderHandles.data() + 2 * handleSize, handleSize);
+        m_hitRegion.deviceAddress = m_sbtBuffer.address + hitOffset;
+        m_hitRegion.stride = hitSize;
+        m_hitRegion.size = hitSize;
+
+        // Callable shaders (none in this tutorial)
+        m_callableRegion.deviceAddress = 0;
+        m_callableRegion.stride = 0;
+        m_callableRegion.size = 0;
+
+        LOGI("Shader binding table created and populated \n");
+    }
+
+    /*#include "rtbasic.slang.h" */
+
+    VanKPipeLine VulkanRendererAPI::createRayTracingPipeline(VanKRaytracingPipelineSpecification raytracingPipelineSpecification)
+    {
+        vk::raii::Pipeline tempPipeline = VK_NULL_HANDLE;
+        vk::raii::PipelineLayout tempPipelineLayout = VK_NULL_HANDLE;
+
+        // Creating all shaders
+        enum StageIndices
+        {
+            eRaygen,
+            eMiss,
+            eClosestHit,
+            eShaderGroupCount
+        };
+
+        auto specShader = raytracingPipelineSpecification.ShaderStageCreateInfo.VanKShader;
+        auto vkShader = dynamic_cast<VulkanShader*>(specShader);
+
+        std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
+        std::vector<std::string> entryNames; // only need to keep names alive
+        entryNames.reserve(4); // needs to be reserved or string changes to random bs
+
+        std::array<uint32_t, eShaderGroupCount> stageToShaderIndex;
+        stageToShaderIndex.fill(VK_SHADER_UNUSED_KHR);
+
+        auto addStage = [&](vk::ShaderStageFlagBits stage, StageIndices eShaderGroupCount)
+        {
+            if (!vkShader->HasStage(stage))
+                return;
+
+            entryNames.push_back(vkShader->GetShaderEntryName(stage));
+
+            auto& module = vkShader->GetShaderModule(stage);
+
+            uint32_t shaderIndex = static_cast<uint32_t>(shaderStages.size());
+
+            shaderStages.push_back
+            ({
+                .stage = stage,
+                .module = module,
+                .pName = entryNames.back().c_str()
+            });
+
+            stageToShaderIndex[eShaderGroupCount] = shaderIndex;
+        };
+
+        addStage(vk::ShaderStageFlagBits::eRaygenKHR, eRaygen);
+        addStage(vk::ShaderStageFlagBits::eMissKHR, eMiss);
+        addStage(vk::ShaderStageFlagBits::eClosestHitKHR, eClosestHit);
+
+        // Shader groups
+        vk::RayTracingShaderGroupCreateInfoKHR group{};
+        group.anyHitShader = VK_SHADER_UNUSED_KHR;
+        group.closestHitShader = VK_SHADER_UNUSED_KHR;
+        group.generalShader = VK_SHADER_UNUSED_KHR;
+        group.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+        std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shader_groups;
+        // Raygen
+        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+        group.generalShader = stageToShaderIndex[eRaygen];
+        shader_groups.push_back(group);
+
+        // Miss
+        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+        group.generalShader = stageToShaderIndex[eMiss];
+        shader_groups.push_back(group);
+
+        // closest hit shader
+        group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
+        group.generalShader = VK_SHADER_UNUSED_KHR;
+        group.closestHitShader = stageToShaderIndex[eClosestHit];
+        shader_groups.push_back(group);
+
+        std::array<vk::DescriptorSetLayout, 3> setLayouts =
+        {
+            *descriptorSetLayout,
+            *commonDescriptorSetLayout,
+            raytraceDescriptorSetLayout
+        };
+
+        std::vector<vk::PushConstantRange> vkPushConstants;
+        vkPushConstants.reserve(raytracingPipelineSpecification.PipelineLayoutInfo.PushConstants.size());
+        vk::ShaderStageFlags stageFlags = ConvertToVkShaderStageFlagBits(VanKRaytracing);
+        for (const auto pushRange : raytracingPipelineSpecification.PipelineLayoutInfo.PushConstants)
+        {
+            vkPushConstants.push_back(vk::PushConstantRange{stageFlags, pushRange.Offset, pushRange.Size});
+        }
+
+        vk::PipelineLayoutCreateInfo pipelineLayoutInfo
+        {
+            .setLayoutCount = setLayouts.size(),
+            .pSetLayouts = setLayouts.data(),
+            .pushConstantRangeCount = static_cast<uint32_t>(vkPushConstants.size()),
+            .pPushConstantRanges = vkPushConstants.data()
+        };
+
+        tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
+        DBG_VK_NAME(*tempPipelineLayout);
+
+        vk::StructureChain
+            <
+                vk::PhysicalDeviceProperties2,
+                vk::PhysicalDeviceRayTracingPipelinePropertiesKHR,
+                vk::PhysicalDeviceAccelerationStructurePropertiesKHR
+            >
+            props =
+                physicalDevice.getProperties2
+                <
+                    vk::PhysicalDeviceProperties2,
+                    vk::PhysicalDeviceRayTracingPipelinePropertiesKHR,
+                    vk::PhysicalDeviceAccelerationStructurePropertiesKHR
+                >();
+
+        const auto& rtProps =
+            props.get<vk::PhysicalDeviceRayTracingPipelinePropertiesKHR>();
+
+        uint32_t maxRecursion = rtProps.maxRayRecursionDepth;
+
+        vk::RayTracingPipelineCreateInfoKHR rtPipelineInfo;
+        rtPipelineInfo.stageCount = static_cast<uint32_t>(shaderStages.size());
+        rtPipelineInfo.pStages = shaderStages.data();
+        rtPipelineInfo.groupCount = static_cast<uint32_t>(shader_groups.size());
+        rtPipelineInfo.pGroups = shader_groups.data();
+        rtPipelineInfo.maxPipelineRayRecursionDepth = std::max(3U, maxRecursion);
+        rtPipelineInfo.layout = tempPipelineLayout;
+
+        tempPipeline = vk::raii::Pipeline(device, nullptr, nullptr, rtPipelineInfo);
+        DBG_VK_NAME(*tempPipeline);
+        
+        createShaderBindingTable(rtPipelineInfo, tempPipeline);
+
+        PipelineResource resource;
+        resource.pipeline = std::move(tempPipeline);
+        resource.layout = std::move(tempPipelineLayout);
+        resource.bindPoint = VanKPipelineBindPoint::Raytracing;
+        resource.raytracingSpec = raytracingPipelineSpecification;
+
+        auto rawHandle = *resource.pipeline; // raw VkPipeline before moving
+        m_currentGraphicPipelineLayout = *resource.layout;
+        m_PipelineResources.emplace(rawHandle, std::move(resource));
+
+        std::cout << "Ray tracing pipeline layout created successfully\n";
 
         return Wrap(rawHandle);
     }
@@ -922,39 +1171,39 @@ namespace  VanK
     VanKCommandBuffer VulkanRendererAPI::BeginCommandBuffer()
     {
         commandBuffers[frameIndex].reset();
-        
+
         commandBuffers[frameIndex].begin({});
 
         //statistics
         commandBuffers[frameIndex].resetQueryPool(queryPoolStatistics, 0, 1);
         commandBuffers[frameIndex].beginQuery(queryPoolStatistics, 0);
-        
+
         auto cmd = new VanKCommandBuffer_T{&commandBuffers[frameIndex]};
-        
+
         //timestamp
         timeStampIndex = 0;
         commandBuffers[frameIndex].resetQueryPool(queryPoolTimeStep, 0, maxTimeStamp);
         timestamp.queryIndex = 0;
         StartTimeStamp(cmd, timestamp);
-        
+
         return cmd;
     }
-    
+
     void VulkanRendererAPI::EndCommandBuffer(VanKCommandBuffer cmd)
     {
         //statistics
         Unwrap(cmd).endQuery(queryPoolStatistics, 0);
-        
+
         //timestamp
         StopTimeStamp(cmd, timestamp);
-        
+
         Unwrap(cmd).end();
     }
 
     void VulkanRendererAPI::BeginFrame(VanKRenderOption renderOption)
     {
         m_renderOption = renderOption;
-        
+
         if (m_renderOption == VanK_Render_ImGui)
         {
             ImGui_ImplVulkan_NewFrame();
@@ -962,19 +1211,19 @@ namespace  VanK
             ImGui::NewFrame();
             ImGuizmo::BeginFrame();
         }
-        
+
         // Note: inFlightFences, presentCompleteSemaphores, and commandBuffers are indexed by frameIndex,
         //       while renderFinishedSemaphores is indexed by imageIndex
-        
+
         auto fenceResult = device.waitForFences(*inFlightFences[frameIndex], vk::True, UINT64_MAX);
-        
+
         if (fenceResult != vk::Result::eSuccess)
         {
             throw std::runtime_error("failed to wait for fence!");
         }
-        
+
         auto [result, acquiredImageIndex] = swapChain.acquireNextImage(UINT64_MAX, *presentCompleteSemaphores[frameIndex], nullptr);
-        
+
         // Due to VULKAN_HPP_HANDLE_ERROR_OUT_OF_DATE_AS_SUCCESS being defined, eErrorOutOfDateKHR can be checked as a result
         // here and does not need to be caught by an exception.
         if (result == vk::Result::eErrorOutOfDateKHR)
@@ -982,7 +1231,7 @@ namespace  VanK
             recreateSwapChain();
             return;
         }
-        
+
         // On other success codes than eSuccess and eSuboptimalKHR we just throw an exception.
         // On any error code, aquireNextImage already threw an exception.
         if (result != vk::Result::eSuccess && result != vk::Result::eSuboptimalKHR)
@@ -990,11 +1239,11 @@ namespace  VanK
             assert(result == vk::Result::eTimeout || result == vk::Result::eNotReady);
             throw std::runtime_error("failed to acquire swap chain image!");
         }
-        
+
         device.resetFences(*inFlightFences[frameIndex]);
 
         currentResult = result;
-        
+
         imageIndex = acquiredImageIndex;
     }
 
@@ -1009,9 +1258,9 @@ namespace  VanK
                 ImGui::RenderPlatformWindowsDefault();
             }
         }
-        
+
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
-        
+
         const vk::SubmitInfo submitInfo
         {
             .waitSemaphoreCount = 1,
@@ -1035,7 +1284,7 @@ namespace  VanK
                 .pImageIndices = &imageIndex
             };
             currentResult = queue.presentKHR(presentInfoKHR);
-            
+
             if (currentResult == vk::Result::eErrorOutOfDateKHR || currentResult == vk::Result::eSuboptimalKHR || framebufferResized)
             {
                 framebufferResized = false;
@@ -1046,7 +1295,7 @@ namespace  VanK
                 throw std::runtime_error("failed to present swap chain image!");
             }
         }
-        catch (const vk::SystemError &e)
+        catch (const vk::SystemError& e)
         {
             if (e.code().value() == static_cast<int>(vk::Result::eErrorOutOfDateKHR))
             {
@@ -1058,7 +1307,7 @@ namespace  VanK
                 throw;
             }
         }
-        
+
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
         downloadQueryStatisticsBuffer();
         if (isTimeStapEnabled)
@@ -1067,8 +1316,7 @@ namespace  VanK
 
     VanKComputePass* VulkanRendererAPI::BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers)
     {
-        auto* result = new VanKComputePass
-        {
+        auto* result = new VanKComputePass{
             .VanKCommandBuffer = cmd,
             .VanKVertexBuffer = vertexBuffer,
             .VanKIndirectBuffers = indirectBuffers,
@@ -1088,11 +1336,11 @@ namespace  VanK
                 vk::AccessFlagBits2::eShaderRead // Dst Access: Compute Shader READ
             );
         }
-        
+
         for (auto& indirectBuffer : indirectBuffers)
         {
             if (!indirectBuffer) continue;
-            
+
             // Add a barrier to make sure nothing was writing to it, before updating its content
             utils::cmdBufferMemoryBarrier
             (
@@ -1104,11 +1352,11 @@ namespace  VanK
                 vk::AccessFlagBits2::eShaderWrite // Dst Access: Compute Shader WRITE
             );
         }
-        
+
         for (auto& countBuffer : countBuffers)
         {
             if (!countBuffer) continue;
-                
+
             // Add a barrier to make sure nothing was writing to it, before updating its content
             utils::cmdBufferMemoryBarrier
             (
@@ -1120,7 +1368,7 @@ namespace  VanK
                 vk::AccessFlagBits2::eShaderWrite // Dst Access: Compute Shader WRITE
             );
         }
-        
+
         return result;
     }
 
@@ -1135,7 +1383,7 @@ namespace  VanK
     {
         // A. If Compute ONLY READS (Standard Culling): No barrier needed, as access doesn't change.
         // B. If Compute WROTE (Simulation/Generation):
-        
+
         if (computePass->VanKVertexBuffer != nullptr)
         {
             // Add barrier to make sure the compute shader is finished before the vertex buffer is used
@@ -1149,11 +1397,11 @@ namespace  VanK
                 vk::AccessFlagBits2::eShaderRead // Allow vertex shader to read
             );
         }
-        
+
         for (auto& indirectBuffer : computePass->VanKIndirectBuffers)
         {
             if (!indirectBuffer) continue;
-            
+
             // Barrier for the Indirect buffer
             utils::cmdBufferMemoryBarrier
             (
@@ -1165,11 +1413,11 @@ namespace  VanK
                 vk::AccessFlagBits2::eIndirectCommandRead // Dst Access: Draw Indirect READ
             );
         }
-        
+
         for (auto& countBuffer : computePass->VanKIndirectCountBuffers)
         {
             if (!countBuffer) continue;
-            
+
             // Barrier for the Draw Count buffer
             utils::cmdBufferMemoryBarrier
             (
@@ -1181,90 +1429,90 @@ namespace  VanK
                 vk::AccessFlagBits2::eIndirectCommandRead // Dst Access: Draw Indirect READ
             );
         }
-        
+
         delete computePass;
     }
 
     int32_t VulkanRendererAPI::ReadEntityIDAtPixel(uint32_t x, uint32_t y)
     {
         // Clamp coordinates to viewport
-    x = std::min(x, viewport.width - 1);
-    y = std::min(y, viewport.height - 1);
-    
-    // Create readback buffer if needed (only once)
-    if (!*entityReadbackBuffer.buffer)
-    {
-        entityReadbackBuffer = m_allocator.createBuffer(
-            sizeof(int32_t),/*sizeof(int32_t) * viewport.width * viewport.height,*/
-            vk::BufferUsageFlagBits2::eTransferDst,
-            vma::MemoryUsage::eGpuToCpu
+        x = std::min(x, viewport.width - 1);
+        y = std::min(y, viewport.height - 1);
+
+        // Create readback buffer if needed (only once)
+        if (!*entityReadbackBuffer.buffer)
+        {
+            entityReadbackBuffer = m_allocator.createBuffer(
+                sizeof(int32_t), /*sizeof(int32_t) * viewport.width * viewport.height,*/
+                vk::BufferUsageFlagBits2::eTransferDst,
+                vma::MemoryUsage::eGpuToCpu
+            );
+        }
+
+        /*
+        // Wait for GPU to finish rendering
+        queue.waitIdle();*/
+
+        // Transition entity image to transfer source
+        /*auto cmd = utils::beginSingleTimeCommands(device, commandPool);*/
+
+        utils::transition_image_layout
+        (
+            commandBuffers[frameIndex],
+            *entityImage,
+            entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eTransferSrcOptimal,
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::AccessFlagBits2::eTransferRead,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::PipelineStageFlagBits2::eTransfer,
+            vk::ImageAspectFlagBits::eColor
         );
-    }
-        
-    /*
-    // Wait for GPU to finish rendering
-    queue.waitIdle();*/
-    
-    // Transition entity image to transfer source
-    /*auto cmd = utils::beginSingleTimeCommands(device, commandPool);*/
-   
-    utils::transition_image_layout
-    (
-        commandBuffers[frameIndex],
-        *entityImage,
-        entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::AccessFlagBits2::eColorAttachmentWrite,
-        vk::AccessFlagBits2::eTransferRead,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::PipelineStageFlagBits2::eTransfer,
-        vk::ImageAspectFlagBits::eColor
-    );
-    
-    // Copy image to buffer
-    vk::BufferImageCopy copyRegion{
-        .bufferOffset = 0,
-        .bufferRowLength = 0,
-        .bufferImageHeight = 0,
-        .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-        .imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0}, /*.imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0},*/
-        .imageExtent = {1, 1, 1} /*.imageExtent = {1, 1, 1} */
-    };
-        
-            
-    commandBuffers[frameIndex].copyImageToBuffer(
-        *entityImage,
-        vk::ImageLayout::eTransferSrcOptimal,
-        entityReadbackBuffer.buffer,
-        {copyRegion}
-    );
-    
-    // Transition back
-    utils::transition_image_layout
-    (
-        commandBuffers[frameIndex],
-        *entityImage,
-        vk::ImageLayout::eTransferSrcOptimal,
-        vk::ImageLayout::eColorAttachmentOptimal,
-        vk::AccessFlagBits2::eTransferRead,
-        vk::AccessFlagBits2::eColorAttachmentWrite,
-        vk::PipelineStageFlagBits2::eTransfer,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::ImageAspectFlagBits::eColor
-    );
-    
-    /*utils::endSingleTimeCommands(*cmd, queue);*/
-    
-    // Map and read the pixel
-    void* mappedData = entityReadbackBuffer.buffer.getAllocation().map();
-    int32_t* entityIDs = static_cast<int32_t*>(mappedData);
-        
-    /*int32_t entityID = entityIDs[y * viewport.width + x];*/
-    int32_t entityID = entityIDs[0];
-    
-    entityReadbackBuffer.buffer.getAllocation().unmap();
-    
-    return entityID;
+
+        // Copy image to buffer
+        vk::BufferImageCopy copyRegion{
+            .bufferOffset = 0,
+            .bufferRowLength = 0,
+            .bufferImageHeight = 0,
+            .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
+            .imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0}, /*.imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0},*/
+            .imageExtent = {1, 1, 1} /*.imageExtent = {1, 1, 1} */
+        };
+
+
+        commandBuffers[frameIndex].copyImageToBuffer(
+            *entityImage,
+            vk::ImageLayout::eTransferSrcOptimal,
+            entityReadbackBuffer.buffer,
+            {copyRegion}
+        );
+
+        // Transition back
+        utils::transition_image_layout
+        (
+            commandBuffers[frameIndex],
+            *entityImage,
+            vk::ImageLayout::eTransferSrcOptimal,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            vk::AccessFlagBits2::eTransferRead,
+            vk::AccessFlagBits2::eColorAttachmentWrite,
+            vk::PipelineStageFlagBits2::eTransfer,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor
+        );
+
+        /*utils::endSingleTimeCommands(*cmd, queue);*/
+
+        // Map and read the pixel
+        void* mappedData = entityReadbackBuffer.buffer.getAllocation().map();
+        int32_t* entityIDs = static_cast<int32_t*>(mappedData);
+
+        /*int32_t entityID = entityIDs[y * viewport.width + x];*/
+        int32_t entityID = entityIDs[0];
+
+        entityReadbackBuffer.buffer.getAllocation().unmap();
+
+        return entityID;
     }
 
     void VulkanRendererAPI::BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline)
@@ -1304,21 +1552,21 @@ namespace  VanK
 #define LAB_TASK_AS_OPAQUE_FLAG 7
 #define LAB_TASK_INSTANCE_LUT 9
 #define LAB_TASK_REFLECTIONS 11
-    
-    std::vector<vk::raii::Buffer>                   blasBuffers;
-    std::vector<vk::raii::DeviceMemory>             blasMemories;
+
+    std::vector<vk::raii::Buffer> blasBuffers;
+    std::vector<vk::raii::DeviceMemory> blasMemories;
     std::vector<vk::raii::AccelerationStructureKHR> blasHandles;
 
     std::vector<vk::AccelerationStructureInstanceKHR> instances;
-    vk::raii::Buffer                                  instanceBuffer = nullptr;
-    vk::raii::DeviceMemory                            instanceMemory = nullptr;
-    
-    vk::raii::Buffer                   tlasBuffer        = nullptr;
-    vk::raii::DeviceMemory             tlasMemory        = nullptr;
-    vk::raii::Buffer                   tlasScratchBuffer = nullptr;
-    vk::raii::DeviceMemory             tlasScratchMemory = nullptr;
-    vk::raii::AccelerationStructureKHR tlas              = nullptr;
-    
+    vk::raii::Buffer instanceBuffer = nullptr;
+    vk::raii::DeviceMemory instanceMemory = nullptr;
+
+    vk::raii::Buffer tlasBuffer = nullptr;
+    vk::raii::DeviceMemory tlasMemory = nullptr;
+    vk::raii::Buffer tlasScratchBuffer = nullptr;
+    vk::raii::DeviceMemory tlasScratchMemory = nullptr;
+    vk::raii::AccelerationStructureKHR tlas = nullptr;
+
     /*
     struct InstanceLUT
     {
@@ -1329,14 +1577,14 @@ namespace  VanK
     vk::raii::Buffer         instanceLUTBuffer       = nullptr;
     vk::raii::DeviceMemory   instanceLUTBufferMemory = nullptr;
     */
-    
+
     void VulkanRendererAPI::BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement)
     {
         vk::PipelineLayout layout = VK_NULL_HANDLE;
 
         if (bindPoint == VanKPipelineBindPoint::Graphics) layout = m_currentGraphicPipelineLayout;
         if (bindPoint == VanKPipelineBindPoint::Compute) layout = m_currentComputePipelineLayout;
-    
+
         VulkanUniformBuffer* vulkanUBO = dynamic_cast<VulkanUniformBuffer*>(buffer);
         if (!vulkanUBO)
         {
@@ -1344,9 +1592,9 @@ namespace  VanK
         }
 
         const utils::Buffer& vkBuffer = vulkanUBO->GetBuffer();
-    
+
         // Setting up push descriptor information, we could choose dynamically the buffer to work on
-        const vk::DescriptorBufferInfo bufferInfo = { .buffer = vkBuffer.buffer, .offset = 0, .range = vk::WholeSize };
+        const vk::DescriptorBufferInfo bufferInfo = {.buffer = vkBuffer.buffer, .offset = 0, .range = vk::WholeSize};
 
         std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
         writeDescriptorSets[0] = vk::WriteDescriptorSet{};
@@ -1367,7 +1615,7 @@ namespace  VanK
         {
             stage_flags = vk::ShaderStageFlagBits::eAllGraphics;
         }
-        
+
         // Push layout information with updated data
         const vk::PushDescriptorSetInfoKHR pushDescriptorSetInfo
         {
@@ -1377,15 +1625,16 @@ namespace  VanK
             .descriptorWriteCount = writeDescriptorSets.size(),
             .pDescriptorWrites = writeDescriptorSets.data(),
         };
-    
+
         // This is a push descriptor, allowing synchronization and dynamically changing data
         Unwrap(cmd).pushDescriptorSet2(pushDescriptorSetInfo);
     }
 
-    void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0, VanKDepthStencilTargetInfo depth_stencil_target_info = {})
+    void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0,
+                                           VanKDepthStencilTargetInfo depth_stencil_target_info = {})
     {
-        DBG_VK_SCOPE(Unwrap(cmd));  // <-- Helps to debug in NSight
-        
+        DBG_VK_SCOPE(Unwrap(cmd)); // <-- Helps to debug in NSight
+
         // Before starting rendering, transition the images to the appropriate layouts
         // Transition the multisampled color image to COLOR_ATTACHMENT_OPTIMAL
         utils::transition_image_layout
@@ -1428,34 +1677,34 @@ namespace  VanK
             vk::PipelineStageFlagBits2::eColorAttachmentOutput,
             vk::ImageAspectFlagBits::eColor
         );
-        
+
         utils::transition_image_layout
-    (
-        Unwrap(cmd),
-        *entityImage,
-        entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eColorAttachmentOptimal,
-        entityImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
-        vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-        entityImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::ImageAspectFlagBits::eColor
-    );
-        
+        (
+            Unwrap(cmd),
+            *entityImage,
+            entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            entityImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
+            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+            entityImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor
+        );
+
         // Transition the MSAA entity color image to COLOR_ATTACHMENT_OPTIMAL
         utils::transition_image_layout
-    (
-        Unwrap(cmd),
-        *entityColorImage,
-        entityColorImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
-        vk::ImageLayout::eColorAttachmentOptimal,
-        entityColorImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
-        vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-        entityColorImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
-        vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-        vk::ImageAspectFlagBits::eColor
-    );
-        
+        (
+            Unwrap(cmd),
+            *entityColorImage,
+            entityColorImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
+            vk::ImageLayout::eColorAttachmentOptimal,
+            entityColorImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
+            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
+            entityColorImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
+            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+            vk::ImageAspectFlagBits::eColor
+        );
+
         /*vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);*/
         // Use the caller-provided clear color
         vk::ClearColorValue clearDepth = vk::ClearColorValue
@@ -1466,7 +1715,7 @@ namespace  VanK
             depth_stencil_target_info.clearColor.f[3]
         );
         /*vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);*/
-        
+
 
         // Depth attachment
         vk::RenderingAttachmentInfo depthAttachment =
@@ -1477,14 +1726,14 @@ namespace  VanK
             .storeOp = vk::AttachmentStoreOp::eStore,
             .clearValue = clearDepth
         };
-        
+
         std::vector<vk::RenderingAttachmentInfo> colorAttachments;
         colorAttachments.reserve(num_color_targets);
-        
+
         for (uint32_t i = 0; i < num_color_targets; i++)
         {
             const auto& colorAttachment = color_target_info[i];
-            
+
             vk::RenderingAttachmentInfo attachment;
             attachment.imageView = (i == 0) ? colorImageView : entityColorImageView;
             attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
@@ -1494,10 +1743,10 @@ namespace  VanK
             attachment.loadOp = ConvertToVkLoadOp(colorAttachment.loadOp);
             attachment.storeOp = ConvertToVkStoreOp(colorAttachment.storeOp);
             attachment.clearValue = ConvertToVkClearColor(colorAttachment.clearColor, ConvertToVkFormat(colorAttachment.format));
-            
+
             colorAttachments.emplace_back(attachment);
         }
-        
+
         vk::RenderingInfo renderingInfo =
         {
             .renderArea = {.offset = {0, 0}, .extent = viewport},
@@ -1506,27 +1755,27 @@ namespace  VanK
             .pColorAttachments = colorAttachments.data(),
             .pDepthAttachment = &depthAttachment
         };
-    
+
         Unwrap(cmd).beginRendering(renderingInfo);
     }
 
     void VulkanRendererAPI::SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport vanKViewports)
     {
-        vk::Viewport vk_viewport{ vanKViewports.x, vanKViewports.y, vanKViewports.width, vanKViewports.height, vanKViewports.minDepth, vanKViewports.maxDepth };
+        vk::Viewport vk_viewport{vanKViewports.x, vanKViewports.y, vanKViewports.width, vanKViewports.height, vanKViewports.minDepth, vanKViewports.maxDepth};
 
         // Wrap the single viewport in an ArrayProxy (RAII-friendly)
         std::vector viewports(viewportCount, vk_viewport);
-        
+
         Unwrap(cmd).setViewportWithCount(viewports);
     }
 
     void VulkanRendererAPI::SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor)
     {
-        vk::Rect2D vk_scissor{ vk::Offset2D(scissor.x, scissor.y), {scissor.width, scissor.height} };
+        vk::Rect2D vk_scissor{vk::Offset2D(scissor.x, scissor.y), {scissor.width, scissor.height}};
 
         // Wrap the single scissor in an ArrayProxy (RAII-friendly)
         std::vector scissors(scissorCount, vk_scissor);
-        
+
         Unwrap(cmd).setScissorWithCount(scissors);
     }
 
@@ -1534,7 +1783,7 @@ namespace  VanK
     {
         Unwrap(cmd).setLineWidth(lineWidth);
     }
-    
+
     void VulkanRendererAPI::SetCullMode(VanKCommandBuffer cmd, VanKCullModeFlags cullMode)
     {
         Unwrap(cmd).setCullMode(ConvertToVkCullMode(cullMode));
@@ -1546,20 +1795,20 @@ namespace  VanK
         {
             VK_CORE_ERROR("num_bindings is less then 1 check: {}", num_bindings);
         }
-        
+
         // Cast to VulkanVertexBuffer
         const VulkanVertexBuffer* vulkanVB = dynamic_cast<const VulkanVertexBuffer*>(&vertexBuffer);
         if (!vulkanVB)
         {
             // Handle error: wrong buffer type
-            return; 
+            return;
         }
 
         const utils::Buffer& vkBuffer = vulkanVB->GetBuffer();
         std::vector<vk::Buffer> buffers(num_bindings, vkBuffer.buffer); // The actual VkBuffer
 
         std::vector<vk::DeviceSize> offsets(num_bindings, 0);
-        
+
         Unwrap(cmd).bindVertexBuffers(first_slot, buffers, offsets);
     }
 
@@ -1579,19 +1828,21 @@ namespace  VanK
         vk::IndexType vkIndexType = vk::IndexType::eNoneKHR;
         switch (elementSize)
         {
-        case VanKIndexElementSize::Uint16: vkIndexType = vk::IndexType::eUint16; break;
-        case VanKIndexElementSize::Uint32: vkIndexType = vk::IndexType::eUint32; break;
+        case VanKIndexElementSize::Uint16: vkIndexType = vk::IndexType::eUint16;
+            break;
+        case VanKIndexElementSize::Uint32: vkIndexType = vk::IndexType::eUint32;
+            break;
         }
 
         Unwrap(cmd).bindIndexBuffer(buffer, 0, vkIndexType);
     }
-    
+
     void VulkanRendererAPI::PushConstans(VanKCommandBuffer cmd, VanKShaderStageFlags stageFlags, uint32_t slot, const void* data, uint32_t dataSize)
     {
         vk::PipelineLayout layout = VK_NULL_HANDLE;
-        
-         vk::ShaderStageFlags flag = ConvertToVkShaderStageFlagBits(stageFlags);
-        
+
+        vk::ShaderStageFlags flag = ConvertToVkShaderStageFlagBits(stageFlags);
+
         if (flag & (vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment))
         {
             layout = m_currentGraphicPipelineLayout;
@@ -1600,7 +1851,7 @@ namespace  VanK
         {
             layout = m_currentComputePipelineLayout;
         }
-        
+
         vk::PushConstantsInfo pushConstantsInfo
         {
             .layout = layout,
@@ -1609,7 +1860,7 @@ namespace  VanK
             .size = dataSize,
             .pValues = data,
         };
-    
+
         Unwrap(cmd).pushConstants2(pushConstantsInfo);
     }
 
@@ -1622,12 +1873,13 @@ namespace  VanK
     {
         Unwrap(cmd).drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
-    
-    void VulkanRendererAPI::DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+
+    void VulkanRendererAPI::DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                              uint32_t maxDrawCount, uint32_t stride)
     {
         if (stride < sizeof(vk::DrawIndexedIndirectCommand))
             throw std::runtime_error("drawIndexedIndirectCount: stride too small");
-        
+
         // Cast to VulkanVertexBuffer
         const VulkanIndirectBuffer* vulkanIB = dynamic_cast<const VulkanIndirectBuffer*>(&indirectBuffer);
         if (!vulkanIB)
@@ -1643,15 +1895,16 @@ namespace  VanK
 
         const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
         vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
-        
+
         Unwrap(cmd).drawIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
-    void VulkanRendererAPI::DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+    void VulkanRendererAPI::DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                                     uint32_t maxDrawCount, uint32_t stride)
     {
         if (stride < sizeof(vk::DrawIndexedIndirectCommand))
             throw std::runtime_error("drawIndexedIndirectCount: stride too small");
-        
+
         // Cast to VulkanVertexBuffer
         const VulkanIndirectBuffer* vulkanIB = dynamic_cast<const VulkanIndirectBuffer*>(&indirectBuffer);
         if (!vulkanIB)
@@ -1667,20 +1920,20 @@ namespace  VanK
 
         const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
         vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
-        
+
         Unwrap(cmd).drawIndexedIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
-    
+
     void VulkanRendererAPI::DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
         Unwrap(cmd).drawMeshTasksEXT(groupCountX, groupCountY, groupCountZ);
     }
-    
+
     void VulkanRendererAPI::DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride)
     {
         if (stride < sizeof(vk::DrawMeshTasksIndirectCommandEXT))
             throw std::runtime_error("drawMeshTasksIndirectCount: stride too small");
-        
+
         // Cast to VulkanVertexBuffer
         const VulkanIndirectBuffer* vulkanIB = dynamic_cast<const VulkanIndirectBuffer*>(&indirectBuffer);
         if (!vulkanIB)
@@ -1688,15 +1941,16 @@ namespace  VanK
 
         const utils::Buffer& vkBuffer = vulkanIB->GetBuffer();
         vk::Buffer bufferIndirect = vkBuffer.buffer; // The actual VkBuffer
-        
+
         Unwrap(cmd).drawMeshTasksIndirectEXT(bufferIndirect, indirectBufferOffset, maxDrawCount, stride);
     }
-    
-    void VulkanRendererAPI::DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride)
+
+    void VulkanRendererAPI::DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                                       uint32_t maxDrawCount, uint32_t stride)
     {
         if (stride < sizeof(vk::DrawMeshTasksIndirectCommandEXT))
             throw std::runtime_error("drawMeshTasksIndirectCount: stride too small");
-        
+
         // Cast to VulkanVertexBuffer
         const VulkanIndirectBuffer* vulkanIB = dynamic_cast<const VulkanIndirectBuffer*>(&indirectBuffer);
         if (!vulkanIB)
@@ -1712,7 +1966,7 @@ namespace  VanK
 
         const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
         vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
-        
+
         Unwrap(cmd).drawMeshTasksIndirectCountEXT(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
@@ -1742,7 +1996,7 @@ namespace  VanK
                 vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage,
                 vk::ImageAspectFlagBits::eColor
             );
-        
+
             if (m_hasActiveRenderPass)
             {
                 // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
@@ -1758,11 +2012,11 @@ namespace  VanK
                     vk::PipelineStageFlagBits2::eFragmentShader,
                     vk::ImageAspectFlagBits::eColor
                 );
-                
+
                 sceneImageInitialized = true;
-            
+
                 entityImageInitialized = true;
-            
+
                 entityColorImageInitialized = true;
             }
             else
@@ -1772,7 +2026,7 @@ namespace  VanK
                 (
                     Unwrap(cmd),
                     sceneImage,
-                    vk::ImageLayout::eUndefined,  // Never transitioned
+                    vk::ImageLayout::eUndefined, // Never transitioned
                     vk::ImageLayout::eShaderReadOnlyOptimal,
                     {},
                     vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
@@ -1791,7 +2045,7 @@ namespace  VanK
                 .loadOp = vk::AttachmentLoadOp::eClear,
                 .storeOp = vk::AttachmentStoreOp::eStore
             };
-        
+
             vk::RenderingInfo renderingInfo2 =
             {
                 .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
@@ -1802,15 +2056,15 @@ namespace  VanK
 
             Unwrap(cmd).beginRendering(renderingInfo2);
         }
-        
+
         if (m_renderOption == VanK_Render_ImGui)
         {
             ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
-            
+
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
 
             Unwrap(cmd).endRendering();
-            
+
             // Transition the swapchain image to PRESENT_SRC
             utils::transition_image_layout
             (
@@ -1827,11 +2081,11 @@ namespace  VanK
 
             return;
         }
-        
+
         if (m_renderOption == VanK_Render_Swapchain)
         {
             Unwrap(cmd).endRendering();
-            
+
             // Transition images before blit
             utils::transition_image_layout
             (
@@ -1858,21 +2112,21 @@ namespace  VanK
                 vk::PipelineStageFlagBits2::eTransfer,
                 vk::ImageAspectFlagBits::eColor
             );
-            
+
             vk::ImageSubresourceLayers subresource{};
             subresource.aspectMask = vk::ImageAspectFlagBits::eColor;
             subresource.baseArrayLayer = 0;
             subresource.layerCount = 1;
             subresource.mipLevel = 0;
-            
+
             vk::ImageBlit2 blitRegion{};
             blitRegion.srcSubresource = subresource;
             blitRegion.srcOffsets[0] = {0, 0, 0};
-            blitRegion.srcOffsets[1] = { static_cast<int32_t>(viewport.width), static_cast<int32_t>(viewport.height), 1 };
+            blitRegion.srcOffsets[1] = {static_cast<int32_t>(viewport.width), static_cast<int32_t>(viewport.height), 1};
             blitRegion.dstSubresource = subresource;
             blitRegion.dstOffsets[0] = {0, 0, 0};
-            blitRegion.dstOffsets[1] = { static_cast<int32_t>(swapChainExtent.width), static_cast<int32_t>(swapChainExtent.height), 1 };
-            
+            blitRegion.dstOffsets[1] = {static_cast<int32_t>(swapChainExtent.width), static_cast<int32_t>(swapChainExtent.height), 1};
+
             vk::BlitImageInfo2 blitInfo{};
             blitInfo.srcImage = sceneImage;
             blitInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
@@ -1881,7 +2135,7 @@ namespace  VanK
             blitInfo.regionCount = 1;
             blitInfo.pRegions = &blitRegion;
             blitInfo.filter = vk::Filter::eNearest;
-            
+
             Unwrap(cmd).blitImage2(blitInfo);
 
             // After rendering, transition the images to appropriate layouts
@@ -1899,7 +2153,7 @@ namespace  VanK
                 vk::PipelineStageFlagBits2::eColorAttachmentOutput,
                 vk::ImageAspectFlagBits::eColor
             );
-        
+
             // Transition the swapchain image to PRESENT_SRC
             utils::transition_image_layout
             (
@@ -1924,7 +2178,7 @@ namespace  VanK
             std::cout << "Descriptor set array is empty!" << std::endl;
             return;
         }
-        
+
         //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
         // TextureSamplerBinding is empty check rendererapi strcut
         /*-- 
@@ -1947,14 +2201,14 @@ namespace  VanK
             .pDescriptorSets = &rawDescriptorSet,
         };
         Unwrap(cmd).bindDescriptorSets2(bindDescriptorSetsInfo);
-        
+
         // Ensure the descriptor set exists and the first handle is valid
         if (raytraceDescriptorSet.empty())
         {
             std::cout << "Descriptor set array is empty!" << std::endl;
             return;
         }
-        
+
         //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
         // TextureSamplerBinding is empty check rendererapi strcut
         /*-- 
@@ -1998,7 +2252,7 @@ namespace  VanK
     {
         vk::Format colorFormat = swapChainSurfaceFormat.format;
         // single-sampled and SAMPLED
-        
+
         vk::ImageCreateInfo imageInfo
         {
             .imageType = vk::ImageType::e2D, .format = colorFormat,
@@ -2007,11 +2261,11 @@ namespace  VanK
             .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
             .sharingMode = vk::SharingMode::eExclusive
         };
-        
+
         sceneImage = m_allocator.createImage(imageInfo).image;
 
         DBG_VK_NAME(*sceneImage);
-        
+
         sceneImageView = createImageView(sceneImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
         DBG_VK_NAME(*sceneImageView);
     }
@@ -2019,7 +2273,7 @@ namespace  VanK
     void VulkanRendererAPI::createColorResources()
     {
         vk::Format colorFormat = swapChainSurfaceFormat.format;
-        
+
         vk::ImageCreateInfo imageInfo
         {
             .imageType = vk::ImageType::e2D, .format = colorFormat,
@@ -2028,11 +2282,11 @@ namespace  VanK
             .usage = vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
             .sharingMode = vk::SharingMode::eExclusive
         };
-        
+
         colorImage = m_allocator.createImage(imageInfo).image;
-        
+
         DBG_VK_NAME(*colorImage);
-        
+
         colorImageView = createImageView(colorImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
         DBG_VK_NAME(*colorImageView);
     }
@@ -2040,7 +2294,7 @@ namespace  VanK
     void VulkanRendererAPI::createDepthResources()
     {
         vk::Format depthFormat = findDepthFormat();
-        
+
         vk::ImageCreateInfo imageInfo
         {
             .imageType = vk::ImageType::e2D, .format = depthFormat,
@@ -2049,20 +2303,20 @@ namespace  VanK
             .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
             .sharingMode = vk::SharingMode::eExclusive
         };
-        
+
         depthImage = m_allocator.createImage(imageInfo).image;
-        
+
         DBG_VK_NAME(*depthImage);
-        
+
         depthImageView = createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
         DBG_VK_NAME(*depthImageView);
     }
-    
+
     void VulkanRendererAPI::createEntityResources()
     {
         vk::Format colorFormat = vk::Format::eR32Sint;
         // single-sampled and SAMPLED
-        
+
         vk::ImageCreateInfo imageInfo
         {
             .imageType = vk::ImageType::e2D, .format = colorFormat,
@@ -2071,19 +2325,19 @@ namespace  VanK
             .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
             .sharingMode = vk::SharingMode::eExclusive
         };
-        
+
         entityImage = m_allocator.createImage(imageInfo).image;
 
         DBG_VK_NAME(*entityImage);
-        
+
         entityImageView = createImageView(entityImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
         DBG_VK_NAME(*entityImageView);
     }
-    
+
     void VulkanRendererAPI::createEntityColorResources()
     {
         vk::Format colorFormat = vk::Format::eR32Sint;
-    
+
         vk::ImageCreateInfo imageInfo
         {
             .imageType = vk::ImageType::e2D, .format = colorFormat,
@@ -2092,17 +2346,17 @@ namespace  VanK
             .usage = vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
             .sharingMode = vk::SharingMode::eExclusive
         };
-    
+
         entityColorImage = m_allocator.createImage(imageInfo).image;
-    
+
         DBG_VK_NAME(*entityColorImage);
-    
+
         entityColorImageView = createImageView(entityColorImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
         DBG_VK_NAME(*entityColorImageView);
     }
 
     vk::Format VulkanRendererAPI::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
-                                             vk::FormatFeatureFlags features) const
+                                                      vk::FormatFeatureFlags features) const
     {
         for (const auto format : candidates)
         {
@@ -2136,7 +2390,7 @@ namespace  VanK
     }
 
     void VulkanRendererAPI::generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
-                                   uint32_t mipLevels, uint32_t layerCount)
+                                            uint32_t mipLevels, uint32_t layerCount)
     {
         // Check if image format supports linear blit-ing
         vk::FormatProperties formatProperties = physicalDevice.getFormatProperties(imageFormat);
@@ -2251,8 +2505,8 @@ namespace  VanK
     }
 
     vk::raii::ImageView VulkanRendererAPI::createImageView(vk::raii::Image& image, vk::Format format,
-                                                  vk::ImageAspectFlags aspectFlags,
-                                                  uint32_t mipLevels, uint32_t layerCount, vk::ImageViewType viewType)
+                                                           vk::ImageAspectFlags aspectFlags,
+                                                           uint32_t mipLevels, uint32_t layerCount, vk::ImageViewType viewType)
     {
         vk::ImageViewCreateInfo viewInfo
         {
@@ -2265,9 +2519,9 @@ namespace  VanK
     }
 
     void VulkanRendererAPI::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples,
-                               vk::Format format, vk::ImageTiling tiling,
-                               vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
-                               vk::raii::DeviceMemory& imageMemory)
+                                        vk::Format format, vk::ImageTiling tiling,
+                                        vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
+                                        vk::raii::DeviceMemory& imageMemory)
     {
         vk::ImageCreateInfo imageInfo
         {
@@ -2287,29 +2541,31 @@ namespace  VanK
         imageMemory = vk::raii::DeviceMemory(device, allocInfo);
         image.bindMemory(imageMemory, 0);
     }
-    
 
-    void VulkanRendererAPI::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer &buffer, vk::raii::DeviceMemory &bufferMemory)
+
+    void VulkanRendererAPI::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
     {
         vk::BufferCreateInfo bufferInfo{
-            .size        = size,
-            .usage       = usage,
-            .sharingMode = vk::SharingMode::eExclusive};
-        buffer                                 = vk::raii::Buffer(device, bufferInfo);
+            .size = size,
+            .usage = usage,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+        buffer = vk::raii::Buffer(device, bufferInfo);
         vk::MemoryRequirements memRequirements = buffer.getMemoryRequirements();
         vk::MemoryAllocateInfo allocInfo{
-            .allocationSize  = memRequirements.size,
-            .memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)};
+            .allocationSize = memRequirements.size,
+            .memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)
+        };
         vk::MemoryAllocateFlagsInfo allocFlagsInfo{};
         if (usage & vk::BufferUsageFlagBits::eShaderDeviceAddress)
         {
             allocFlagsInfo.flags = vk::MemoryAllocateFlagBits::eDeviceAddress;
-            allocInfo.pNext      = &allocFlagsInfo;
+            allocInfo.pNext = &allocFlagsInfo;
         }
         bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
         buffer.bindMemory(bufferMemory, 0);
     }
-    
+
     /*void VulkanRendererAPI::createInstanceLUTBuffer()
     {
 #if LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
@@ -2330,7 +2586,7 @@ namespace  VanK
         copyBuffer(stagingBuffer, instanceLUTBuffer, bufferSize);
 #endif        // LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
     }*/
-    
+
     void VulkanRendererAPI::createAccelerationStructures
     (
         const StorageBuffer& vertexBuffer,
@@ -2341,234 +2597,247 @@ namespace  VanK
     )
     {
 #if LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
-		/*vk::BufferDeviceAddressInfo vai{.buffer = *vertexBuffer};*/
-		vk::DeviceAddress           vertexAddr = vertexBuffer.GetBufferAddress();
-		/*vk::BufferDeviceAddressInfo iai{.buffer = *indexBuffer};*/
-		vk::DeviceAddress           indexAddr = indexBuffer.GetBufferAddress();
+        /*vk::BufferDeviceAddressInfo vai{.buffer = *vertexBuffer};*/
+        vk::DeviceAddress vertexAddr = vertexBuffer.GetBufferAddress();
+        /*vk::BufferDeviceAddressInfo iai{.buffer = *indexBuffer};*/
+        vk::DeviceAddress indexAddr = indexBuffer.GetBufferAddress();
         std::cout << std::dec << "vertaddr: " << vertexAddr << " indexaddr: " << indexAddr << std::endl;
-        
-		instances.reserve(primitives.size());
-		blasBuffers.reserve(primitives.size());
-		blasMemories.reserve(primitives.size());
-		blasHandles.reserve(primitives.size());
 
-		vk::TransformMatrixKHR identity{};
-        identity.matrix = std::array<std::array<float, 4>, 3>{{std::array<float, 4>{1.f, 0.f, 0.f, 0.f},
-                                                               std::array<float, 4>{0.f, 1.f, 0.f, 0.f},
-                                                               std::array<float, 4>{0.f, 0.f, 1.f, 0.f}}};
+        instances.reserve(primitives.size());
+        blasBuffers.reserve(primitives.size());
+        blasMemories.reserve(primitives.size());
+        blasHandles.reserve(primitives.size());
 
-		// TASK02: Build a bottom level acceleration structure for each submesh
-		for (size_t i = 0; i < primitives.size(); ++i)
-		{
-			const auto &submesh = primitives[i];
-		    const auto &mat = materials[submesh.materialIndex];
+        vk::TransformMatrixKHR identity{};
+        identity.matrix = std::array<std::array<float, 4>, 3>{
+            {
+                std::array<float, 4>{1.f, 0.f, 0.f, 0.f},
+                std::array<float, 4>{0.f, 1.f, 0.f, 0.f},
+                std::array<float, 4>{0.f, 0.f, 1.f, 0.f}
+            }
+        };
 
-			// Prepare the geometry data
-			auto trianglesData = vk::AccelerationStructureGeometryTrianglesDataKHR{
-			    .vertexFormat = vk::Format::eR32G32B32Sfloat,
-			    .vertexData   = vertexAddr,
-			    .vertexStride = sizeof(shaderio::Vertex),
-			    .maxVertex    = submesh.maxVertex,
-			    .indexType    = vk::IndexType::eUint32,
-			    .indexData    = indexAddr + submesh.indexOffset * sizeof(uint32_t)};
+        // TASK02: Build a bottom level acceleration structure for each submesh
+        for (size_t i = 0; i < primitives.size(); ++i)
+        {
+            const auto& submesh = primitives[i];
+            const auto& mat = materials[submesh.materialIndex];
 
-			vk::AccelerationStructureGeometryDataKHR geometryData(trianglesData);
+            // Prepare the geometry data
+            auto trianglesData = vk::AccelerationStructureGeometryTrianglesDataKHR{
+                .vertexFormat = vk::Format::eR32G32B32Sfloat,
+                .vertexData = vertexAddr,
+                .vertexStride = sizeof(shaderio::Vertex),
+                .maxVertex = submesh.maxVertex,
+                .indexType = vk::IndexType::eUint32,
+                .indexData = indexAddr + submesh.indexOffset * sizeof(uint32_t)
+            };
 
-			vk::AccelerationStructureGeometryKHR blasGeometry{
-			    .geometryType = vk::GeometryTypeKHR::eTriangles,
-			    .geometry     = geometryData,
-			    .flags        = vk::GeometryFlagBitsKHR::eOpaque};
+            vk::AccelerationStructureGeometryDataKHR geometryData(trianglesData);
+
+            vk::AccelerationStructureGeometryKHR blasGeometry{
+                .geometryType = vk::GeometryTypeKHR::eTriangles,
+                .geometry = geometryData,
+                .flags = vk::GeometryFlagBitsKHR::eOpaque
+            };
 #	if LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
-			// TASK07
-			blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagsKHR(0) : vk::GeometryFlagBitsKHR::eOpaque;
+            // TASK07
+            blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagsKHR(0) : vk::GeometryFlagBitsKHR::eOpaque;
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
 
-			vk::AccelerationStructureBuildGeometryInfoKHR blasBuildGeometryInfo{
-			    .type          = vk::AccelerationStructureTypeKHR::eBottomLevel,
-			    .mode          = vk::BuildAccelerationStructureModeKHR::eBuild,
-			    .geometryCount = 1,
-			    .pGeometries   = &blasGeometry,
-			};
+            vk::AccelerationStructureBuildGeometryInfoKHR blasBuildGeometryInfo{
+                .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
+                .mode = vk::BuildAccelerationStructureModeKHR::eBuild,
+                .geometryCount = 1,
+                .pGeometries = &blasGeometry,
+            };
 
-			// Query the memory sizes that will be needed for this BLAS
-			auto primitiveCount = static_cast<uint32_t>(submesh.indexCount / 3);
+            // Query the memory sizes that will be needed for this BLAS
+            auto primitiveCount = static_cast<uint32_t>(submesh.indexCount / 3);
 
-			vk::AccelerationStructureBuildSizesInfoKHR blasBuildSizes =
-			    device.getAccelerationStructureBuildSizesKHR(
-			        vk::AccelerationStructureBuildTypeKHR::eDevice,
-			        blasBuildGeometryInfo,
-			        {primitiveCount});
+            vk::AccelerationStructureBuildSizesInfoKHR blasBuildSizes =
+                device.getAccelerationStructureBuildSizesKHR(
+                    vk::AccelerationStructureBuildTypeKHR::eDevice,
+                    blasBuildGeometryInfo,
+                    {primitiveCount});
 
-			// Create a scratch buffer for the BLAS, this will hold temporary data
-			// during the build process
-			vk::raii::Buffer       scratchBuffer = nullptr;
-			vk::raii::DeviceMemory scratchMemory = nullptr;
-			createBuffer(blasBuildSizes.buildScratchSize,
-			             vk::BufferUsageFlagBits::eStorageBuffer |
-			                 vk::BufferUsageFlagBits::eShaderDeviceAddress,
-			             vk::MemoryPropertyFlagBits::eDeviceLocal,
-			             scratchBuffer, scratchMemory);
+            // Create a scratch buffer for the BLAS, this will hold temporary data
+            // during the build process
+            vk::raii::Buffer scratchBuffer = nullptr;
+            vk::raii::DeviceMemory scratchMemory = nullptr;
+            createBuffer(blasBuildSizes.buildScratchSize,
+                         vk::BufferUsageFlagBits::eStorageBuffer |
+                         vk::BufferUsageFlagBits::eShaderDeviceAddress,
+                         vk::MemoryPropertyFlagBits::eDeviceLocal,
+                         scratchBuffer, scratchMemory);
 
-			// Save the scratch buffer address in the build info structure
-			vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *scratchBuffer};
-			vk::DeviceAddress           scratchAddr         = device.getBufferAddressKHR(scratchAddressInfo);
-			blasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
+            // Save the scratch buffer address in the build info structure
+            vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *scratchBuffer};
+            vk::DeviceAddress scratchAddr = device.getBufferAddressKHR(scratchAddressInfo);
+            blasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
 
-			// Create a buffer for the BLAS itself now that we now the required size
-			vk::raii::Buffer       blasBuffer = nullptr;
-			vk::raii::DeviceMemory blasMemory = nullptr;
-			blasBuffers.emplace_back(std::move(blasBuffer));
-			blasMemories.emplace_back(std::move(blasMemory));
-			createBuffer(blasBuildSizes.accelerationStructureSize,
-			             vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-			                 vk::BufferUsageFlagBits::eShaderDeviceAddress |
-			                 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
-			             vk::MemoryPropertyFlagBits::eDeviceLocal,
-			             blasBuffers[i], blasMemories[i]);
+            // Create a buffer for the BLAS itself now that we now the required size
+            vk::raii::Buffer blasBuffer = nullptr;
+            vk::raii::DeviceMemory blasMemory = nullptr;
+            blasBuffers.emplace_back(std::move(blasBuffer));
+            blasMemories.emplace_back(std::move(blasMemory));
+            createBuffer(blasBuildSizes.accelerationStructureSize,
+                         vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                         vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+                         vk::MemoryPropertyFlagBits::eDeviceLocal,
+                         blasBuffers[i], blasMemories[i]);
 
-			// Create and store the BLAS handle
-			vk::AccelerationStructureCreateInfoKHR blasCreateInfo{
-			    .buffer = blasBuffers[i],
-			    .offset = 0,
-			    .size   = blasBuildSizes.accelerationStructureSize,
-			    .type   = vk::AccelerationStructureTypeKHR::eBottomLevel,
-			};
+            // Create and store the BLAS handle
+            vk::AccelerationStructureCreateInfoKHR blasCreateInfo{
+                .buffer = blasBuffers[i],
+                .offset = 0,
+                .size = blasBuildSizes.accelerationStructureSize,
+                .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
+            };
 
-			blasHandles.emplace_back(device.createAccelerationStructureKHR(blasCreateInfo));
+            blasHandles.emplace_back(device.createAccelerationStructureKHR(blasCreateInfo));
 
-			// Save the BLAS handle in the build info structure
-			blasBuildGeometryInfo.dstAccelerationStructure = blasHandles[i];
+            // Save the BLAS handle in the build info structure
+            blasBuildGeometryInfo.dstAccelerationStructure = blasHandles[i];
 
-			// Prepare the build range for the BLAS
-			vk::AccelerationStructureBuildRangeInfoKHR blasRangeInfo{
-			    .primitiveCount  = primitiveCount,
-			    .primitiveOffset = 0,
-			    .firstVertex     = submesh.firstVertex,
-			    .transformOffset = 0};
+            // Prepare the build range for the BLAS
+            vk::AccelerationStructureBuildRangeInfoKHR blasRangeInfo{
+                .primitiveCount = primitiveCount,
+                .primitiveOffset = 0,
+                .firstVertex = submesh.firstVertex,
+                .transformOffset = 0
+            };
 
-			// Build the BLAS
-			auto cmd = utils::beginSingleTimeCommands(device, commandPool);
-			cmd->buildAccelerationStructuresKHR({blasBuildGeometryInfo}, {&blasRangeInfo});
-			utils::endSingleTimeCommands(*cmd, queue);
+            // Build the BLAS
+            auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+            cmd->buildAccelerationStructuresKHR({blasBuildGeometryInfo}, {&blasRangeInfo});
+            utils::endSingleTimeCommands(*cmd, queue);
 
-			// TASK03: Create a BLAS instance for the TLAS
-			vk::AccelerationStructureDeviceAddressInfoKHR addrInfo{
-			    .accelerationStructure = *blasHandles[i]};
-			vk::DeviceAddress blasDeviceAddr = device.getAccelerationStructureAddressKHR(addrInfo);
+            // TASK03: Create a BLAS instance for the TLAS
+            vk::AccelerationStructureDeviceAddressInfoKHR addrInfo{
+                .accelerationStructure = *blasHandles[i]
+            };
+            vk::DeviceAddress blasDeviceAddr = device.getAccelerationStructureAddressKHR(addrInfo);
 
-			vk::AccelerationStructureInstanceKHR instance{
-			    .transform                      = identity,
-			    .mask                           = 0xFF,
-			    .accelerationStructureReference = blasDeviceAddr};
+            vk::AccelerationStructureInstanceKHR instance{
+                .transform = identity,
+                .mask = 0xFF,
+                .accelerationStructureReference = blasDeviceAddr
+            };
 
-			instances.push_back(instance);
+            instances.push_back(instance);
 
 #	if LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
-			// TASK09: store the instance look-up table entry
-			instances[i].instanceCustomIndex = static_cast<uint32_t>(i);
+            // TASK09: store the instance look-up table entry
+            instances[i].instanceCustomIndex = static_cast<uint32_t>(i);
 
-			instanceLUTs.push_back({static_cast<uint32_t>(submesh.materialIndex), submesh.indexOffset, submesh.firstVertex});
+            instanceLUTs.push_back({static_cast<uint32_t>(submesh.materialIndex), submesh.indexOffset, submesh.firstVertex});
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
-		}
+        }
 
-		// TASK03: Prepare the instance data buffer
-		vk::DeviceSize instBufferSize = sizeof(instances[0]) * instances.size();
-		createBuffer(instBufferSize,
-		             vk::BufferUsageFlagBits::eShaderDeviceAddress |
-		                 vk::BufferUsageFlagBits::eTransferDst |
-		                 vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
-		             vk::MemoryPropertyFlagBits::eHostVisible |
-		                 vk::MemoryPropertyFlagBits::eHostCoherent,
-		             instanceBuffer, instanceMemory);
+        // TASK03: Prepare the instance data buffer
+        vk::DeviceSize instBufferSize = sizeof(instances[0]) * instances.size();
+        createBuffer(instBufferSize,
+                     vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                     vk::BufferUsageFlagBits::eTransferDst |
+                     vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+                     vk::MemoryPropertyFlagBits::eHostVisible |
+                     vk::MemoryPropertyFlagBits::eHostCoherent,
+                     instanceBuffer, instanceMemory);
 
-		void *ptr = instanceMemory.mapMemory(0, instBufferSize);
-		memcpy(ptr, instances.data(), instBufferSize);
-		instanceMemory.unmapMemory();
+        void* ptr = instanceMemory.mapMemory(0, instBufferSize);
+        memcpy(ptr, instances.data(), instBufferSize);
+        instanceMemory.unmapMemory();
 
-		vk::BufferDeviceAddressInfo instanceAddrInfo{.buffer = instanceBuffer};
-		vk::DeviceAddress           instanceAddr = device.getBufferAddressKHR(instanceAddrInfo);
+        vk::BufferDeviceAddressInfo instanceAddrInfo{.buffer = instanceBuffer};
+        vk::DeviceAddress instanceAddr = device.getBufferAddressKHR(instanceAddrInfo);
 
-		// Prepare the geometry (instance) data
-		auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR{
-		    .arrayOfPointers = vk::False,
-		    .data            = instanceAddr};
+        // Prepare the geometry (instance) data
+        auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR{
+            .arrayOfPointers = vk::False,
+            .data = instanceAddr
+        };
 
-		vk::AccelerationStructureGeometryDataKHR geometryData(instancesData);
+        vk::AccelerationStructureGeometryDataKHR geometryData(instancesData);
 
-		vk::AccelerationStructureGeometryKHR tlasGeometry{
-		    .geometryType = vk::GeometryTypeKHR::eInstances,
-		    .geometry     = geometryData};
+        vk::AccelerationStructureGeometryKHR tlasGeometry{
+            .geometryType = vk::GeometryTypeKHR::eInstances,
+            .geometry = geometryData
+        };
 
-		vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo{
-		    .type          = vk::AccelerationStructureTypeKHR::eTopLevel,
-		    .mode          = vk::BuildAccelerationStructureModeKHR::eBuild,
-		    .geometryCount = 1,
-		    .pGeometries   = &tlasGeometry};
+        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo{
+            .type = vk::AccelerationStructureTypeKHR::eTopLevel,
+            .mode = vk::BuildAccelerationStructureModeKHR::eBuild,
+            .geometryCount = 1,
+            .pGeometries = &tlasGeometry
+        };
 
 #	if LAB_TASK_LEVEL >= LAB_TASK_AS_ANIMATION
-		tlasBuildGeometryInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
+        tlasBuildGeometryInfo.flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate;
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_ANIMATION
 
-		// Query the memory sizes that will be needed for this TLAS
-		auto primitiveCount = static_cast<uint32_t>(instances.size());
+        // Query the memory sizes that will be needed for this TLAS
+        auto primitiveCount = static_cast<uint32_t>(instances.size());
 
-		vk::AccelerationStructureBuildSizesInfoKHR tlasBuildSizes =
-		    device.getAccelerationStructureBuildSizesKHR(
-		        vk::AccelerationStructureBuildTypeKHR::eDevice,
-		        tlasBuildGeometryInfo,
-		        {primitiveCount});
+        vk::AccelerationStructureBuildSizesInfoKHR tlasBuildSizes =
+            device.getAccelerationStructureBuildSizesKHR(
+                vk::AccelerationStructureBuildTypeKHR::eDevice,
+                tlasBuildGeometryInfo,
+                {primitiveCount});
 
-		// Create a scratch buffer for the TLAS, this will hold temporary data
-		// during the build process
-		createBuffer(
-		    tlasBuildSizes.buildScratchSize,
-		    vk::BufferUsageFlagBits::eStorageBuffer |
-		        vk::BufferUsageFlagBits::eShaderDeviceAddress,
-		    vk::MemoryPropertyFlagBits::eDeviceLocal,
-		    tlasScratchBuffer, tlasScratchMemory);
+        // Create a scratch buffer for the TLAS, this will hold temporary data
+        // during the build process
+        createBuffer(
+            tlasBuildSizes.buildScratchSize,
+            vk::BufferUsageFlagBits::eStorageBuffer |
+            vk::BufferUsageFlagBits::eShaderDeviceAddress,
+            vk::MemoryPropertyFlagBits::eDeviceLocal,
+            tlasScratchBuffer, tlasScratchMemory);
 
-		// Save the scratch buffer address in the build info structure
-		vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *tlasScratchBuffer};
-		vk::DeviceAddress           scratchAddr         = device.getBufferAddressKHR(scratchAddressInfo);
-		tlasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
+        // Save the scratch buffer address in the build info structure
+        vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *tlasScratchBuffer};
+        vk::DeviceAddress scratchAddr = device.getBufferAddressKHR(scratchAddressInfo);
+        tlasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
 
-		// Create a buffer for the TLAS itself now that we now the required size
-		createBuffer(
-		    tlasBuildSizes.accelerationStructureSize,
-		    vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
-		        vk::BufferUsageFlagBits::eShaderDeviceAddress |
-		        vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
-		    vk::MemoryPropertyFlagBits::eDeviceLocal,
-		    tlasBuffer, tlasMemory);
+        // Create a buffer for the TLAS itself now that we now the required size
+        createBuffer(
+            tlasBuildSizes.accelerationStructureSize,
+            vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+            vk::BufferUsageFlagBits::eShaderDeviceAddress |
+            vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+            vk::MemoryPropertyFlagBits::eDeviceLocal,
+            tlasBuffer, tlasMemory);
 
-		// Create and store the TLAS handle
-		vk::AccelerationStructureCreateInfoKHR tlasCreateInfo{
-		    .buffer = tlasBuffer,
-		    .offset = 0,
-		    .size   = tlasBuildSizes.accelerationStructureSize,
-		    .type   = vk::AccelerationStructureTypeKHR::eTopLevel,
-		};
+        // Create and store the TLAS handle
+        vk::AccelerationStructureCreateInfoKHR tlasCreateInfo{
+            .buffer = tlasBuffer,
+            .offset = 0,
+            .size = tlasBuildSizes.accelerationStructureSize,
+            .type = vk::AccelerationStructureTypeKHR::eTopLevel,
+        };
 
-		tlas = device.createAccelerationStructureKHR(tlasCreateInfo);
+        tlas = device.createAccelerationStructureKHR(tlasCreateInfo);
 
-		// Save the TLAS handle in the build info structure
-		tlasBuildGeometryInfo.dstAccelerationStructure = tlas;
+        // Save the TLAS handle in the build info structure
+        tlasBuildGeometryInfo.dstAccelerationStructure = tlas;
 
-		// Prepare the build range for the TLAS
-		vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo{
-		    .primitiveCount  = primitiveCount,
-		    .primitiveOffset = 0,
-		    .firstVertex     = 0,
-		    .transformOffset = 0};
+        // Prepare the build range for the TLAS
+        vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo{
+            .primitiveCount = primitiveCount,
+            .primitiveOffset = 0,
+            .firstVertex = 0,
+            .transformOffset = 0
+        };
 
-		// Build the TLAS
-		auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+        // Build the TLAS
+        auto cmd = utils::beginSingleTimeCommands(device, commandPool);
 
-		cmd->buildAccelerationStructuresKHR({tlasBuildGeometryInfo}, {&tlasRangeInfo});
+        cmd->buildAccelerationStructuresKHR({tlasBuildGeometryInfo}, {&tlasRangeInfo});
 
-		utils::endSingleTimeCommands(*cmd, queue);
+        utils::endSingleTimeCommands(*cmd, queue);
 #endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
-        
+
         vk::WriteDescriptorSetAccelerationStructureKHR asInfo{
             .accelerationStructureCount = 1,
             .pAccelerationStructures = {&*tlas}
@@ -2582,129 +2851,137 @@ namespace  VanK
             .descriptorCount = 1,
             .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
         };
-        
+
         std::array<vk::WriteDescriptorSet, 1> descriptorWrites{asWrite};
 
         device.updateDescriptorSets(descriptorWrites, {});
-	}
-    
-    void VulkanRendererAPI::copyBuffer(vk::raii::Buffer &srcBuffer, vk::raii::Buffer &dstBuffer, vk::DeviceSize size)
+    }
+
+    void VulkanRendererAPI::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
     {
         vk::CommandBufferAllocateInfo allocInfo{.commandPool = commandPool, .level = vk::CommandBufferLevel::ePrimary, .commandBufferCount = 1};
-        vk::raii::CommandBuffer       commandCopyBuffer = std::move(device.allocateCommandBuffers(allocInfo).front());
+        vk::raii::CommandBuffer commandCopyBuffer = std::move(device.allocateCommandBuffers(allocInfo).front());
         commandCopyBuffer.begin(vk::CommandBufferBeginInfo{.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit});
         commandCopyBuffer.copyBuffer(*srcBuffer, *dstBuffer, vk::BufferCopy{.size = size});
         commandCopyBuffer.end();
         queue.submit(vk::SubmitInfo{.commandBufferCount = 1, .pCommandBuffers = &*commandCopyBuffer}, nullptr);
         queue.waitIdle();
     }
-    
-    #if LAB_TASK_LEVEL >= LAB_TASK_AS_ANIMATION
-	void VulkanRendererAPI::updateTopLevelAS(const glm::mat4 &model)
-	{
-		vk::TransformMatrixKHR tm{};
-		auto                  &M = model;
-		tm.matrix                = std::array<std::array<float, 4>, 3>{{std::array<float, 4>{M[0][0], M[1][0], M[2][0], M[3][0]},
-		                                                                std::array<float, 4>{M[0][1], M[1][1], M[2][1], M[3][1]},
-		                                                                std::array<float, 4>{M[0][2], M[1][2], M[2][2], M[3][2]}}};
 
-		// TASK06: update the instances to use the new transform matrix.
-		for (auto &instance : instances)
-		{
-			instance.setTransform(tm);
-		}
+#if LAB_TASK_LEVEL >= LAB_TASK_AS_ANIMATION
+    void VulkanRendererAPI::updateTopLevelAS(const glm::mat4& model)
+    {
+        vk::TransformMatrixKHR tm{};
+        auto& M = model;
+        tm.matrix = std::array<std::array<float, 4>, 3>{
+            {
+                std::array<float, 4>{M[0][0], M[1][0], M[2][0], M[3][0]},
+                std::array<float, 4>{M[0][1], M[1][1], M[2][1], M[3][1]},
+                std::array<float, 4>{M[0][2], M[1][2], M[2][2], M[3][2]}
+            }
+        };
 
-		auto           primitiveCount = static_cast<uint32_t>(instances.size());
-		vk::DeviceSize instBufferSize = sizeof(instances[0]) * primitiveCount;
+        // TASK06: update the instances to use the new transform matrix.
+        for (auto& instance : instances)
+        {
+            instance.setTransform(tm);
+        }
 
-		vk::raii::Buffer       stagingBuffer({});
-		vk::raii::DeviceMemory stagingBufferMemory({});
-		createBuffer(instBufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+        auto primitiveCount = static_cast<uint32_t>(instances.size());
+        vk::DeviceSize instBufferSize = sizeof(instances[0]) * primitiveCount;
 
-		void *dataStaging = stagingBufferMemory.mapMemory(0, instBufferSize);
-		memcpy(dataStaging, instances.data(), instBufferSize);
-		stagingBufferMemory.unmapMemory();
+        vk::raii::Buffer stagingBuffer({});
+        vk::raii::DeviceMemory stagingBufferMemory({});
+        createBuffer(instBufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
 
-		copyBuffer(stagingBuffer, instanceBuffer, instBufferSize);
+        void* dataStaging = stagingBufferMemory.mapMemory(0, instBufferSize);
+        memcpy(dataStaging, instances.data(), instBufferSize);
+        stagingBufferMemory.unmapMemory();
 
-		vk::BufferDeviceAddressInfo instanceAddrInfo{.buffer = instanceBuffer};
-		vk::DeviceAddress           instanceAddr = device.getBufferAddressKHR(instanceAddrInfo);
+        copyBuffer(stagingBuffer, instanceBuffer, instBufferSize);
 
-		// Prepare the geometry (instance) data
-		auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR{
-		    .arrayOfPointers = vk::False,
-		    .data            = instanceAddr};
+        vk::BufferDeviceAddressInfo instanceAddrInfo{.buffer = instanceBuffer};
+        vk::DeviceAddress instanceAddr = device.getBufferAddressKHR(instanceAddrInfo);
 
-		vk::AccelerationStructureGeometryDataKHR geometryData(instancesData);
+        // Prepare the geometry (instance) data
+        auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR{
+            .arrayOfPointers = vk::False,
+            .data = instanceAddr
+        };
 
-		vk::AccelerationStructureGeometryKHR tlasGeometry{
-		    .geometryType = vk::GeometryTypeKHR::eInstances,
-		    .geometry     = geometryData};
+        vk::AccelerationStructureGeometryDataKHR geometryData(instancesData);
 
-		// TASK06: Note the new parameters to re-build the TLAS in-place
-		vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo{
-		    .type                     = vk::AccelerationStructureTypeKHR::eTopLevel,
-		    .flags                    = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate,
-		    .mode                     = vk::BuildAccelerationStructureModeKHR::eUpdate,
-		    .srcAccelerationStructure = tlas,
-		    .dstAccelerationStructure = tlas,
-		    .geometryCount            = 1,
-		    .pGeometries              = &tlasGeometry};
+        vk::AccelerationStructureGeometryKHR tlasGeometry{
+            .geometryType = vk::GeometryTypeKHR::eInstances,
+            .geometry = geometryData
+        };
 
-		vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *tlasScratchBuffer};
-		vk::DeviceAddress           scratchAddr         = device.getBufferAddressKHR(scratchAddressInfo);
-		tlasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
+        // TASK06: Note the new parameters to re-build the TLAS in-place
+        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo{
+            .type = vk::AccelerationStructureTypeKHR::eTopLevel,
+            .flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate,
+            .mode = vk::BuildAccelerationStructureModeKHR::eUpdate,
+            .srcAccelerationStructure = tlas,
+            .dstAccelerationStructure = tlas,
+            .geometryCount = 1,
+            .pGeometries = &tlasGeometry
+        };
 
-		// Prepare the build range for the TLAS
-		vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo{
-		    .primitiveCount  = primitiveCount,
-		    .primitiveOffset = 0,
-		    .firstVertex     = 0,
-		    .transformOffset = 0};
+        vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *tlasScratchBuffer};
+        vk::DeviceAddress scratchAddr = device.getBufferAddressKHR(scratchAddressInfo);
+        tlasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
 
-		// Re-build the TLAS
-		auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+        // Prepare the build range for the TLAS
+        vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo{
+            .primitiveCount = primitiveCount,
+            .primitiveOffset = 0,
+            .firstVertex = 0,
+            .transformOffset = 0
+        };
 
-		// Pre-build barrier
+        // Re-build the TLAS
+        auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+
+        // Pre-build barrier
         vk::MemoryBarrier2 preBarrier
         {
-            .srcStageMask  = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR | vk::PipelineStageFlagBits2::eTransfer | vk::PipelineStageFlagBits2::eFragmentShader,
+            .srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR | vk::PipelineStageFlagBits2::eTransfer | vk::PipelineStageFlagBits2::eFragmentShader,
             .srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR | vk::AccessFlagBits2::eTransferWrite | vk::AccessFlagBits2::eShaderRead,
-            .dstStageMask  = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+            .dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
             .dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR
         };
-        
+
         vk::DependencyInfo preDependencyInfo
         {
             .dependencyFlags = {},
             .memoryBarrierCount = 1,
             .pMemoryBarriers = &preBarrier,
         };
-        
+
         cmd->pipelineBarrier2(preDependencyInfo);
 
-		cmd->buildAccelerationStructuresKHR({tlasBuildGeometryInfo}, {&tlasRangeInfo});
+        cmd->buildAccelerationStructuresKHR({tlasBuildGeometryInfo}, {&tlasRangeInfo});
 
-		// Post-build barrier
+        // Post-build barrier
         vk::MemoryBarrier2 postBarrier
         {
-            .srcStageMask  = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+            .srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
             .srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR,
-            .dstStageMask  = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR | vk::PipelineStageFlagBits2::eFragmentShader,
+            .dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR | vk::PipelineStageFlagBits2::eFragmentShader,
             .dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead
         };
-        
+
         vk::DependencyInfo postDependencyInfo
         {
             .dependencyFlags = {},
             .memoryBarrierCount = 1,
             .pMemoryBarriers = &postBarrier,
         };
-        
+
         cmd->pipelineBarrier2(postDependencyInfo);
 
-		utils::endSingleTimeCommands(*cmd, queue);
-	}
+        utils::endSingleTimeCommands(*cmd, queue);
+    }
 #endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_ANIMATION
 
     void VulkanRendererAPI::createDescriptorPool()
@@ -2719,7 +2996,7 @@ namespace  VanK
             {
                 vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, m_maxTextures)
             };
-        
+
             vk::DescriptorPoolCreateInfo poolInfo
             {
                 .flags = vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind | vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
@@ -2747,7 +3024,7 @@ namespace  VanK
             uiDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
             DBG_VK_NAME(*uiDescriptorPool);
         }
-        
+
         // Pool for TLAS descriptor set
         {
             std::array poolSizes = {
@@ -2773,17 +3050,17 @@ namespace  VanK
 
             // In comment, the layout for a storage buffer, which is not used in this sample, but rather a push descriptor (below)
             std::array<vk::DescriptorSetLayoutBinding, 1> layoutBindings{
+                {
                     {
-                        {
-                            .binding = 0,
-                            .descriptorType = vk::DescriptorType::eCombinedImageSampler,
-                            .descriptorCount = numTextures,
-                            .stageFlags = vk::ShaderStageFlagBits::eAllGraphics
-                        },
-                
-                        // This is if we would add another binding for the scene info, but instead we make another set, see below
-                        // {.binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS},
-                    }
+                        .binding = 0,
+                        .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                        .descriptorCount = numTextures,
+                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics
+                    },
+
+                    // This is if we would add another binding for the scene info, but instead we make another set, see below
+                    // {.binding = 1, .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, .descriptorCount = 1, .stageFlags = VK_SHADER_STAGE_ALL_GRAPHICS},
+                }
             };
 
             std::array<vk::DescriptorBindingFlags, 1> flags = {
@@ -2795,7 +3072,7 @@ namespace  VanK
                 // Flags for binding 1 (scene info buffer):
                 // VK_DESCRIPTOR_BINDING_UPDATE_AFTER_BIND_BIT  // flags for storage buffer binding
             };
-            
+
             vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlags{
                 .bindingCount = uint32_t(layoutBindings.size()), // matches our number of bindings
                 .pBindingFlags = flags.data(), // the flags for each binding
@@ -2810,7 +3087,7 @@ namespace  VanK
             };
             descriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
             DBG_VK_NAME(*descriptorSetLayout);
-            std::vector<vk::DescriptorSetLayout> layouts = { *descriptorSetLayout };
+            std::vector<vk::DescriptorSetLayout> layouts = {*descriptorSetLayout};
             // Allocate the descriptor set, needed only for larger descriptor sets
             vk::DescriptorSetAllocateInfo allocInfo = {
                 .descriptorPool = descriptorPool,
@@ -2830,11 +3107,11 @@ namespace  VanK
             // This is the scene buffer information
             // Use descriptor set 0 for global data
             // TASK04: The acceleration structure uses binding 1
-            std::array layoutBindings = 
+            std::array layoutBindings =
             {
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, nullptr),
             };
-            
+
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
             {
                 .flags = vk::DescriptorSetLayoutCreateFlagBits::ePushDescriptor,
@@ -2843,19 +3120,18 @@ namespace  VanK
             };
             commonDescriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
             DBG_VK_NAME(*commonDescriptorSetLayout);
-            
         }
-        
+
         // acceleration structure
         {
             // This is the scene buffer information
             // Use descriptor set 0 for global data
             // TASK04: The acceleration structure uses binding 1
-            std::array layoutBindings = 
+            std::array layoutBindings =
             {
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eFragment, nullptr)
             };
-            
+
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
             {
                 .bindingCount = uint32_t(layoutBindings.size()),
@@ -2863,7 +3139,7 @@ namespace  VanK
             };
             raytraceDescriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
             DBG_VK_NAME(*raytraceDescriptorSetLayout);
-            std::vector<vk::DescriptorSetLayout> layouts = { *raytraceDescriptorSetLayout };
+            std::vector<vk::DescriptorSetLayout> layouts = {*raytraceDescriptorSetLayout};
             // Allocate the descriptor set, needed only for larger descriptor sets
             vk::DescriptorSetAllocateInfo allocInfo = {
                 .descriptorPool = raytraceDescriptorPool,
@@ -2888,7 +3164,7 @@ namespace  VanK
             LOGW("updateGraphicsDescriptorSet: No textures to update, skipping descriptor set update");
             return;
         }
-    
+
         // Prepare imageInfos vector automatically sized to m_image's size
         std::vector<vk::DescriptorImageInfo> imageInfos;
         imageInfos.reserve(m_images.size()); // reserve for efficiency
@@ -2902,7 +3178,7 @@ namespace  VanK
                 .imageLayout = m_image.layout,
             });
         }
-        
+
         std::array<vk::WriteDescriptorSet, 1> writeDescriptorSets;
         writeDescriptorSets[0] = vk::WriteDescriptorSet{};
         writeDescriptorSets[0].dstSet = descriptorSets[0]; // single handle
@@ -2938,7 +3214,7 @@ namespace  VanK
         -*/
         device.updateDescriptorSets(writeDescriptorSets, {});
     }
-    
+
     uint32_t VulkanRendererAPI::findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties)
     {
         vk::PhysicalDeviceMemoryProperties memProperties = physicalDevice.getMemoryProperties();
@@ -2993,12 +3269,12 @@ namespace  VanK
                 .queryType = vk::QueryType::ePipelineStatistics,
                 .queryCount = 1,
                 .pipelineStatistics =
-                    /*vk::QueryPipelineStatisticFlagBits::eInputAssemblyVertices |
-                    vk::QueryPipelineStatisticFlagBits::eInputAssemblyPrimitives |
-                    vk::QueryPipelineStatisticFlagBits::eVertexShaderInvocations |
-                    vk::QueryPipelineStatisticFlagBits::eFragmentShaderInvocations |
-                    vk::QueryPipelineStatisticFlagBits::eComputeShaderInvocations |*/
-                    vk::QueryPipelineStatisticFlagBits::eClippingInvocations /*|
+                /*vk::QueryPipelineStatisticFlagBits::eInputAssemblyVertices |
+                vk::QueryPipelineStatisticFlagBits::eInputAssemblyPrimitives |
+                vk::QueryPipelineStatisticFlagBits::eVertexShaderInvocations |
+                vk::QueryPipelineStatisticFlagBits::eFragmentShaderInvocations |
+                vk::QueryPipelineStatisticFlagBits::eComputeShaderInvocations |*/
+                vk::QueryPipelineStatisticFlagBits::eClippingInvocations /*|
                     vk::QueryPipelineStatisticFlagBits::eClippingPrimitives |
                     vk::QueryPipelineStatisticFlagBits::eTaskShaderInvocationsEXT |
                     vk::QueryPipelineStatisticFlagBits::eMeshShaderInvocationsEXT*/
@@ -3007,14 +3283,14 @@ namespace  VanK
             queryPoolStatistics = vk::raii::QueryPool(device, poolInfo);
             DBG_VK_NAME(*queryPoolStatistics);
         }
-        
+
         // timestamp
         {
             vk::QueryPoolCreateInfo poolInfo
-           {
-               .queryType = vk::QueryType::eTimestamp,
-               .queryCount = maxTimeStamp,
-           };
+            {
+                .queryType = vk::QueryType::eTimestamp,
+                .queryCount = maxTimeStamp,
+            };
 
             queryPoolTimeStep = vk::raii::QueryPool(device, poolInfo);
             DBG_VK_NAME(*queryPoolTimeStep);
@@ -3025,7 +3301,7 @@ namespace  VanK
     {
         // 7 pipelineStatistics, 1 querycount
         queryStatisticsBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 1 * 1, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
-        
+
         // timestamp, 2 quercount
         queryTimeStepBuffer = m_allocator.createBuffer(sizeof(uint64_t) * 1 * maxTimeStamp, vk::BufferUsageFlagBits2::eTransferDst, vma::MemoryUsage::eGpuToCpu);
     }
@@ -3033,17 +3309,17 @@ namespace  VanK
     void VulkanRendererAPI::downloadQueryStatisticsBuffer()
     {
         auto cmd = utils::beginSingleTimeCommands(device, commandPool);
-        
+
         cmd->copyQueryPoolResults(queryPoolStatistics, 0, 1, queryStatisticsBuffer.buffer, 0, 0, vk::QueryResultFlagBits::e64/* | vk::QueryResultFlagBits::eWait*/);
 
         utils::endSingleTimeCommands(*cmd, queue);
-        
+
         // Map and copy data to the staging buffer
         try
         {
             void* mappedData = queryStatisticsBuffer.buffer.getAllocation().map();
             // No need to explicitly unmap; vma::raii::Allocation unmaps on destruction
-            
+
             uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
 
             /*
@@ -3055,7 +3331,7 @@ namespace  VanK
             std::cout << "Clipping primitives: "            << stats[4] << "\n";
             std::cout << "Fragment shader invocations: "    << stats[5] << "\n";
             std::cout << "Compute shader invocations: "     << stats[6] << "\n";*/
-            
+
             pipeStats.clippingInvocations = stats[0];
 
             queryStatisticsBuffer.buffer.getAllocation().unmap();
@@ -3066,50 +3342,50 @@ namespace  VanK
             // You could throw or handle the error here
         }
     }
-    
+
     void VulkanRendererAPI::StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass)
     {
         uint32_t base = timeStampIndex;
-        
+
         timeStampIndex += 2;
-        
+
         Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, queryPoolTimeStep, base + 0);
-        
+
         pass.queryIndex = base;
-        
+
         activeTimestamps.emplace_back(&pass);
     }
-    
+
     void VulkanRendererAPI::StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass)
     {
-       Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, queryPoolTimeStep, pass.queryIndex + 1);
+        Unwrap(cmd).writeTimestamp2(vk::PipelineStageFlagBits2::eAllCommands, queryPoolTimeStep, pass.queryIndex + 1);
     }
-    
+
     void VulkanRendererAPI::downloadQueryTimeStampBuffer() // todo use vankcommandbuffer because its in a pass anyway
     {
         auto cmd = utils::beginSingleTimeCommands(device, commandPool);
-        
+
         cmd->copyQueryPoolResults(queryPoolTimeStep, 0, timeStampIndex, queryTimeStepBuffer.buffer, 0, sizeof(uint64_t), vk::QueryResultFlagBits::e64 | vk::QueryResultFlagBits::eWait);
-        
+
         utils::endSingleTimeCommands(*cmd, queue);
-        
+
         // Map and copy data to the staging buffer
         try
         {
             void* mappedData = queryTimeStepBuffer.buffer.getAllocation().map();
             // No need to explicitly unmap; vma::raii::Allocation unmaps on destruction
-            
+
             uint64_t* stats = reinterpret_cast<uint64_t*>(mappedData);
-            
+
             /*timestamp.begin = stats[timestamp.queryIndex + 0];
             timestamp.end = stats[timestamp.queryIndex + 1];*/
-            
+
             for (auto* passPtr : activeTimestamps)
             {
                 passPtr->begin = stats[passPtr->queryIndex];
-                passPtr->end   = stats[passPtr->queryIndex + 1];
+                passPtr->end = stats[passPtr->queryIndex + 1];
             }
-            
+
             activeTimestamps.clear();
 
             queryTimeStepBuffer.buffer.getAllocation().unmap();
@@ -3120,7 +3396,7 @@ namespace  VanK
             // You could throw or handle the error here
         }
     }
-    
+
     uint32_t VulkanRendererAPI::chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities)
     {
         auto minImageCount = std::max(3u, surfaceCapabilities.minImageCount);
@@ -3144,7 +3420,7 @@ namespace  VanK
     }
 
     vk::PresentModeKHR VulkanRendererAPI::chooseSwapPresentMode(const std::vector<vk::PresentModeKHR>& availablePresentModes,
-                                                       bool vsync)
+                                                                bool vsync)
     {
         if (vsync)
             return vk::PresentModeKHR::eFifo; // guaranteed available
@@ -3168,7 +3444,7 @@ namespace  VanK
         }
         int width, height;
         SDL_GetWindowSize(window, &width, &height);
-        
+
         return {
             std::clamp<uint32_t>(width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width),
             std::clamp<uint32_t>(height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height)
@@ -3190,9 +3466,9 @@ namespace  VanK
     }
 
     VKAPI_ATTR vk::Bool32 VKAPI_CALL VulkanRendererAPI::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
-                                                             vk::DebugUtilsMessageTypeFlagsEXT type,
-                                                             const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                                             void*)
+                                                                      vk::DebugUtilsMessageTypeFlagsEXT type,
+                                                                      const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
+                                                                      void*)
     {
         std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
 

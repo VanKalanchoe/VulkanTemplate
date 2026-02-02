@@ -23,7 +23,7 @@ namespace VanK
     {
         if (diagnosticsBlob != nullptr)
         {
-            std::cout << static_cast<const char*>(diagnosticsBlob->getBufferPointer()) << std::endl;
+            std::cout << static_cast<const char*>(diagnosticsBlob->getBufferPointer()) << '\n';
         }
     }
 
@@ -42,6 +42,9 @@ namespace VanK
             else if (entryPoint == "compMain") stage = vk::ShaderStageFlagBits::eCompute;
             else if (entryPoint == "taskMain") stage = vk::ShaderStageFlagBits::eTaskEXT;
             else if (entryPoint == "meshMain") stage = vk::ShaderStageFlagBits::eMeshEXT;
+            else if (entryPoint == "raygenerationMain") stage = vk::ShaderStageFlagBits::eRaygenKHR;
+            else if (entryPoint == "missMain") stage = vk::ShaderStageFlagBits::eMissKHR;
+            else if (entryPoint == "closesthitMain") stage = vk::ShaderStageFlagBits::eClosestHitKHR;
             else continue;
                 
             std::string fileName = m_Name + "." + entryPoint + ".spv";
@@ -69,6 +72,9 @@ namespace VanK
         if (entry == "compMain")         return vk::ShaderStageFlagBits::eCompute;
         if (entry == "taskMain")         return vk::ShaderStageFlagBits::eTaskEXT;
         if (entry == "meshMain")         return vk::ShaderStageFlagBits::eMeshEXT;
+        if (entry == "raygenerationMain")         return vk::ShaderStageFlagBits::eRaygenKHR;
+        if (entry == "missMain")         return vk::ShaderStageFlagBits::eMissKHR;
+        if (entry == "closesthitMain")         return vk::ShaderStageFlagBits::eClosestHitKHR;
         throw std::runtime_error("Unknown entry point: " + entry);
     }
     
@@ -83,6 +89,9 @@ namespace VanK
             "compMain", // maybe i can call this computemain ? will see
             "taskMain",
             "meshMain",
+            "raygenerationMain",
+            "missMain",
+            "closesthitMain",
         };
 
         std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> spirvPerStage;
@@ -259,7 +268,7 @@ namespace VanK
         std::string rootPath = Application::Get().GetExecutableRootPath();
         const std::vector<std::string> searchPaths =
         {
-            rootPath + "../../../VanK-Editor/shaders"
+            rootPath + "../../../VanK-Editor/assets/shaders"
         };
 
         std::string shaderFile = utils::findFile(fileName, searchPaths);

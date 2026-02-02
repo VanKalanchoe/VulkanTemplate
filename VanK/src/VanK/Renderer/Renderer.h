@@ -84,7 +84,7 @@ namespace VanK
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
-                                                     VanKPipeLine* pipeline, VanKShaderStageFlags flag);
+                                                     VanKRaytracingPipelineSpecification* raytracingSpec, VanKPipeLine* pipeline, VanKShaderStageFlags flag);
         static void WatchShaderFiles();
         static void ReloadPipelines();
         
@@ -123,6 +123,10 @@ namespace VanK
         // Compute Pipelines
         inline static VanKPipeLine m_ComputeDrawMeshTaskCommandPipeline = {};
         inline static VanKComputePipelineSpecification m_ComputeDrawMeshTaskCommandPipelineSpecification = {};
+        
+        // Raytracing Pipelines
+        inline static VanKPipeLine m_RaytracingPipeline = {};
+        inline static VanKRaytracingPipelineSpecification m_RaytracingPipelineSpecification = {};
     
     public:
         inline static bool frozen = false;

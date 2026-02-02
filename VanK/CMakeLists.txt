@@ -126,10 +126,10 @@ function(add_chapter CHAPTER_NAME)
     "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/src/*.cpp"
     "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/src/*.h"
     "${CMAKE_SOURCE_DIR}/${CHAPTER_NAME}/src/*.hpp"
-    "${CMAKE_SOURCE_DIR}/VanK-Editor/shaders/shaderIO.h"
+    "${CMAKE_SOURCE_DIR}/VanK-Editor/assets/shaders/shaderIO.h"
     )
 
-    target_include_directories(${CHAPTER_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/VanK/src ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/FileWatch ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/Entt/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/VulkanMemoryAllocator/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/include "${CMAKE_SOURCE_DIR}/VanK-Editor/shaders")
+    target_include_directories(${CHAPTER_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/VanK/src ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/FileWatch ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/Entt/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/VulkanMemoryAllocator/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/include "${CMAKE_SOURCE_DIR}/VanK-Editor/assets/shaders")
 message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAllocator-Hpp/include")
 
     set_target_properties(${CHAPTER_NAME} PROPERTIES
@@ -164,46 +164,14 @@ message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAl
 
     # Copy textures to build folder
     if(DEFINED CHAPTER_TEXTURES)
-        list(TRANSFORM CHAPTER_TEXTURES PREPEND "${CMAKE_SOURCE_DIR}/assets/")
+        list(TRANSFORM CHAPTER_TEXTURES PREPEND "${CMAKE_SOURCE_DIR}/VanK-Editor/assets/textures/")
         file(COPY ${CHAPTER_TEXTURES} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/textures)
     endif()
 
     # Copy shaders to build folder
     if(DEFINED CHAPTER_SHADER)
-        list(TRANSFORM CHAPTER_SHADER PREPEND "${CMAKE_SOURCE_DIR}/VanK-Editor/shaders/")
+        list(TRANSFORM CHAPTER_SHADER PREPEND "${CMAKE_SOURCE_DIR}/VanK-Editor/assets/shaders/")
         file(COPY ${CHAPTER_SHADER} DESTINATION ${CMAKE_BINARY_DIR}/${CHAPTER_NAME}/shaders)
-    endif()
-
-    if(WIN32)
-        target_link_libraries(${CHAPTER_NAME} Vulkan::cppm SDL3::SDL3 "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/lib/slang.lib")
-
-        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/bin/slang.dll"
-                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
-        )
-
-        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/bin/slang-glslang.dll"
-                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
-        )
-    endif()
-
-    if(APPLE)
-        target_link_libraries(${CHAPTER_NAME} "${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/lib/libslang.dylib")
-
-        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/lib/libslang.dylib"
-                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
-        )
-
-        add_custom_command(TARGET ${CHAPTER_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                "${CMAKE_SOURCE_DIR}/VanK/Vendor/slang/lib/libslang-glslang.dylib"
-                $<TARGET_FILE_DIR:${CHAPTER_NAME}>
-        )
     endif()
 
     # Attach sources to the target
@@ -212,8 +180,8 @@ endfunction()
 
 add_chapter(
     VanK
-    SHADER shaderIO.h QuadShader.slang DrawIndirectShader.slang
-    MODELS viking_room.obj viking_room.glb
-    TEXTURES viking_room.png viking_room.ktx2 ../textures/texture.jpg ../textures/viking_room2.ktx2 
-    LIBS glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf
+    #SHADER shaderIO.h QuadShader.slang DrawIndirectShader.slang
+    #MODELS
+    #TEXTURES texture.jpg viking_room2.ktx2
+    LIBS Vulkan::cppm SDL3::SDL3 glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf
 )

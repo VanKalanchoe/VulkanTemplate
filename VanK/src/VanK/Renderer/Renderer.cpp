@@ -20,8 +20,6 @@
 
 #include "MSDFData.h"
 #include "VanK/Asset/AssetManager.h"
-/*#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>*/
 
 namespace VanK
 {
@@ -1492,6 +1490,7 @@ namespace VanK
         auto MeshText = GetShaderLibrary().Load("MeshText", "MeshText.slang");
         auto MeshLine = GetShaderLibrary().Load("MeshLine", "MeshLine.slang");
         auto SkyBox = GetShaderLibrary().Load("SkyBox", "SkyBox.slang");
+        auto raytracingbasic = GetShaderLibrary().Load("raytracingbasic", "raytracingbasic.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -1607,35 +1606,35 @@ namespace VanK
         m_MeshPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshShader;
         m_MeshPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(TaskMeshPipelinePushConstant)}};
         m_MeshPipeline = RenderCommand::createGraphicsPipeline(m_MeshPipelineSpecification);
-        RegisterPipelineForShaderWatcher("MeshShader", "MeshShader.slang", &m_MeshPipelineSpecification, nullptr, &m_MeshPipeline, VanKGraphics);
+        RegisterPipelineForShaderWatcher("MeshShader", "MeshShader.slang", &m_MeshPipelineSpecification, nullptr, nullptr, &m_MeshPipeline, VanKGraphics);
 
         m_MeshQuadPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshQuadPipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshQuadPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshQuad;
         m_MeshQuadPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
         m_MeshQuadPipeline = RenderCommand::createGraphicsPipeline(m_MeshQuadPipelineSpecification);
-        RegisterPipelineForShaderWatcher("MeshQuad", "MeshQuad.slang", &m_MeshQuadPipelineSpecification, nullptr, &m_MeshQuadPipeline, VanKGraphics);
+        RegisterPipelineForShaderWatcher("MeshQuad", "MeshQuad.slang", &m_MeshQuadPipelineSpecification, nullptr, nullptr, &m_MeshQuadPipeline, VanKGraphics);
 
         m_MeshCirclePipelineSpecification = GraphicsPipelineSpecification;
         m_MeshCirclePipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshCirclePipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshCircle;
         m_MeshCirclePipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
         m_MeshCirclePipeline = RenderCommand::createGraphicsPipeline(m_MeshCirclePipelineSpecification);
-        RegisterPipelineForShaderWatcher("MeshCircle", "MeshCircle.slang", &m_MeshCirclePipelineSpecification, nullptr, &m_MeshCirclePipeline, VanKGraphics);
+        RegisterPipelineForShaderWatcher("MeshCircle", "MeshCircle.slang", &m_MeshCirclePipelineSpecification, nullptr, nullptr, &m_MeshCirclePipeline, VanKGraphics);
 
         m_MeshTextPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshTextPipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshTextPipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshText;
         m_MeshTextPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
         m_MeshTextPipeline = RenderCommand::createGraphicsPipeline(m_MeshTextPipelineSpecification);
-        RegisterPipelineForShaderWatcher("MeshText", "MeshText.slang", &m_MeshTextPipelineSpecification, nullptr, &m_MeshTextPipeline, VanKGraphics);
+        RegisterPipelineForShaderWatcher("MeshText", "MeshText.slang", &m_MeshTextPipelineSpecification, nullptr, nullptr, &m_MeshTextPipeline, VanKGraphics);
 
         m_MeshLinePipelineSpecification = GraphicsPipelineSpecification;
         m_MeshLinePipelineSpecification.PipelineType = VanK_Mesh;
         m_MeshLinePipelineSpecification.ShaderStageCreateInfo.VanKShader = MeshLine;
         m_MeshLinePipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstant2D)}};
         m_MeshLinePipeline = RenderCommand::createGraphicsPipeline(m_MeshLinePipelineSpecification);
-        RegisterPipelineForShaderWatcher("MeshLine", "MeshLine.slang", &m_MeshLinePipelineSpecification, nullptr, &m_MeshLinePipeline, VanKGraphics);
+        RegisterPipelineForShaderWatcher("MeshLine", "MeshLine.slang", &m_MeshLinePipelineSpecification, nullptr, nullptr, &m_MeshLinePipeline, VanKGraphics);
 
         m_MeshSkyBoxPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshSkyBoxPipelineSpecification.PipelineType = VanK_Mesh;
@@ -1644,7 +1643,7 @@ namespace VanK
         m_MeshSkyBoxPipelineSpecification.DepthStateInfo.VanKdepthCompareOp = VanK_COMPARE_OP_GREATER_OR_EQUAL;
         m_MeshSkyBoxPipelineSpecification.PipelineLayoutInfo.PushConstants = {PushConstantRange{0, sizeof(PushConstantSkyBox)}};
         m_MeshSkyBoxPipeline = RenderCommand::createGraphicsPipeline(m_MeshSkyBoxPipelineSpecification);
-        RegisterPipelineForShaderWatcher("SkyBox", "SkyBox.slang", &m_MeshSkyBoxPipelineSpecification, nullptr, &m_MeshSkyBoxPipeline, VanKGraphics);
+        RegisterPipelineForShaderWatcher("SkyBox", "SkyBox.slang", &m_MeshSkyBoxPipelineSpecification, nullptr, nullptr, &m_MeshSkyBoxPipeline, VanKGraphics);
         
         // Compute Pipelines creations
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo
@@ -1665,8 +1664,29 @@ namespace VanK
 
         m_ComputeDrawMeshTaskCommandPipelineSpecification = computePipelineSpecification;
         m_ComputeDrawMeshTaskCommandPipeline = RenderCommand::createComputeShaderPipeline(m_ComputeDrawMeshTaskCommandPipelineSpecification);
-        RegisterPipelineForShaderWatcher("MeshTaskSubmit", "MeshTaskSubmit.slang", nullptr, &m_ComputeDrawMeshTaskCommandPipelineSpecification, &m_ComputeDrawMeshTaskCommandPipeline, VanKCompute);
+        RegisterPipelineForShaderWatcher("MeshTaskSubmit", "MeshTaskSubmit.slang", nullptr, &m_ComputeDrawMeshTaskCommandPipelineSpecification, nullptr, &m_ComputeDrawMeshTaskCommandPipeline, VanKCompute);
 
+        // Raytracing Pipeline creation
+        VanKPipelineShaderStageCreateInfo rtShaderStageCreateInfo
+        {
+            .VanKShader = raytracingbasic
+        };
+        
+        VanKPipelineLayoutCreateInfo rtPipelineLayoutCreateInfo
+        {
+            .PushConstants = {PushConstantRange{0, sizeof(uint32_t)}}
+        };
+        
+        VanKRaytracingPipelineSpecification raytracingPipelineSpecification
+        {
+            .ShaderStageCreateInfo = rtShaderStageCreateInfo,
+            .PipelineLayoutInfo = rtPipelineLayoutCreateInfo
+        };
+        
+        m_RaytracingPipelineSpecification = raytracingPipelineSpecification;
+        m_RaytracingPipeline = RenderCommand::createRayTracingPipeline(m_RaytracingPipelineSpecification);
+        RegisterPipelineForShaderWatcher("raytracingbasic", "raytracingbasic.slang", nullptr, nullptr, &m_RaytracingPipelineSpecification, &m_RaytracingPipeline, VanKRaytracing);
+        
         WatchShaderFiles(); // has to be last after pipeline creation
 
         //sampler
@@ -1687,8 +1707,8 @@ namespace VanK
         
         whiteTexture = TextureImporter::LoadTexture2D("");
         pinkTexture = TextureImporter::LoadTexture2D("", {.defaultColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)});
-        vikingRoom = TextureImporter::LoadTexture2D("../build/VanK/textures/viking_room.ktx2", {.FlipTexture = true});
-        ChernoLogo = TextureImporter::LoadTexture2D("../build/VanK/textures/ChernoLogo.ktx2");
+        vikingRoom = TextureImporter::LoadTexture2D("assets/textures/viking_room.ktx2", {.FlipTexture = true});
+        ChernoLogo = TextureImporter::LoadTexture2D("assets/textures/ChernoLogo.ktx2");
         BRDF2DLUT = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/lol.ktx2", {.FlipTexture = true, .SamplerInfo = skyboxSampler});
         /*
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2", {.SamplerInfo = skyboxSampler});
@@ -1745,12 +1765,12 @@ namespace VanK
         /*ModelHandle bhudda = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
         /*ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/cornell_box/scene.gltf");*/
-        /*ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");*/
-        ModelHandle plantOnTable = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/plantOnTable/Untitled.gltf");
+        ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");
+        /*ModelHandle plantOnTable = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/plantOnTable/Untitled.gltf");*/
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
         /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
         /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
-        runtimePlant = BuildRuntimeModel(plantOnTable);
+        runtimePlant = BuildRuntimeModel(spheres);
         //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
@@ -2196,6 +2216,7 @@ namespace VanK
         VanKPipeLine* Pipeline;
         VanKGraphicsPipelineSpecification* graphicsSpec;
         VanKComputePipelineSpecification* computeSpec;
+        VanKRaytracingPipelineSpecification* raytracingSpec;
         std::string ShaderKey;
         std::string FileName; // e.g., "GraphicsCubeShader.slang"
         VanKShaderStageFlags flag;
@@ -2209,11 +2230,12 @@ namespace VanK
         const std::string& fileName,
         VanKGraphicsPipelineSpecification* graphicsSpec,
         VanKComputePipelineSpecification* computeSpec,
+        VanKRaytracingPipelineSpecification* raytracingSpec,
         VanKPipeLine* pipeline,
         VanKShaderStageFlags flag
     )
     {
-        s_PipelineReloadEntries.push_back({pipeline, graphicsSpec, computeSpec, shaderKey, fileName, flag});
+        s_PipelineReloadEntries.push_back({pipeline, graphicsSpec, computeSpec, raytracingSpec, shaderKey, fileName, flag});
     }
 
     void Renderer::WatchShaderFiles()
@@ -2265,10 +2287,15 @@ namespace VanK
                 entry.graphicsSpec->ShaderStageCreateInfo.VanKShader = Shader;
                 *entry.Pipeline = RenderCommand::createGraphicsPipeline(*entry.graphicsSpec);
             }
-            else
+            else if (entry.flag == VanKCompute)
             {
                 entry.computeSpec->ComputePipelineCreateInfo.VanKShader = Shader;
                 *entry.Pipeline = RenderCommand::createComputeShaderPipeline(*entry.computeSpec);
+            }
+            else if (entry.flag == VanKRaytracing)
+            {
+                entry.raytracingSpec->ShaderStageCreateInfo.VanKShader = Shader;
+                *entry.Pipeline = RenderCommand::createRayTracingPipeline(*entry.raytracingSpec);
             }
         }
     }

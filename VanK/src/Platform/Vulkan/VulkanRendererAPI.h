@@ -440,6 +440,7 @@ namespace VanK
             vma::raii::Buffer buffer{ nullptr }; // Vulkan Buffer + Memory Allocation
             vk::DeviceAddress address{}; // Address of the buffer in the shader
             vk::DeviceSize size{}; // Size of the buffer
+            void* mapping{ nullptr }; // CPU mapped pointer
         };
 
         /*--
@@ -555,6 +556,10 @@ namespace VanK
                 vma::raii::Buffer vmaBuffer = m_allocator->createBuffer(bufferInfo, allocInfo, allocInfoOut);
                 
                 Buffer resultBuffer;
+                
+                // Map memory if requested
+                if (flags & vma::AllocationCreateFlagBits::eMapped)
+                    resultBuffer.mapping = allocInfoOut.pMappedData;
                 
                 // Get the GPU address of the buffer
                 const vk::BufferDeviceAddressInfo info =
@@ -937,6 +942,8 @@ namespace VanK
     private:
         VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) override;
         VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) override;
+        void createShaderBindingTable(const VkRayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline);
+        VanKPipeLine createRayTracingPipeline(VanKRaytracingPipelineSpecification raytracingPipelineSpecification) override;
         void DestroyAllPipelines() override;
         void DestroyPipeline(VanKPipeLine pipeline) override;
         VanKCommandBuffer BeginCommandBuffer() override;
@@ -979,6 +986,7 @@ namespace VanK
             VanKPipelineBindPoint bindPoint;
             VanKGraphicsPipelineSpecification spec;
             VanKComputePipelineSpecification computeSpec;
+            VanKRaytracingPipelineSpecification raytracingSpec;
         };
         std::unordered_map<vk::Pipeline, PipelineResource> m_PipelineResources;
 
@@ -1117,7 +1125,8 @@ namespace VanK
             vk::KHRAccelerationStructureExtensionName,
             vk::KHRBufferDeviceAddressExtensionName,
             vk::KHRDeferredHostOperationsExtensionName,
-            vk::KHRRayQueryExtensionName
+            vk::KHRRayQueryExtensionName,
+            vk::KHRRayTracingPipelineExtensionName
         };
 
         void initVulkan();
@@ -1416,6 +1425,7 @@ namespace VanK
         case VanKGraphics: return vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         case VanKCompute: return vk::ShaderStageFlagBits::eCompute;
         case VanKMesh: return vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment;
+        case VanKRaytracing: return vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eMissKHR | vk::ShaderStageFlagBits::eClosestHitKHR;
         }
         return vk::ShaderStageFlagBits::eAll;
     }

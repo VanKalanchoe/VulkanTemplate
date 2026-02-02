@@ -340,19 +340,27 @@ namespace VanK
         std::span<Ref<IndirectBuffer>> VanKIndirectBuffers;
         std::span<Ref<IndirectBuffer>> VanKIndirectCountBuffers;
     };
+    
+    struct VanKRaytracingPipelineSpecification
+    {
+        VanKPipelineShaderStageCreateInfo ShaderStageCreateInfo;
+        VanKPipelineLayoutCreateInfo PipelineLayoutInfo;
+    };
 
     enum class VanKPipelineBindPoint
     {
         Graphics,
         Compute,
-        Mesh
+        Mesh,
+        Raytracing
     };
 
     enum VanKShaderStageFlags
     {
         VanKGraphics,
         VanKCompute,
-        VanKMesh
+        VanKMesh,
+        VanKRaytracing
     };
 
     struct TextureSamplerBinding
@@ -462,6 +470,7 @@ namespace VanK
         virtual void setViewportSize(Extent2D viewportSize) = 0;
         virtual VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) = 0;
         virtual VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) = 0;
+        virtual VanKPipeLine createRayTracingPipeline(VanKRaytracingPipelineSpecification raytracingPipelineSpecification) = 0;
         virtual void DestroyAllPipelines() = 0;
         virtual void DestroyPipeline(VanKPipeLine pipeline) = 0;
         virtual VanKCommandBuffer BeginCommandBuffer() { return nullptr; }
