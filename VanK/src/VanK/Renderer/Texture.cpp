@@ -16,4 +16,16 @@ namespace VanK
             default: return nullptr;
         }
     }
+    
+    size_t RenderTargetImage::s_ImGuiTextureCount = 0;
+
+    Ref<RenderTargetImage> RenderTargetImage::Create(const RenderImageSpecification& specification)
+    {
+        switch (RendererAPI::GetAPI())
+        {
+            case RenderAPIType::None: return nullptr;
+            case RenderAPIType::Vulkan: return CreateRef<VulkanRenderTargetImage>(specification);
+            default: return nullptr;
+        }
+    }
 }

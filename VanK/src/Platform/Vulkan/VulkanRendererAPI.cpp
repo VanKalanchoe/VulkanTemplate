@@ -87,6 +87,7 @@ namespace VanK
         createDepthResources();
         createEntityResources();
         createEntityColorResources();
+        createRaytraceStorageImageResources();
         m_samplerPool.init(device);
         createTextureSampler(); // maybe integrate into texture class ? so every texture has a reference to it ? or maybe every texture has its own sampler idk
         createDescriptorPool();
@@ -132,7 +133,7 @@ namespace VanK
 
         ImGui::GetIO().ConfigFlags = ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
 
-        // Descriptor Set for ImGUI
+        /*// Descriptor Set for ImGUI
         uiDescriptorSet.resize(1);
         if ((ImGui::GetCurrentContext() != nullptr) && ImGui::GetIO().BackendPlatformUserData != nullptr)
         {
@@ -142,7 +143,7 @@ namespace VanK
                                                                  static_cast<VkImageLayout>(
                                                                      vk::ImageLayout::eShaderReadOnlyOptimal));
             }
-        }
+        }*/
     }
 
     void VulkanRendererAPI::cleanupSwapChain()
@@ -156,6 +157,8 @@ namespace VanK
     {
         // Clear the pool on the renderer side so it doesn't hold dangling references
         m_images.clear();
+        
+        m_RenderTargetImages.clear();
 
         sceneImage.clear();
         sceneImageView.clear();
@@ -171,6 +174,9 @@ namespace VanK
 
         entityImage.clear();
         entityImageView.clear();
+
+        raytraceStorageImage.clear();
+        raytraceStorageImageView.clear();
 
         // Clean up entity readback buffer
         entityReadbackBuffer.buffer.clear(); // Add this line
@@ -195,7 +201,7 @@ namespace VanK
 
     void VulkanRendererAPI::recreateImages()
     {
-        device.waitIdle();
+        /*device.waitIdle();
 
         // Recreate offscreen buffers to match viewport size
         createSceneResources(); //scene evertyhing drawn into this
@@ -203,6 +209,7 @@ namespace VanK
         createDepthResources(); //depth
         createEntityResources(); //entity
         createEntityColorResources();
+        createRaytraceStorageImageResources();
         sceneImageInitialized = false;
         entityImageInitialized = false;
         entityColorImageInitialized = false;
@@ -210,6 +217,7 @@ namespace VanK
         // Recreate the ImGui texture to point to the new sceneImageView
         if (!uiDescriptorSet.empty() && uiDescriptorSet[0] != nullptr)
         {
+            uiDescriptorSet.resize(1);
             ImGui_ImplVulkan_RemoveTexture(uiDescriptorSet[0]);
             uiDescriptorSet[0] = nullptr;
         }
@@ -220,7 +228,7 @@ namespace VanK
                 linearSampler,
                 *sceneImageView,
                 static_cast<VkImageLayout>(vk::ImageLayout::eShaderReadOnlyOptimal));
-        }
+        }*/
     }
 
     void VulkanRendererAPI::createInstance()
@@ -576,6 +584,39 @@ namespace VanK
         }
         return desc;
     }
+    
+    uint32_t VulkanRendererAPI::AddRenderTargetImageToPool(utils::ImageResource&& imageResource)
+    {
+        // Add the texture to the image vector
+        m_RenderTargetImages.emplace_back(std::move(imageResource));
+
+        // Return the index of the new texture
+        return static_cast<uint32_t>(m_RenderTargetImages.size() - 1);
+    }
+
+    void VulkanRendererAPI::RemoveRenderTargetImageToPool(uint32_t index)
+    {
+        // Safety checks
+        if (m_RenderTargetImages.empty())
+        {
+            VK_CORE_WARN("Attempted to remove texture from empty pool");
+            return;
+        }
+
+        if (index >= m_RenderTargetImages.size())
+        {
+            VK_CORE_WARN("Attempted to remove texture at invalid index: %u (max: %zu)", index, m_RenderTargetImages.size());
+            return;
+        }
+
+        // Destroy the texture resource
+        m_allocator.destroyImageResource(m_RenderTargetImages[index]);
+
+        // Remove the texture from the image vector
+        m_RenderTargetImages[index] = {};
+
+        VK_CORE_INFO("Removed texture at index %u, remaining textures: %zu", index, m_RenderTargetImages.size());
+    }
 
     uint32_t VulkanRendererAPI::AddTextureToPool(utils::ImageResource&& imageResource)
     {
@@ -608,8 +649,8 @@ namespace VanK
         m_allocator.destroyImageResource(m_images[index]);
 
         // Remove the texture from the image vector
+        m_images[index] = {};
         m_images.erase(m_images.begin() + index);
-
         // Update the descriptor set to include the new texture
         updateGraphicsDescriptorSet();
 
@@ -1115,7 +1156,7 @@ namespace VanK
 
         tempPipeline = vk::raii::Pipeline(device, nullptr, nullptr, rtPipelineInfo);
         DBG_VK_NAME(*tempPipeline);
-        
+
         createShaderBindingTable(rtPipelineInfo, tempPipeline);
 
         PipelineResource resource;
@@ -1433,7 +1474,105 @@ namespace VanK
         delete computePass;
     }
 
-    int32_t VulkanRendererAPI::ReadEntityIDAtPixel(uint32_t x, uint32_t y)
+    vk::PipelineStageFlags2 StageFromResourceState(ResourceState state)
+    {
+        using Stage = ResourceState::Stage;
+        switch (state.stage)
+        {
+        case Stage::TopOfPipe:     return vk::PipelineStageFlagBits2::eTopOfPipe;
+        case Stage::Compute:       return vk::PipelineStageFlagBits2::eComputeShader;
+        case Stage::ColorOutput:   return vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        case Stage::DepthOutput:   return vk::PipelineStageFlagBits2::eAllCommands; // Vulkan has no direct DepthOutput stage
+        case Stage::Fragment:      return vk::PipelineStageFlagBits2::eFragmentShader;
+        case Stage::Transfer:      return vk::PipelineStageFlagBits2::eTransfer;
+        case Stage::DrawIndirect: return vk::PipelineStageFlagBits2::eDrawIndirect;
+        default:                   return vk::PipelineStageFlagBits2::eAllCommands;
+        }
+    }
+    
+    vk::AccessFlags2 AccessFromResourceState(ResourceState state)
+    {
+        using Access = ResourceState::Access;
+        switch (state.access)
+        {
+        case Access::ShaderRead:       return vk::AccessFlagBits2::eShaderRead;
+        case Access::ShaderWrite:      return vk::AccessFlagBits2::eShaderWrite;
+        case Access::ColorWrite:       return vk::AccessFlagBits2::eColorAttachmentWrite;
+        case Access::DepthWrite:       return vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
+        case Access::TransferRead:     return vk::AccessFlagBits2::eTransferRead;
+        case Access::TransferWrite:    return vk::AccessFlagBits2::eTransferWrite;
+        case Access::IndirectRead:  return vk::AccessFlagBits2::eIndirectCommandRead;
+        default:                       return {};
+        }
+    }
+    
+    void VulkanRendererAPI::InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired)
+    {
+        if (id.type == ResourceType::Image)
+        {
+            // Map our abstract ResourceState::Layout to VkImageLayout
+            auto toVkLayout = [](ResourceState::Layout l) -> vk::ImageLayout
+            {
+                switch (l)
+                {
+                case ResourceState::Layout::Undefined: return vk::ImageLayout::eUndefined;
+                case ResourceState::Layout::General: return vk::ImageLayout::eGeneral;
+                case ResourceState::Layout::ColorAttachment: return vk::ImageLayout::eColorAttachmentOptimal;
+                case ResourceState::Layout::ResolveAttachment: return vk::ImageLayout::eColorAttachmentOptimal;
+                case ResourceState::Layout::DepthAttachment: return vk::ImageLayout::eDepthAttachmentOptimal;
+                case ResourceState::Layout::ShaderReadOnly: return vk::ImageLayout::eShaderReadOnlyOptimal;
+                case ResourceState::Layout::TransferDst: return vk::ImageLayout::eTransferDstOptimal;
+                case ResourceState::Layout::TransferSrc: return vk::ImageLayout::eTransferSrcOptimal;
+                default: return vk::ImageLayout::eUndefined;
+                }
+            };
+
+            vk::ImageLayout oldLayout = toVkLayout(last.layout);
+            vk::ImageLayout newLayout = toVkLayout(desired.layout);
+
+            if (oldLayout == newLayout) 
+                return; // no barrier needed
+
+            auto [srcStage, srcAccess] = utils::makePipelineStageAccessTuple(oldLayout);
+            auto [dstStage, dstAccess] = utils::makePipelineStageAccessTuple(newLayout);
+
+            // Use your existing helper
+            utils::transition_image_layout
+            (
+                Unwrap(cmd),
+                m_RenderTargetImages[id.index].image,
+                oldLayout,
+                newLayout,
+                srcAccess,
+                dstAccess,
+                srcStage,
+                dstStage,
+                utils::AspectFromLayout(desired.layout)
+            );
+        }
+        else if (id.type == ResourceType::Buffer)
+        {
+            auto buffer = static_cast<VkBuffer>(id.buffer->GetNativeHandle());
+
+            vk::PipelineStageFlags2 srcStage = StageFromResourceState(last);
+            vk::PipelineStageFlags2 dstStage = StageFromResourceState(desired);
+
+            vk::AccessFlags2 srcAccess = AccessFromResourceState(last);
+            vk::AccessFlags2 dstAccess = AccessFromResourceState(desired);
+
+            utils::cmdBufferMemoryBarrier
+            (
+                Unwrap(cmd),
+                buffer,
+                srcStage,
+                dstStage,
+                srcAccess,
+                dstAccess
+            );
+        }
+    }
+
+    int32_t VulkanRendererAPI::ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y)
     {
         // Clamp coordinates to viewport
         x = std::min(x, viewport.width - 1);
@@ -1459,7 +1598,7 @@ namespace VanK
         utils::transition_image_layout
         (
             commandBuffers[frameIndex],
-            *entityImage,
+            *m_RenderTargetImages[imageIndex].image,
             entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
             vk::ImageLayout::eTransferSrcOptimal,
             vk::AccessFlagBits2::eColorAttachmentWrite,
@@ -1481,7 +1620,7 @@ namespace VanK
 
 
         commandBuffers[frameIndex].copyImageToBuffer(
-            *entityImage,
+            *m_RenderTargetImages[imageIndex].image,
             vk::ImageLayout::eTransferSrcOptimal,
             entityReadbackBuffer.buffer,
             {copyRegion}
@@ -1491,7 +1630,7 @@ namespace VanK
         utils::transition_image_layout
         (
             commandBuffers[frameIndex],
-            *entityImage,
+            *m_RenderTargetImages[imageIndex].image,
             vk::ImageLayout::eTransferSrcOptimal,
             vk::ImageLayout::eColorAttachmentOptimal,
             vk::AccessFlagBits2::eTransferRead,
@@ -1630,130 +1769,78 @@ namespace VanK
         Unwrap(cmd).pushDescriptorSet2(pushDescriptorSetInfo);
     }
 
-    void VulkanRendererAPI::BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info = {}, uint32_t num_color_targets = 0,
-                                           VanKDepthStencilTargetInfo depth_stencil_target_info = {})
+    void VulkanRendererAPI::BeginRendering
+    (
+        VanKCommandBuffer cmd,
+        const VanKColorTargetInfo* color_target_info = {},
+        uint32_t num_color_targets = 0,
+        VanKDepthStencilTargetInfo depth_stencil_target_info = {}
+    )
     {
         DBG_VK_SCOPE(Unwrap(cmd)); // <-- Helps to debug in NSight
-
-        // Before starting rendering, transition the images to the appropriate layouts
-        // Transition the multisampled color image to COLOR_ATTACHMENT_OPTIMAL
-        utils::transition_image_layout
-        (
-            Unwrap(cmd),
-            *colorImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            {},
-            vk::AccessFlagBits2::eColorAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        // Transition the depth image to DEPTH_ATTACHMENT_OPTIMAL
-        utils::transition_image_layout
-        (
-            Unwrap(cmd),
-            *depthImage,
-            vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eDepthAttachmentOptimal,
-            {},
-            vk::AccessFlagBits2::eDepthStencilAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eEarlyFragmentTests,
-            vk::ImageAspectFlagBits::eDepth
-        );
-
-        // 3) Bootstrap or re-transition resolve target (sceneImage) for FIRST pass
-        utils::transition_image_layout
-        (
-            Unwrap(cmd),
-            *sceneImage,
-            sceneImageInitialized ? vk::ImageLayout::eShaderReadOnlyOptimal : vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            sceneImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead) : vk::AccessFlags2{},
-            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-            sceneImageInitialized ? vk::PipelineStageFlagBits2::eFragmentShader : vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        utils::transition_image_layout
-        (
-            Unwrap(cmd),
-            *entityImage,
-            entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            entityImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
-            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-            entityImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        // Transition the MSAA entity color image to COLOR_ATTACHMENT_OPTIMAL
-        utils::transition_image_layout
-        (
-            Unwrap(cmd),
-            *entityColorImage,
-            entityColorImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            entityColorImageInitialized ? vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite) : vk::AccessFlags2{},
-            vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-            entityColorImageInitialized ? vk::PipelineStageFlagBits2::eColorAttachmentOutput : vk::PipelineStageFlagBits2::eTopOfPipe,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        /*vk::ClearValue clearColor = vk::ClearColorValue(0.0f, 0.0f, 0.0f, 1.0f);*/
-        // Use the caller-provided clear color
-        vk::ClearColorValue clearDepth = vk::ClearColorValue
-        (
-            depth_stencil_target_info.clearColor.f[0],
-            depth_stencil_target_info.clearColor.f[1],
-            depth_stencil_target_info.clearColor.f[2],
-            depth_stencil_target_info.clearColor.f[3]
-        );
-        /*vk::ClearValue clearDepth = vk::ClearDepthStencilValue(1.0f, 0);*/
-
-
+        
         // Depth attachment
-        vk::RenderingAttachmentInfo depthAttachment =
+        vk::RenderingAttachmentInfo depthAttachment{};
+        if (depth_stencil_target_info.format != VanK_FORMAT_INVALID)
         {
-            .imageView = depthImageView,
-            .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
-            .loadOp = vk::AttachmentLoadOp::eClear,
-            .storeOp = vk::AttachmentStoreOp::eStore,
-            .clearValue = clearDepth
-        };
+            auto& depthImageTarget = m_RenderTargetImages[depth_stencil_target_info.imageIndex];
+            vk::ClearDepthStencilValue clearValue{depth_stencil_target_info.clearColor.f[0], 0};
+            depthAttachment = vk::RenderingAttachmentInfo
+            {
+                .imageView = depthImageTarget.view,
+                .imageLayout = vk::ImageLayout::eDepthAttachmentOptimal,
+                .loadOp = ConvertToVkLoadOp(depth_stencil_target_info.loadOp),
+                .storeOp = ConvertToVkStoreOp(depth_stencil_target_info.storeOp),
+                .clearValue = clearValue
+            };
+        }
 
+        // Color attachment
         std::vector<vk::RenderingAttachmentInfo> colorAttachments;
         colorAttachments.reserve(num_color_targets);
 
         for (uint32_t i = 0; i < num_color_targets; i++)
         {
-            const auto& colorAttachment = color_target_info[i];
+            const auto& ct = color_target_info[i];
+            auto& colorImageTarget = m_RenderTargetImages[ct.imageIndex];
 
-            vk::RenderingAttachmentInfo attachment;
-            attachment.imageView = (i == 0) ? colorImageView : entityColorImageView;
+            vk::RenderingAttachmentInfo attachment{};
+            attachment.imageView = colorImageTarget.view;
             attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-            attachment.resolveMode = (colorAttachment.format == VanK_FORMAT_R32_SINT) ? vk::ResolveModeFlagBits::eSampleZero : vk::ResolveModeFlagBits::eAverage;
-            attachment.resolveImageView = (i == 0) ? sceneImageView : entityImageView;
-            attachment.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-            attachment.loadOp = ConvertToVkLoadOp(colorAttachment.loadOp);
-            attachment.storeOp = ConvertToVkStoreOp(colorAttachment.storeOp);
-            attachment.clearValue = ConvertToVkClearColor(colorAttachment.clearColor, ConvertToVkFormat(colorAttachment.format));
+            attachment.loadOp = ConvertToVkLoadOp(ct.loadOp);
+            attachment.storeOp = ConvertToVkStoreOp(ct.storeOp);
+            attachment.clearValue = ConvertToVkClearColor(ct.clearColor, ConvertToVkFormat(ct.format));
 
-            colorAttachments.emplace_back(attachment);
+            // Handle resolve images
+            if (colorImageTarget.isResolveImage)
+            {
+                auto& resolveImageTarget = m_RenderTargetImages[colorImageTarget.resolveTargetID];
+                attachment.resolveImageView = resolveImageTarget.view;
+                attachment.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+                // Resolve mode: simple heuristic (could store per-resource if needed)
+                attachment.resolveMode = (ct.format == VanK_FORMAT_R32_SINT) 
+                    ? vk::ResolveModeFlagBits::eSampleZero 
+                    : vk::ResolveModeFlagBits::eAverage;
+            }
+
+            colorAttachments.push_back(attachment);
         }
+        
+        auto& firstColor = m_RenderTargetImages[color_target_info[0].imageIndex];
 
+        vk::Extent2D renderExtent {
+            firstColor.extent.width,
+            firstColor.extent.height
+        };
+        
         vk::RenderingInfo renderingInfo =
         {
-            .renderArea = {.offset = {0, 0}, .extent = viewport},
+            .renderArea = {.offset = {0, 0}, .extent = renderExtent},
             .layerCount = 1,
             .colorAttachmentCount = static_cast<uint32_t>(colorAttachments.size()),
             .pColorAttachments = colorAttachments.data(),
-            .pDepthAttachment = &depthAttachment
+            .pDepthAttachment = (depth_stencil_target_info.format != VanK_FORMAT_INVALID) ? &depthAttachment : nullptr
         };
 
         Unwrap(cmd).beginRendering(renderingInfo);
@@ -1979,7 +2066,7 @@ namespace VanK
         m_hasActiveRenderPass = false;
     }
 
-    void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd)
+    void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage)
     {
         if (m_renderOption == VanK_Render_ImGui || m_renderOption == VanK_Render_Swapchain)
         {
@@ -1996,47 +2083,7 @@ namespace VanK
                 vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage,
                 vk::ImageAspectFlagBits::eColor
             );
-
-            if (m_hasActiveRenderPass)
-            {
-                // Transition sceneImage -> SHADER_READ_ONLY_OPTIMAL for sampling in ImGui
-                utils::transition_image_layout
-                (
-                    Unwrap(cmd),
-                    sceneImage,
-                    vk::ImageLayout::eColorAttachmentOptimal,
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::AccessFlags2(vk::AccessFlagBits2::eColorAttachmentWrite),
-                    vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                    vk::PipelineStageFlagBits2::eFragmentShader,
-                    vk::ImageAspectFlagBits::eColor
-                );
-
-                sceneImageInitialized = true;
-
-                entityImageInitialized = true;
-
-                entityColorImageInitialized = true;
-            }
-            else
-            {
-                // Case 2: First frame with no 3D - bootstrap from UNDEFINED → SHADER_READ_ONLY
-                utils::transition_image_layout
-                (
-                    Unwrap(cmd),
-                    sceneImage,
-                    vk::ImageLayout::eUndefined, // Never transitioned
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    {},
-                    vk::AccessFlags2(vk::AccessFlagBits2::eShaderRead),
-                    vk::PipelineStageFlagBits2::eTopOfPipe,
-                    vk::PipelineStageFlagBits2::eFragmentShader,
-                    vk::ImageAspectFlagBits::eColor
-                );
-                sceneImageInitialized = true;
-                m_hasActiveRenderPass = true;
-            }
+            
             // Second pass: draw ImGui to swapchain image
             vk::RenderingAttachmentInfo swapColorAttachment =
             {
@@ -2085,88 +2132,137 @@ namespace VanK
         if (m_renderOption == VanK_Render_Swapchain)
         {
             Unwrap(cmd).endRendering();
+            
+            if (renderTargetImage != -1)
+            {
+                // Transition images before blit
+                utils::transition_image_layout
+                (
+                    Unwrap(cmd),
+                    m_RenderTargetImages[renderTargetImage].image,
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::ImageLayout::eTransferSrcOptimal,
+                    vk::AccessFlagBits2::eShaderRead,
+                    vk::AccessFlagBits2::eTransferRead,
+                    vk::PipelineStageFlagBits2::eFragmentShader,
+                    vk::PipelineStageFlagBits2::eTransfer,
+                    vk::ImageAspectFlagBits::eColor
+                );
 
-            // Transition images before blit
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                sceneImage,
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::ImageLayout::eTransferSrcOptimal,
-                vk::AccessFlagBits2::eShaderRead,
-                vk::AccessFlagBits2::eTransferRead,
-                vk::PipelineStageFlagBits2::eFragmentShader,
-                vk::PipelineStageFlagBits2::eTransfer,
-                vk::ImageAspectFlagBits::eColor
-            );
+                utils::transition_image_layout
+                (
+                    Unwrap(cmd),
+                    swapChainImages[imageIndex],
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageLayout::eTransferDstOptimal,
+                    {},
+                    vk::AccessFlagBits2::eTransferWrite,
+                    vk::PipelineStageFlagBits2::eBottomOfPipe,
+                    vk::PipelineStageFlagBits2::eTransfer,
+                    vk::ImageAspectFlagBits::eColor
+                );
 
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                swapChainImages[imageIndex],
-                vk::ImageLayout::eColorAttachmentOptimal,
-                vk::ImageLayout::eTransferDstOptimal,
-                {},
-                vk::AccessFlagBits2::eTransferWrite,
-                vk::PipelineStageFlagBits2::eBottomOfPipe,
-                vk::PipelineStageFlagBits2::eTransfer,
-                vk::ImageAspectFlagBits::eColor
-            );
+                vk::ImageSubresourceLayers subresource{};
+                subresource.aspectMask = vk::ImageAspectFlagBits::eColor;
+                subresource.baseArrayLayer = 0;
+                subresource.layerCount = 1;
+                subresource.mipLevel = 0;
 
-            vk::ImageSubresourceLayers subresource{};
-            subresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-            subresource.baseArrayLayer = 0;
-            subresource.layerCount = 1;
-            subresource.mipLevel = 0;
+                vk::ImageBlit2 blitRegion{};
+                blitRegion.srcSubresource = subresource;
+                blitRegion.srcOffsets[0] = {0, 0, 0};
+                blitRegion.srcOffsets[1] = {static_cast<int32_t>(m_RenderTargetImages[renderTargetImage].extent.width), static_cast<int32_t>(m_RenderTargetImages[renderTargetImage].extent.height), 1};
+                blitRegion.dstSubresource = subresource;
+                blitRegion.dstOffsets[0] = {0, 0, 0};
+                blitRegion.dstOffsets[1] = {static_cast<int32_t>(swapChainExtent.width), static_cast<int32_t>(swapChainExtent.height), 1};
 
-            vk::ImageBlit2 blitRegion{};
-            blitRegion.srcSubresource = subresource;
-            blitRegion.srcOffsets[0] = {0, 0, 0};
-            blitRegion.srcOffsets[1] = {static_cast<int32_t>(viewport.width), static_cast<int32_t>(viewport.height), 1};
-            blitRegion.dstSubresource = subresource;
-            blitRegion.dstOffsets[0] = {0, 0, 0};
-            blitRegion.dstOffsets[1] = {static_cast<int32_t>(swapChainExtent.width), static_cast<int32_t>(swapChainExtent.height), 1};
+                vk::BlitImageInfo2 blitInfo{};
+                blitInfo.srcImage = m_RenderTargetImages[renderTargetImage].image;
+                blitInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
+                blitInfo.dstImage = swapChainImages[imageIndex];
+                blitInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
+                blitInfo.regionCount = 1;
+                blitInfo.pRegions = &blitRegion;
+                blitInfo.filter = vk::Filter::eNearest;
 
-            vk::BlitImageInfo2 blitInfo{};
-            blitInfo.srcImage = sceneImage;
-            blitInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-            blitInfo.dstImage = swapChainImages[imageIndex];
-            blitInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-            blitInfo.regionCount = 1;
-            blitInfo.pRegions = &blitRegion;
-            blitInfo.filter = vk::Filter::eNearest;
+                Unwrap(cmd).blitImage2(blitInfo);
 
-            Unwrap(cmd).blitImage2(blitInfo);
+                // After rendering, transition the images to appropriate layouts
 
-            // After rendering, transition the images to appropriate layouts
+                // Transition images before blit
+                utils::transition_image_layout
+                (
+                    Unwrap(cmd),
+                    m_RenderTargetImages[renderTargetImage].image,
+                    vk::ImageLayout::eTransferSrcOptimal,
+                    vk::ImageLayout::eShaderReadOnlyOptimal,
+                    vk::AccessFlagBits2::eTransferRead,
+                    vk::AccessFlagBits2::eColorAttachmentWrite,
+                    vk::PipelineStageFlagBits2::eTransfer,
+                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
+                    vk::ImageAspectFlagBits::eColor
+                );
 
-            // Transition images before blit
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                sceneImage,
-                vk::ImageLayout::eTransferSrcOptimal,
-                vk::ImageLayout::eShaderReadOnlyOptimal,
-                vk::AccessFlagBits2::eTransferRead,
-                vk::AccessFlagBits2::eColorAttachmentWrite,
-                vk::PipelineStageFlagBits2::eTransfer,
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                vk::ImageAspectFlagBits::eColor
-            );
+                // Transition the swapchain image to PRESENT_SRC
+                utils::transition_image_layout
+                (
+                    Unwrap(cmd),
+                    swapChainImages[imageIndex],
+                    vk::ImageLayout::eTransferDstOptimal,
+                    vk::ImageLayout::ePresentSrcKHR,
+                    vk::AccessFlagBits2::eTransferWrite, // srcAccessMask
+                    {}, // dstAccessMask
+                    vk::PipelineStageFlagBits2::eTransfer, // srcStage
+                    vk::PipelineStageFlagBits2::eBottomOfPipe, // dstStage
+                    vk::ImageAspectFlagBits::eColor
+                );
+            }
+            else
+            {
+                VK_CORE_ERROR("SubmitRendering Swapchain no renderTargetImage provided fallback to direct SwapChain");
+                
+                vk::ClearColorValue clearColor{ std::array{0.5f,0.5f,0.5f,1.0f} };
+                
+                vk::ImageSubresourceRange range;
+                range.aspectMask = vk::ImageAspectFlagBits::eColor;
+                range.baseMipLevel = 0;
+                range.levelCount = 1;
+                range.baseArrayLayer = 0;
+                range.layerCount = 1;
 
-            // Transition the swapchain image to PRESENT_SRC
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                swapChainImages[imageIndex],
-                vk::ImageLayout::eTransferDstOptimal,
-                vk::ImageLayout::ePresentSrcKHR,
-                vk::AccessFlagBits2::eTransferWrite, // srcAccessMask
-                {}, // dstAccessMask
-                vk::PipelineStageFlagBits2::eTransfer, // srcStage
-                vk::PipelineStageFlagBits2::eBottomOfPipe, // dstStage
-                vk::ImageAspectFlagBits::eColor
-            );
+                utils::transition_image_layout(
+                    Unwrap(cmd),
+                    swapChainImages[imageIndex],
+                    vk::ImageLayout::eColorAttachmentOptimal,
+                    vk::ImageLayout::eTransferDstOptimal,
+                    {},
+                    vk::AccessFlagBits2::eTransferWrite,
+                    vk::PipelineStageFlagBits2::eBottomOfPipe,
+                    vk::PipelineStageFlagBits2::eTransfer,
+                    vk::ImageAspectFlagBits::eColor
+                );
+
+                vk::ImageSubresourceRange ranges[] = { range };
+
+                Unwrap(cmd).clearColorImage(
+                    swapChainImages[imageIndex],
+                    vk::ImageLayout::eTransferDstOptimal,
+                    clearColor, // pass by reference, not pointer
+                    ranges      // ArrayProxy will implicitly wrap the array
+                );
+
+                utils::transition_image_layout(
+                    Unwrap(cmd),
+                    swapChainImages[imageIndex],
+                    vk::ImageLayout::eTransferDstOptimal,
+                    vk::ImageLayout::ePresentSrcKHR,
+                    vk::AccessFlagBits2::eTransferWrite,
+                    {},
+                    vk::PipelineStageFlagBits2::eTransfer,
+                    vk::PipelineStageFlagBits2::eBottomOfPipe,
+                    vk::ImageAspectFlagBits::eColor
+                );
+            }
         }
     }
 
@@ -2355,6 +2451,28 @@ namespace VanK
         DBG_VK_NAME(*entityColorImageView);
     }
 
+    void VulkanRendererAPI::createRaytraceStorageImageResources()
+    {
+        vk::Format colorFormat = vk::Format::eR8G8B8A8Unorm;
+        // single-sampled and SAMPLED
+
+        vk::ImageCreateInfo imageInfo
+        {
+            .imageType = vk::ImageType::e2D, .format = colorFormat,
+            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
+            .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+
+        raytraceStorageImage = m_allocator.createImage(imageInfo).image;
+
+        DBG_VK_NAME(*raytraceStorageImage);
+
+        raytraceStorageImageView = createImageView(raytraceStorageImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
+        DBG_VK_NAME(*raytraceStorageImageView);
+    }
+
     vk::Format VulkanRendererAPI::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
                                                       vk::FormatFeatureFlags features) const
     {
@@ -2465,7 +2583,7 @@ namespace VanK
         utils::endSingleTimeCommands(*commandBuffer, queue);
     }
 
-    vk::SampleCountFlagBits VulkanRendererAPI::getMaxUsableSampleCount()
+    vk::SampleCountFlagBits VulkanRendererAPI::getMaxUsableSampleCount() const
     {
         vk::PhysicalDeviceProperties physicalDeviceProperties = physicalDevice.getProperties();
 
@@ -2852,7 +2970,21 @@ namespace VanK
             .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
         };
 
-        std::array<vk::WriteDescriptorSet, 1> descriptorWrites{asWrite};
+        vk::DescriptorImageInfo imageInfo{
+            .sampler = VK_NULL_HANDLE,
+            .imageView = raytraceStorageImageView,
+            .imageLayout = vk::ImageLayout::eGeneral
+        };
+
+        vk::WriteDescriptorSet imageWrite{
+            .dstSet = raytraceDescriptorSet[0],
+            .dstBinding = 1,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eStorageImage,
+            .pImageInfo = &imageInfo
+        };
+
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites{asWrite, imageWrite};
 
         device.updateDescriptorSets(descriptorWrites, {});
     }
@@ -3027,8 +3159,10 @@ namespace VanK
 
         // Pool for TLAS descriptor set
         {
-            std::array poolSizes = {
-                vk::DescriptorPoolSize(vk::DescriptorType::eAccelerationStructureKHR, MAX_FRAMES_IN_FLIGHT)
+            std::array poolSizes =
+            {
+                vk::DescriptorPoolSize(vk::DescriptorType::eAccelerationStructureKHR, MAX_FRAMES_IN_FLIGHT),
+                vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, MAX_FRAMES_IN_FLIGHT),
             };
 
             vk::DescriptorPoolCreateInfo poolInfo{
@@ -3129,7 +3263,9 @@ namespace VanK
             // TASK04: The acceleration structure uses binding 1
             std::array layoutBindings =
             {
-                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eFragment, nullptr)
+                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eFragment, nullptr),
+                vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
+                                               nullptr)
             };
 
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo

@@ -26,4 +26,23 @@ namespace VanK
         vk::Format textureImageFormat = vk::Format::eUndefined; // do i need this here ? 
         uint32_t mipLevels = 0; // do i need this here ? 
     };
+    
+    class VulkanRenderTargetImage : public RenderTargetImage
+    {
+    public:
+        VulkanRenderTargetImage(const RenderImageSpecification& specification);
+        virtual ~VulkanRenderTargetImage() override;
+        
+        virtual const RenderImageSpecification& GetSpecification() const override { return m_Specification; }
+        
+        virtual uint32_t GetWidth() const override { return m_Specification.Width; }
+        virtual uint32_t GetHeight() const override { return m_Specification.Height; }
+        virtual uint32_t GetRenderImageIndex() const override { return m_RenderImageIndex; }
+        virtual ImTextureID getImTextureID() override;
+        
+    private:
+        RenderImageSpecification m_Specification;
+        VkDescriptorSet m_ImGuiHandle = nullptr;
+        uint32_t m_RenderImageIndex = 0;
+    };
 }

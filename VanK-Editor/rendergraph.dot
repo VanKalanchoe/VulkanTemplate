@@ -1,0 +1,7 @@
+digraph RenderGraph {
+  rankdir=LR;
+  node [shape=box];
+  0 [label="Compute Mesh Tasks"];
+  1 [label="Mesh Draw"];
+  0 -> 1 [label="IndirectRead Buffer", color=blue];
+}

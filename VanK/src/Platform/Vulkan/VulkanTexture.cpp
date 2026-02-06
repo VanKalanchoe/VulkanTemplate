@@ -10,60 +10,60 @@ namespace VanK
     {
         switch (vankFilter)
         {
-            case VanKFilter::filterNearest: return vk::Filter::eNearest;
-            case VanKFilter::filterLinear: return vk::Filter::eLinear;
-            default:
+        case VanKFilter::filterNearest: return vk::Filter::eNearest;
+        case VanKFilter::filterLinear: return vk::Filter::eLinear;
+        default:
             {
                 std::cout << "Invalid Filter" << '\n';
                 return vk::Filter::eLinear;
             }
         }
     }
-    
+
     vk::SamplerMipmapMode ConvertToVkSamplerMipmapMode(VanKSamplerMipmapMode vankMode)
     {
         switch (vankMode)
         {
-            case VanKSamplerMipmapMode::mipmapModeNearest : return vk::SamplerMipmapMode::eNearest;
-            case VanKSamplerMipmapMode::mipmapModeLinear : return vk::SamplerMipmapMode::eLinear;
-            default:
+        case VanKSamplerMipmapMode::mipmapModeNearest: return vk::SamplerMipmapMode::eNearest;
+        case VanKSamplerMipmapMode::mipmapModeLinear: return vk::SamplerMipmapMode::eLinear;
+        default:
             {
                 std::cout << "Invalid Sampler Mipmap Mode" << '\n';
                 return vk::SamplerMipmapMode::eLinear;
             }
         }
     }
-    
+
     vk::SamplerAddressMode ConvertToVkSamplerAddressMode(VanKSamplerAddressMode vankMode)
     {
         switch (vankMode)
         {
-            case VanKSamplerAddressMode::addressModeRepeat : return vk::SamplerAddressMode::eRepeat;
-            case VanKSamplerAddressMode::addressModeMirrorRepeat : return vk::SamplerAddressMode::eMirroredRepeat;
-            case VanKSamplerAddressMode::addressModeClampToEdge : return vk::SamplerAddressMode::eClampToEdge;
-            case VanKSamplerAddressMode::addressModeClampToBorder : return vk::SamplerAddressMode::eClampToBorder;
-            case VanKSamplerAddressMode::addressModeMirrorClampToEdge : return vk::SamplerAddressMode::eMirrorClampToEdge;
-            default:
+        case VanKSamplerAddressMode::addressModeRepeat: return vk::SamplerAddressMode::eRepeat;
+        case VanKSamplerAddressMode::addressModeMirrorRepeat: return vk::SamplerAddressMode::eMirroredRepeat;
+        case VanKSamplerAddressMode::addressModeClampToEdge: return vk::SamplerAddressMode::eClampToEdge;
+        case VanKSamplerAddressMode::addressModeClampToBorder: return vk::SamplerAddressMode::eClampToBorder;
+        case VanKSamplerAddressMode::addressModeMirrorClampToEdge: return vk::SamplerAddressMode::eMirrorClampToEdge;
+        default:
             {
                 std::cout << "Invalid Sampler Address Mode" << '\n';
                 return vk::SamplerAddressMode::eRepeat;
             }
         }
     }
-    
+
     vk::CompareOp ConvertToVkCompareOp(VanKCompareOp vankCompareOp)
     {
         switch (vankCompareOp)
         {
-            case VanKCompareOp::compareOpNever : return vk::CompareOp::eNever;
-            case VanKCompareOp::compareOpLess : return vk::CompareOp::eLess;
-            case VanKCompareOp::compareOpEqual : return vk::CompareOp::eEqual;
-            case VanKCompareOp::compareOpLessOrEqual : return vk::CompareOp::eLessOrEqual;
-            case VanKCompareOp::compareOpGreater : return vk::CompareOp::eGreater;
-            case VanKCompareOp::compareOpNotEqual : return vk::CompareOp::eNotEqual;
-            case VanKCompareOp::compareOpGreaterOrEqual : return vk::CompareOp::eGreaterOrEqual;
-            case VanKCompareOp::compareOpAlways : return vk::CompareOp::eAlways;
-            default:
+        case VanKCompareOp::compareOpNever: return vk::CompareOp::eNever;
+        case VanKCompareOp::compareOpLess: return vk::CompareOp::eLess;
+        case VanKCompareOp::compareOpEqual: return vk::CompareOp::eEqual;
+        case VanKCompareOp::compareOpLessOrEqual: return vk::CompareOp::eLessOrEqual;
+        case VanKCompareOp::compareOpGreater: return vk::CompareOp::eGreater;
+        case VanKCompareOp::compareOpNotEqual: return vk::CompareOp::eNotEqual;
+        case VanKCompareOp::compareOpGreaterOrEqual: return vk::CompareOp::eGreaterOrEqual;
+        case VanKCompareOp::compareOpAlways: return vk::CompareOp::eAlways;
+        default:
             {
                 std::cout << "Invalid Sampler Compare Op" << '\n';
                 return vk::CompareOp::eNever;
@@ -90,6 +90,7 @@ namespace VanK
         case ImageFormat::RGBA8: return vk::Format::eR8G8B8A8Unorm; //eR8G8B8A8Unorm
         case ImageFormat::SRGBA8: return vk::Format::eR8G8B8A8Srgb;
         case ImageFormat::R16G16: return vk::Format::eR16G16Sfloat;
+        case ImageFormat::R32SINT: return vk::Format::eR32Sint;
         default: return vk::Format::eUndefined;
         }
     }
@@ -97,16 +98,16 @@ namespace VanK
     VulkanTexture2D::VulkanTexture2D(const TextureSpecification& specification, Buffer data) : m_Specification(specification)
     {
         RenderCommand::waitForGraphicsQueueIdle();
-        
+
         auto& instance = VulkanRendererAPI::Get();
-        
+
         /*if (instance.GetTextureCount() >= instance.GetMaxTexture())
         {
             instance.ResizeDescriptor(); //change this wont work i have multiple pipelines now
         }*/
-        
+
         utils::ImageResource local{};
-        
+
         // sampler
         VanKSamplerInfo info = m_Specification.SamplerInfo;
         vk::PhysicalDeviceProperties properties = instance.GetPhysicalDevice().getProperties();
@@ -128,24 +129,24 @@ namespace VanK
         };
         auto textureSampler = instance.getSamplerPool().acquireSampler(samplerInfo);
         local.sampler = textureSampler;
-        
+
         /* not needed right now only with eclamptoborder im using edge
          *hashCombine(info.borderColor);
         hashCombine(info.unnormalizedCoordinates);
         */
-        
+
         // Determine the Vulkan format from KTX format
         vk::Format textureFormat;
         ktxTexture2* ktx_texture = m_Specification.ktTexture;
-    
+
         uint32_t texWidth = m_Specification.Width;
         uint32_t texHeight = m_Specification.Height;
-    
+
         if (!ktx_texture)
         {
             // WHITE / fallback texture or something in a buffer like font rendering
             VK_CORE_WARN("ktTexture is null, creating default white texture");
-            
+
             // If the user requested RGB8, we must expand it to RGBA8
             if (m_Specification.Format == ImageFormat::RGB8)
             {
@@ -156,29 +157,29 @@ namespace VanK
 
                 for (uint32_t i = 0; i < pixelCount; i++)
                 {
-                    converted[i*4 + 0] = src[i*3 + 0]; // R
-                    converted[i*4 + 1] = src[i*3 + 1]; // G
-                    converted[i*4 + 2] = src[i*3 + 2]; // B
-                    converted[i*4 + 3] = 255;          // A = full opacity
+                    converted[i * 4 + 0] = src[i * 3 + 0]; // R
+                    converted[i * 4 + 1] = src[i * 3 + 1]; // G
+                    converted[i * 4 + 2] = src[i * 3 + 2]; // B
+                    converted[i * 4 + 3] = 255; // A = full opacity
                 }
-                
+
                 // Allocate new Buffer and copy the data
                 Buffer newData(converted.size());
                 memcpy(newData.Data, converted.data(), converted.size());
 
                 // Replace input buffer with RGBA buffer
-                data = newData;  // now data owns the RGBA memory
+                data = newData; // now data owns the RGBA memory
 
                 // Fix format
                 m_Specification.Format = ImageFormat::RGBA8;
             }
-            
+
             // Create staging buffer after conversion
             utils::Buffer stagingBuffer = VulkanRendererAPI::Get().GetAllocator().createStagingBuffer(std::span(data.Data, data.Size));
-            
+
             textureFormat = ConvertImageFormat(m_Specification.Format);
             mipLevels = 1;
-           
+
             // Create the texture image
             vk::ImageCreateInfo imageInfo
             {
@@ -188,42 +189,42 @@ namespace VanK
                 .usage = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 .sharingMode = vk::SharingMode::eExclusive
             };
-            
+
             local.image = instance.GetAllocator().createImage(imageInfo).image;
             DBG_VK_NAME(*local.image);
-            
+
             auto commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
-            
+
             utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels);
-        
+
             VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, texWidth, texHeight);
-        
+
             utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels);
-            
+
             utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
-            
+
             // Create the texture view maybe make info here like createimage ?
-            local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
+            local.view = instance.GetAllocator().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
             if (local.view == VK_NULL_HANDLE)
                 std::cout << "VulkanTexture2D: Failed to create texture view!" << std::endl;
             DBG_VK_NAME(*local.view);
-            
+
             local.extent.width = texWidth;
             local.extent.height = texHeight;
             local.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-        
+
             m_TextureIndex = VulkanRendererAPI::Get().AddTextureToPool(std::move(local));
-        
+
             LOGI("VulkanTexture2D: Created texture with index: %u", m_TextureIndex);
 
             VulkanRendererAPI::Get().GetAllocator().freeStagingBuffers();
-        
+
             // Return early — do not run KTX logic
             return;
         }
-        
+
         utils::Buffer stagingBuffer = VulkanRendererAPI::Get().GetAllocator().createStagingBuffer(std::span(data.Data, data.Size));
-    
+
         // Check if the KTX texture has a format
         if (ktx_texture->classId == ktxTexture2_c)
         {
@@ -233,7 +234,7 @@ namespace VanK
                 // If the format is undefined, fall back to a reasonable default
                 textureFormat = vk::Format::eR8G8B8A8Srgb; // srgb ?
             }
-            
+
             if (textureFormat == vk::Format::eR32G32B32Sfloat)
                 textureFormat = vk::Format::eR32G32B32A32Sfloat;
         }
@@ -242,19 +243,19 @@ namespace VanK
             // For KTX1 files or if we can't determine the format, use a reasonable default
             textureFormat = vk::Format::eR8G8B8A8Srgb;
         }
-    
+
         textureImageFormat = textureFormat;
-        
+
         bool isCubeMap = ktx_texture->isCubemap;
         uint32_t layerCount = isCubeMap ? 6u : 1u;
-        
+
         if (ktx_texture->numLevels > 1)
         {
             if (m_Specification.GenerateMips)
                 mipLevels = ktx_texture->numLevels;
             else
                 mipLevels = 1;
-            
+
             // Create the texture image
             vk::ImageCreateInfo imageInfo
             {
@@ -265,32 +266,32 @@ namespace VanK
                 .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 .sharingMode = vk::SharingMode::eExclusive
             };
-            
+
             local.image = instance.GetAllocator().createImage(imageInfo).image;
             DBG_VK_NAME(*local.image);
-            
+
             // Copy data from staging buffer to texture image
-            
+
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
-            
+
             utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels, layerCount);
-            
+
             // Copy each mip level
             for (uint32_t i = 0; i < mipLevels; i++)
             {
                 uint32_t mipWidth = std::max(1u, texWidth >> i);
                 uint32_t mipHeight = std::max(1u, texHeight >> i);
-            
+
                 for (uint32_t face = 0; face < layerCount; face++)
                 {
                     ktx_size_t offset;
                     KTX_error_code result = ktxTexture_GetImageOffset((ktxTexture*)ktx_texture, i, 0, face, &offset);
-                    VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer,local.image, mipWidth, mipHeight, offset, i, face);
+                    VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, mipWidth, mipHeight, offset, i, face);
                 }
             }
-            
+
             utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eTransferDstOptimal, vk::ImageLayout::eShaderReadOnlyOptimal, mipLevels, layerCount);
-            
+
             utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
         }
         else
@@ -299,7 +300,7 @@ namespace VanK
                 mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
             else
                 mipLevels = 1;
-            
+
             // Create the texture image
             vk::ImageCreateInfo imageInfo
             {
@@ -310,41 +311,41 @@ namespace VanK
                 .usage = vk::ImageUsageFlagBits::eTransferSrc | vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled,
                 .sharingMode = vk::SharingMode::eExclusive
             };
-            
+
             local.image = instance.GetAllocator().createImage(imageInfo).image;
             DBG_VK_NAME(*local.image);
-            
+
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
-            
+
             // Copy data from staging buffer to texture image
             utils::transitionImageLayout(*commandBuffer, local.image, vk::ImageLayout::eUndefined, vk::ImageLayout::eTransferDstOptimal, mipLevels, layerCount);
-        
+
             VulkanRendererAPI::Get().GetAllocator().copyBufferToImage(commandBuffer, stagingBuffer, local.image, texWidth, texHeight, 0, 0, 0);
-            
+
             utils::endSingleTimeCommands(*commandBuffer, instance.GetQueue());
-            
+
             if (mipLevels > 1 && m_Specification.GenerateMips)
                 VulkanRendererAPI::Get().generateMipmaps(local.image, textureFormat, texWidth, texHeight, mipLevels, layerCount);
         }
-        
+
         // Create the texture view maybe make info here like createimage ?
         vk::ImageViewType viewType = isCubeMap ? vk::ImageViewType::eCube : vk::ImageViewType::e2D;
-        local.view = VulkanRendererAPI::Get().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels, layerCount, viewType);
+        local.view = instance.GetAllocator().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels, layerCount, viewType);
         if (local.view == VK_NULL_HANDLE)
             std::cout << "VulkanTexture2D: Failed to create texture view!" << '\n';
-        
+
         DBG_VK_NAME(*local.view);
-        
+
         local.extent.width = texWidth;
         local.extent.height = texHeight;
         local.layout = vk::ImageLayout::eShaderReadOnlyOptimal;
-       
+
         m_TextureIndex = VulkanRendererAPI::Get().AddTextureToPool(std::move(local));
-        
+
         LOGI("VulkanTexture2D: Created texture with index: %u", m_TextureIndex);
-    
+
         VulkanRendererAPI::Get().GetAllocator().freeStagingBuffers();
-    
+
         // Cleanup KTX resources
         ktxTexture_Destroy((ktxTexture*)ktx_texture);
     }
@@ -356,20 +357,20 @@ namespace VanK
         auto& instance = VulkanRendererAPI::Get();
         
         // Check 2: Is the renderer properly initialized?
-        if (VulkanRendererAPI::IsInitialized())
+        if (!VulkanRendererAPI::IsInitialized())
             return; // Renderer not initialized
         
-        /*// Check 3: Is our texture index valid?
-        if (!instance.IsTextureValid(m_TextureIndex))
+        // Check 3: Is our texture index valid?
+        if (m_TextureIndex == UINT32_MAX)
         {
             return; // Texture already removed or invalid index
-        }*/
+        }
 
-        /*// Check 4: Is the texture vector not empty?
-        if (instance.GetTextureCount() == 0)
+        // Check 4: Is the texture vector not empty?
+        if (instance.m_images.empty())
         {
             return; // No textures to remove
-        }*/
+        }
         
         instance.waitForGraphicsQueueIdle();
             
@@ -377,10 +378,9 @@ namespace VanK
         if (m_ImGuiHandle && instance.isImGuiInit())
         {
             ImGui_ImplVulkan_RemoveTexture(m_ImGuiHandle);
+            SetNumImGuiTextures(GetNumImGuiTextures() - 1);
             m_ImGuiHandle = nullptr;
         }
-            
-        SetNumImGuiTextures(GetNumImGuiTextures() - 1);
             
         if (m_TextureIndex != UINT32_MAX)
         {
@@ -403,6 +403,141 @@ namespace VanK
             return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
 
         auto& image = instance.GetImageSource(m_TextureIndex);
+        
+        // Validate that the renderer Vulkan objects are still alive
+        if (!image.sampler)
+            return 0;
+
+        auto view = *image.view;
+        if (!view)
+            return 0;
+
+        // Create descriptor for ImGui
+        m_ImGuiHandle = ImGui_ImplVulkan_AddTexture(
+            image.sampler,
+            view,
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+        );
+        
+        if (m_ImGuiHandle)
+        {
+            SetNumImGuiTextures(GetNumImGuiTextures() + 1);
+        }
+
+        return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
+    }
+
+    vk::SampleCountFlagBits ConvertToVKSampleCount(uint32_t sampleCount, vk::SampleCountFlags maxSamplesSupported)
+    {
+        // Clamp requested sample count to the nearest supported
+        if (sampleCount >= 64 && (maxSamplesSupported & vk::SampleCountFlagBits::e64)) return vk::SampleCountFlagBits::e64;
+        if (sampleCount >= 32 && (maxSamplesSupported & vk::SampleCountFlagBits::e32)) return vk::SampleCountFlagBits::e32;
+        if (sampleCount >= 16 && (maxSamplesSupported & vk::SampleCountFlagBits::e16)) return vk::SampleCountFlagBits::e16;
+        if (sampleCount >= 8  && (maxSamplesSupported & vk::SampleCountFlagBits::e8))  return vk::SampleCountFlagBits::e8;
+        if (sampleCount >= 4  && (maxSamplesSupported & vk::SampleCountFlagBits::e4))  return vk::SampleCountFlagBits::e4;
+        if (sampleCount >= 2  && (maxSamplesSupported & vk::SampleCountFlagBits::e2))  return vk::SampleCountFlagBits::e2;
+        return vk::SampleCountFlagBits::e1;
+    }
+        
+    VulkanRenderTargetImage::VulkanRenderTargetImage(const RenderImageSpecification& specification) : m_Specification(specification)
+    {
+        RenderCommand::waitForGraphicsQueueIdle(); // not sure if needed ? 
+        
+        //mip levers not implemented idk if render images need that or only for textures will see
+        auto& instance = VulkanRendererAPI::Get();
+        
+        utils::ImageResource local{};
+        const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
+        local.sampler = instance.getSamplerPool().acquireSampler(info);
+        
+        vk::Format format;
+        if (specification.depthImage)
+            format = instance.findDepthFormat();
+        else
+            format = (specification.Format != ImageFormat::None) ? ConvertImageFormat(specification.Format) : instance.getSwapchainFormat().format;
+
+        // Create the texture image
+        vk::ImageCreateInfo imageInfo
+        {
+            .imageType = vk::ImageType::e2D, .format = format,
+            .extent = {specification.Width, specification.Height, 1}, .mipLevels = 1, .arrayLayers = 1,
+            .samples = ConvertToVKSampleCount(specification.SampleCount, instance.getMaxUsableSampleCount()), .tiling = vk::ImageTiling::eOptimal,
+            .usage = (specification.depthImage) ? vk::ImageUsageFlagBits::eDepthStencilAttachment : (specification.isResolveImage) ? vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment  : vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
+            .sharingMode = vk::SharingMode::eExclusive
+        };
+
+        local.image = instance.GetAllocator().createImage(imageInfo).image;
+        DBG_VK_NAME(*local.image);
+
+        // Create the texture view maybe make info here like createimage ?
+        local.view = instance.GetAllocator().createImageView(local.image, format, (specification.depthImage) ? vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor, 1);
+        if (local.view == VK_NULL_HANDLE)
+            std::cout << "VulkanRenderTargetImage: Failed to create texture view!" << '\n';
+        DBG_VK_NAME(*local.view);
+        
+        local.extent.width = specification.Width;
+        local.extent.height = specification.Height;
+        local.layout = vk::ImageLayout::eUndefined;
+        local.isResolveImage = specification.isResolveImage;
+        local.resolveTargetID = specification.resolveTargetID;
+
+        m_RenderImageIndex = instance.AddRenderTargetImageToPool(std::move(local));
+    }
+
+    VulkanRenderTargetImage::~VulkanRenderTargetImage()
+    {
+        std::cout << "Destroying: " << m_Specification.Name << '\n';
+
+        // If renderer is gone, do NOTHING
+        if (!VulkanRendererAPI::IsInitialized())
+            return;
+
+        auto& instance = VulkanRendererAPI::Get();
+        
+        // Check 3: Is our texture index valid?
+        if (m_RenderImageIndex == UINT32_MAX)
+        {
+            return; // Texture already removed or invalid index
+        }
+
+        // Check 4: Is the texture vector not empty?
+        if (instance.m_RenderTargetImages.empty())
+        {
+            return; // No textures to remove
+        }
+        
+        instance.waitForGraphicsQueueIdle();
+        
+        // Only remove handle if ImGui Vulkan is still alive
+        if (m_ImGuiHandle && instance.isImGuiInit())
+        {
+            ImGui_ImplVulkan_RemoveTexture(m_ImGuiHandle);
+            SetNumImGuiTextures(GetNumImGuiTextures() - 1);
+            m_ImGuiHandle = nullptr;
+        }
+        
+        // Remove from pool ONLY if pool still exists
+          if (m_RenderImageIndex != UINT32_MAX)
+        {
+            // All checks passed - safe to remove
+            instance.RemoveRenderTargetImageToPool(m_RenderImageIndex);
+            m_RenderImageIndex = UINT32_MAX;
+        }
+    }
+
+    ImTextureID VulkanRenderTargetImage::getImTextureID()
+    {
+        auto& instance = VulkanRendererAPI::Get();
+        
+        // If ImGui Vulkan backend is NOT available, return stored handle or nullptr
+        if (!instance.isImGuiInit())
+            return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
+
+        // If a handle already exists, return it
+        if (m_ImGuiHandle)
+            return reinterpret_cast<ImTextureID>(m_ImGuiHandle);
+
+        auto& image = instance.GetRenderTargetImage(m_RenderImageIndex);
         
         // Validate that the renderer Vulkan objects are still alive
         if (!image.sampler)

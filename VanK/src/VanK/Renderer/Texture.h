@@ -3,6 +3,7 @@
 #include <ktx.h>
 
 #include "imgui.h"
+#include "RendererAPI.h"
 #include "glm/glm.hpp"
 
 #include "VanK/Core/core.h"
@@ -17,7 +18,8 @@ namespace VanK
         RGB8,
         RGBA8,
         SRGBA8,
-        R16G16
+        R16G16,
+        R32SINT
     };
     
     enum class VanKFilter
@@ -106,6 +108,43 @@ namespace VanK
         
         static AssetType GetStaticType() { return AssetType::Texture2D; }
         virtual AssetType GetType() const { return GetStaticType(); }
+    private:
+        static size_t s_ImGuiTextureCount;
+    };
+    
+    struct RenderImageSpecification
+    {
+        std::string Name = "";
+        uint32_t Width = 1;
+        uint32_t Height = 1;
+        ImageFormat Format = ImageFormat::None;
+        glm::vec4 defaultColor = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);
+        uint32_t SampleCount = 1;
+        
+        bool depthImage = false;
+        bool isResolveImage = false; // do you want a resolved target
+        uint32_t resolveTargetID = UINT32_MAX; // optional, ID of the resolved image
+    };
+    
+    class RenderTarget
+    {
+    public:
+        virtual ~RenderTarget() = default;
+        
+        virtual const RenderImageSpecification& GetSpecification() const = 0;
+        
+        virtual uint32_t GetWidth() const = 0;
+        virtual uint32_t GetHeight() const = 0;
+        virtual uint32_t GetRenderImageIndex() const = 0;
+    };
+    
+    class RenderTargetImage : public RenderTarget
+    {
+    public:
+        virtual ImTextureID getImTextureID() = 0;
+        static size_t GetNumImGuiTextures() { return s_ImGuiTextureCount; }
+        static void SetNumImGuiTextures(size_t count) { s_ImGuiTextureCount = count; }
+        static Ref<RenderTargetImage> Create(const RenderImageSpecification& specification);
     private:
         static size_t s_ImGuiTextureCount;
     };

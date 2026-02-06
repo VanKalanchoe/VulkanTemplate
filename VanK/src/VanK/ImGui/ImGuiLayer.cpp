@@ -78,10 +78,10 @@ namespace VanK
     {
         // Cleanup
         RenderCommand::waitForGraphicsQueueIdle();
+        RenderCommand::SetImGuiInit(false);
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplSDL3_Shutdown();
         ImGui::DestroyContext();
-        RenderCommand::SetImGuiInit(false);
     }
 
     void ImGuiLayer::OnUpdate(Timestep ts)

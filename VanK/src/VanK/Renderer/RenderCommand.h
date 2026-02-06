@@ -191,9 +191,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->EndRendering(cmd);
         }
 
-        static void SubmitRendering(VanKCommandBuffer cmd)
+        static void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1)
         {
-            if (s_RendererAPI) s_RendererAPI->SubmitRendering(cmd);
+            if (s_RendererAPI) s_RendererAPI->SubmitRendering(cmd, renderTargetImage);
         }
 
         /**
@@ -224,6 +224,11 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->EndComputePass(computePass);
         }
         
+        static void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired)
+        {
+            if (s_RendererAPI) s_RendererAPI->InsertBarrier(cmd, id, last, desired);
+        }
+        
         static void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs)
         {
             if (s_RendererAPI) s_RendererAPI->createAccelerationStructures(vertexBuffer, indexBuffer, primitives, materials, instanceLUTs);
@@ -234,9 +239,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->updateTopLevelAS(model);
         }
         
-        static int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y)
+        static int32_t ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y)
         {
-            return s_RendererAPI ? s_RendererAPI->ReadEntityIDAtPixel(x, y) : -1;
+            return s_RendererAPI ? s_RendererAPI->ReadEntityIDAtPixel(imageIndex, x, y) : -1;
         }
 
         static void waitForGraphicsQueueIdle()

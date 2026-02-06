@@ -21,6 +21,8 @@
 #include "MSDFData.h"
 #include "VanK/Asset/AssetManager.h"
 
+#include "VanK/Renderer/RenderGraph.h"
+
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -1474,6 +1476,33 @@ namespace VanK
     };
     std::vector<Lights> lights;
     RuntimeModel runtimePlant;
+
+    static RenderGraph graph;
+    
+    void Renderer::CreateRenderTargets()
+    {
+        std::cout << "CreateRenderTargets called with viewport: " << m_ViewportSize.width << "x" << m_ViewportSize.height << std::endl;
+    
+        // Wait for GPU to finish using old render targets
+        RenderCommand::waitForGraphicsQueueIdle();
+
+        // Destroy old render targets
+        sceneImage.reset();
+        colorImage.reset();
+        entityImage.reset();
+        entityColorImage.reset();
+        depthImage.reset();
+
+        // Create new render targets with current viewport size
+        sceneImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
+        std::cout << "sceneImage created at index: " << sceneImage->GetRenderImageIndex() << " size: " << sceneImage->GetWidth() << "x" << sceneImage->GetHeight() << std::endl;
+    
+        colorImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .isResolveImage = true, .resolveTargetID = sceneImage->GetRenderImageIndex()});
+        entityImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT});
+        entityColorImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT, .SampleCount = 64, .isResolveImage = true, .resolveTargetID = entityImage->GetRenderImageIndex()});
+        depthImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .depthImage = true});
+    }
+    
     void Renderer::Init(Window& window)
     {
         RendererAPI::Config config;
@@ -1481,6 +1510,9 @@ namespace VanK
         m_window = window.getWindowHandle();
         RenderCommand::SetConfig(config);
         RenderCommand::Init();
+        
+        // Render Target
+        CreateRenderTargets();
 
         // Shader creation
         auto MeshTaskSubmit = GetShaderLibrary().Load("MeshTaskSubmit", "MeshTaskSubmit.slang");
@@ -1946,7 +1978,8 @@ namespace VanK
             ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
             ImGui::End();
         }
-        RenderCommand::SubmitRendering(cmd);
+        
+        RenderCommand::SubmitRendering(cmd, sceneImage->GetRenderImageIndex());
 
         RenderCommand::EndCommandBuffer(cmd);
 
@@ -2048,167 +2081,183 @@ namespace VanK
         //lines
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
         
-        {
-            GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
-            /*RenderCommand::StartTimeStamp(cmd, lol);*/
-
-            VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, std::span(&meshTaskSubmitBuffer, 1));
-
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
-
-            meshTasksSubmitPushConstant pushData
-            {
-                .meshTasksIndirectBufferAddress = meshTaskSubmitBuffer->GetBufferAddress(),
-                .localMeshTasksIndirectBufferAddress = localMeshTaskSubmitBuffer->GetBufferAddress(),
-            };
-
-            RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
-
-            RenderCommand::DispatchCompute(computePass, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
-
-            RenderCommand::EndComputePass(computePass);
-
-            /*RenderCommand::StopTimeStamp(cmd, lol);*/
-        }
+        graph.Reset();
         
         {
-            GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
-            std::vector<VanKColorTargetInfo> colorAttachments;
-            colorAttachments.emplace_back(VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.2f, 0.2f, 0.2f, 1.0f}});
-            colorAttachments.emplace_back(VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}});
-
-            VanKDepthStencilTargetInfo depthStencilTargetInfo = {.loadOp = VanK_LOADOP_CLEAR, .storeOp = VanK_STOREOP_STORE, .clearColor = VanK_FColor{.f = {0.0f, 0}}};
-
-            RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), depthStencilTargetInfo);
-
-            VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
-            RenderCommand::SetViewport(cmd, 1, viewPort);
-
-            VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
-            RenderCommand::SetScissor(cmd, 1, rect);
-
-            RenderCommand::SetLineWidth(cmd, m_LineWidth);
-
-            RenderCommand::SetCullMode(cmd, cullMode);
-
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
-            
-            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-            
-            TaskMeshPipelinePushConstant pushData
+            auto& compute = graph.AddPass("Compute Mesh Tasks");
+            compute.reads = {{ ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead }};
+            compute.writes = {{ ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite }};
+            compute.execute = []
             {
-                .sceneData = sceneBuffer->GetBufferAddress(),
-                .culledDataBuffer = cullBuffer->GetBufferAddress(),
-                .vertexBuffer = vertexBuffer->GetBufferAddress(),
-                .indexBuffer = indexBuffer->GetBufferAddress(),
-                .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
-                .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
-                .meshletBuffer = meshletBuffer->GetBufferAddress(),
-                .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
-                .meshDraws = meshDrawBuffer->GetBufferAddress(),
-                .materialBuffer = materialBuffer->GetBufferAddress(),
-                .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
-                .lightsBuffer = lightsBuffer->GetBufferAddress(),
+                GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
+                
+                /*
+                VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, {});
+                */
+
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
+
+                meshTasksSubmitPushConstant pushData
+                {
+                    .meshTasksIndirectBufferAddress = meshTaskSubmitBuffer->GetBufferAddress(),
+                    .localMeshTasksIndirectBufferAddress = localMeshTaskSubmitBuffer->GetBufferAddress(),
+                };
+
+                RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
+
+                RenderCommand::DispatchCompute({}, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
+
+                /*
+                RenderCommand::EndComputePass(computePass);*/
             };
-
-            RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
-
-            //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
-            RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
-
-            /*meshTasks.clear();*/
-
-            // quads/sprites/atlas
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshQuadPipeline);
-
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                PushConstant2D push2D
-                {
-                    .numOfElements = quads.size(),
-                    .bufferAddress = quadBuffer->GetBufferAddress(),
-                    .sceneData = sceneBuffer->GetBufferAddress(),
-                };
-
-                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
-
-                RenderCommand::DrawMeshTasks(cmd, quads.size(), 1, 1);
-            }
-
-            //circles
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshCirclePipeline);
-
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                PushConstant2D push2D
-                {
-                    .numOfElements = circles.size(),
-                    .bufferAddress = circleBuffer->GetBufferAddress(),
-                    .sceneData = sceneBuffer->GetBufferAddress(),
-                };
-
-                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
-
-                RenderCommand::DrawMeshTasks(cmd, circles.size(), 1, 1);
-            }
-
-            //texts
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshTextPipeline);
-
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                PushConstant2D push2D
-                {
-                    .numOfElements = texts.size(),
-                    .bufferAddress = textBuffer->GetBufferAddress(),
-                    .sceneData = sceneBuffer->GetBufferAddress(),
-                };
-
-                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
-
-                RenderCommand::DrawMeshTasks(cmd, texts.size(), 1, 1);
-            }
-
-            //lines
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshLinePipeline);
-
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                PushConstant2D push2D
-                {
-                    .numOfElements = lines.size(),
-                    .bufferAddress = lineBuffer->GetBufferAddress(),
-                    .sceneData = sceneBuffer->GetBufferAddress(),
-                };
-
-                RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
-
-                RenderCommand::DrawMeshTasks(cmd, lines.size(), 1, 1);
-            }
-            
-            // skybox always last
-            {
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshSkyBoxPipeline);
-
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                PushConstantSkyBox pushSkyBox
-                {
-                    .MaterialIndex = cubemap->GetTextureIndex(),
-                    .sceneData = sceneBuffer->GetBufferAddress(),
-                };
-
-                RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushSkyBox, sizeof(PushConstantSkyBox));
-
-                RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
-            }
-
-            RenderCommand::EndRendering(cmd);
         }
+
+        {
+            auto& MeshDraw = graph.AddPass("Mesh Draw");
+            MeshDraw.reads.push_back({ ResourceID{.type = ResourceType::Buffer, .buffer = meshTaskSubmitBuffer.get()}, ResourceUsage::IndirectRead });
+            MeshDraw.writes =
+            {
+                    { ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead },
+                    { ResourceID::Image(colorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.2f, 0.2f, 0.2f, 1.0f}} },
+                    { ResourceID::Image(entityImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment },
+                    { ResourceID::Image(entityColorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.i = {-1}} },
+                    { ResourceID::Image(depthImage->GetRenderImageIndex()), ResourceUsage::DepthAttachment, {}, VanK_FORMAT_DEPTH_STENCIL, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE, VanK_FColor{.f = {0.0f}} }
+            };
+            MeshDraw.execute = [] 
+            { 
+                GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
+                
+                VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
+                RenderCommand::SetViewport(cmd, 1, viewPort);
+
+                VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
+                RenderCommand::SetScissor(cmd, 1, rect);
+
+                RenderCommand::SetLineWidth(cmd, m_LineWidth);
+
+                RenderCommand::SetCullMode(cmd, cullMode);
+
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
+            
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+            
+                TaskMeshPipelinePushConstant pushData
+                {
+                    .sceneData = sceneBuffer->GetBufferAddress(),
+                    .culledDataBuffer = cullBuffer->GetBufferAddress(),
+                    .vertexBuffer = vertexBuffer->GetBufferAddress(),
+                    .indexBuffer = indexBuffer->GetBufferAddress(),
+                    .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
+                    .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
+                    .meshletBuffer = meshletBuffer->GetBufferAddress(),
+                    .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
+                    .meshDraws = meshDrawBuffer->GetBufferAddress(),
+                    .materialBuffer = materialBuffer->GetBufferAddress(),
+                    .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
+                    .lightsBuffer = lightsBuffer->GetBufferAddress(),
+                };
+
+                RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
+
+                //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
+                RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+
+                /*meshTasks.clear();*/
+
+                // quads/sprites/atlas
+                {
+                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshQuadPipeline);
+
+                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+
+                    PushConstant2D push2D
+                    {
+                        .numOfElements = quads.size(),
+                        .bufferAddress = quadBuffer->GetBufferAddress(),
+                        .sceneData = sceneBuffer->GetBufferAddress(),
+                    };
+
+                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                    RenderCommand::DrawMeshTasks(cmd, quads.size(), 1, 1);
+                }
+
+                //circles
+                {
+                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshCirclePipeline);
+
+                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+
+                    PushConstant2D push2D
+                    {
+                        .numOfElements = circles.size(),
+                        .bufferAddress = circleBuffer->GetBufferAddress(),
+                        .sceneData = sceneBuffer->GetBufferAddress(),
+                    };
+
+                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                    RenderCommand::DrawMeshTasks(cmd, circles.size(), 1, 1);
+                }
+
+                //texts
+                {
+                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshTextPipeline);
+
+                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+
+                    PushConstant2D push2D
+                    {
+                        .numOfElements = texts.size(),
+                        .bufferAddress = textBuffer->GetBufferAddress(),
+                        .sceneData = sceneBuffer->GetBufferAddress(),
+                    };
+
+                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                    RenderCommand::DrawMeshTasks(cmd, texts.size(), 1, 1);
+                }
+
+                //lines
+                {
+                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshLinePipeline);
+
+                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+
+                    PushConstant2D push2D
+                    {
+                        .numOfElements = lines.size(),
+                        .bufferAddress = lineBuffer->GetBufferAddress(),
+                        .sceneData = sceneBuffer->GetBufferAddress(),
+                    };
+
+                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                    RenderCommand::DrawMeshTasks(cmd, lines.size(), 1, 1);
+                }
+            
+                // skybox always last
+                {
+                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshSkyBoxPipeline);
+
+                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+
+                    PushConstantSkyBox pushSkyBox
+                    {
+                        .MaterialIndex = cubemap->GetTextureIndex(),
+                        .sceneData = sceneBuffer->GetBufferAddress(),
+                    };
+
+                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushSkyBox, sizeof(PushConstantSkyBox));
+
+                    RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
+                }
+            };
+        }
+        
+        graph.Build();
+        graph.DumpGraphviz("rendergraph.dot");
+        graph.Execute(cmd);
     }
 
     struct PipelineReloadEntry

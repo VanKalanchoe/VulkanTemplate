@@ -131,13 +131,13 @@ namespace VanK
     {
         if (!pipeline)
             return nullptr;
-       
+
         return new VanKPipeLine_T(pipeline);
     }
-    
-//--- Vulkan Helpers ------------------------------------------------------------------------------------------------------------
+
+    //--- Vulkan Helpers ------------------------------------------------------------------------------------------------------------
 #ifdef NDEBUG
-    #define VK_CHECK(vkFnc) vkFnc
+#define VK_CHECK(vkFnc) vkFnc
 #else
 #define VK_CHECK(vkFnc) \
 { \
@@ -151,7 +151,7 @@ namespace VanK
     } \
 }
 #endif
-    
+
     namespace utils
     {
         [[nodiscard]] inline vk::raii::ShaderModule createShaderModule(vk::raii::Device& device,
@@ -175,8 +175,7 @@ namespace VanK
             case vk::ImageLayout::eUndefined:
                 return std::make_tuple(vk::PipelineStageFlagBits2::eTopOfPipe, vk::AccessFlagBits2::eNone);
             case vk::ImageLayout::eColorAttachmentOptimal:
-                return std::make_tuple(vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                                       vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite);
+                return std::make_tuple(vk::PipelineStageFlagBits2::eColorAttachmentOutput, vk::AccessFlagBits2::eColorAttachmentRead | vk::AccessFlagBits2::eColorAttachmentWrite);
             case vk::ImageLayout::eShaderReadOnlyOptimal:
                 return std::make_tuple(vk::PipelineStageFlagBits2::eFragmentShader | vk::PipelineStageFlagBits2::eComputeShader
                                        | vk::PipelineStageFlagBits2::ePreRasterizationShaders,
@@ -196,15 +195,41 @@ namespace VanK
                     vk::PipelineStageFlagBits2::eEarlyFragmentTests | vk::PipelineStageFlagBits2::eLateFragmentTests,
                     vk::AccessFlagBits2::eDepthStencilAttachmentRead | vk::AccessFlagBits2::eDepthStencilAttachmentWrite
                 );
+            case vk::ImageLayout::eDepthAttachmentOptimal:
+                return std::make_tuple(
+                    vk::PipelineStageFlagBits2::eEarlyFragmentTests |
+                    vk::PipelineStageFlagBits2::eLateFragmentTests,
+                    vk::AccessFlagBits2::eDepthStencilAttachmentRead |
+                    vk::AccessFlagBits2::eDepthStencilAttachmentWrite
+                );
             default:
                 {
-                    ASSERT(false, "Unsupported layout transition!");
+                    ASSERT(false, "makePipelineStageAccessTuple: Unsupported layout transition!");
                     return std::make_tuple(vk::PipelineStageFlagBits2::eAllCommands,
                                            vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite);
                 }
             }
         };
-        
+
+        static vk::ImageAspectFlags AspectFromLayout(ResourceState::Layout layout)
+        {
+            switch (layout)
+            {
+            case ResourceState::Layout::ColorAttachment:
+                return vk::ImageAspectFlagBits::eColor;
+            case ResourceState::Layout::DepthAttachment:
+                return vk::ImageAspectFlagBits::eDepth;
+            case ResourceState::Layout::ShaderReadOnly:
+            case ResourceState::Layout::General:
+            case ResourceState::Layout::TransferDst:
+            case ResourceState::Layout::TransferSrc:
+            case ResourceState::Layout::Undefined:
+                return vk::ImageAspectFlagBits::eColor; // default for "normal" images
+            default:
+                return vk::ImageAspectFlagBits::eColor;
+            }
+        }
+
         static std::unique_ptr<vk::raii::CommandBuffer> beginSingleTimeCommands(const vk::raii::Device& device, const vk::CommandPool& commandPool)
         {
             vk::CommandBufferAllocateInfo allocInfo{
@@ -240,7 +265,7 @@ namespace VanK
             vk::Image image,
             vk::ImageLayout oldLayout,
             vk::ImageLayout newLayout,
-            vk::ImageSubresourceRange subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 }
+            vk::ImageSubresourceRange subresourceRange = {vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1}
         )
         {
             const auto [srcStage, srcAccess] = makePipelineStageAccessTuple(oldLayout);
@@ -266,8 +291,9 @@ namespace VanK
          * A helper function to transition an image from one layout to another.
          * In the pipeline, the image must be in the correct layout to be used, and this function is used to transition the image to the correct layout.
         -*/
-        
-        static void transitionImageLayout(const vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image &image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels, uint32_t layerCount = 1)
+
+        static void transitionImageLayout(const vk::raii::CommandBuffer& commandBuffer, const vk::raii::Image& image, vk::ImageLayout oldLayout, vk::ImageLayout newLayout, uint32_t mipLevels,
+                                          uint32_t layerCount = 1)
         {
             vk::ImageMemoryBarrier barrier{
                 .oldLayout = oldLayout, .newLayout = newLayout,
@@ -301,7 +327,7 @@ namespace VanK
             }
             commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, {}, nullptr, barrier);
         }
-        
+
         static void transition_image_layout
         (
             const vk::raii::CommandBuffer& commandBuffer,
@@ -428,7 +454,7 @@ namespace VanK
             };
             commandBuffer.pipelineBarrier2(depInfo);
         }
-        
+
         /*--
          * A buffer is a region of memory used to store data.
          * It is used to store vertex data, index data, uniform data, and other types of data.
@@ -437,10 +463,10 @@ namespace VanK
         -*/
         struct Buffer
         {
-            vma::raii::Buffer buffer{ nullptr }; // Vulkan Buffer + Memory Allocation
+            vma::raii::Buffer buffer{nullptr}; // Vulkan Buffer + Memory Allocation
             vk::DeviceAddress address{}; // Address of the buffer in the shader
             vk::DeviceSize size{}; // Size of the buffer
-            void* mapping{ nullptr }; // CPU mapped pointer
+            void* mapping{nullptr}; // CPU mapped pointer
         };
 
         /*--
@@ -449,7 +475,7 @@ namespace VanK
         -*/
         struct Image
         {
-            vma::raii::Image image{ nullptr }; // Vulkan Image + Memory Allocation
+            vma::raii::Image image{nullptr}; // Vulkan Image + Memory Allocation
         };
 
         /*-- 
@@ -462,6 +488,8 @@ namespace VanK
             vk::Extent2D extent{}; // Size of the image
             vk::ImageLayout layout{}; // Layout of the image (color attachment, shader read, ...)
             vk::Sampler sampler{}; // reference not copy
+            bool isResolveImage = false;
+            uint32_t resolveTargetID = UINT32_MAX;
         };
 
         /*- Not implemented here -*/
@@ -486,10 +514,10 @@ namespace VanK
             ~ResourceAllocator() = default;
 
             // Initialization of VMA allocator.
-            void init(const vk::raii::Instance& instance, const vk::raii::PhysicalDevice& physicalDevice,  const vk::raii::Device& device)
+            void init(const vk::raii::Instance& instance, const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::Device& device)
             {
                 // #TODO : VK_EXT_memory_priority ? VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT
-                
+
                 vma::AllocatorCreateInfo info{};
                 info.flags |= vma::AllocatorCreateFlagBits::eBufferDeviceAddress;
                 // allow querying for the GPU address of a buffer
@@ -497,9 +525,9 @@ namespace VanK
                 info.flags |= vma::AllocatorCreateFlagBits::eKhrMaintenance5;
                 // allow using VkBufferUsageFlags2CreateInfoKHR
                 info.physicalDevice = physicalDevice;
-                
-                m_allocator = vma::raii::Allocator { instance, device, info };
-                
+
+                m_allocator = vma::raii::Allocator{instance, device, info};
+
                 m_device = &device;
             }
 
@@ -543,7 +571,7 @@ namespace VanK
                     .sharingMode = vk::SharingMode::eExclusive, // Only one queue family will access i
                 };
 
-                vma::AllocationCreateInfo allocInfo = { .flags = flags, .usage = memoryUsage };
+                vma::AllocationCreateInfo allocInfo = {.flags = flags, .usage = memoryUsage};
                 const vk::DeviceSize dedicatedMemoryMinSize = 64ULL * 1024; // 64 KB
                 if (size > dedicatedMemoryMinSize)
                 {
@@ -554,22 +582,22 @@ namespace VanK
                 // Create the buffer
                 vma::AllocationInfo allocInfoOut{}; // for extra info if needed
                 vma::raii::Buffer vmaBuffer = m_allocator->createBuffer(bufferInfo, allocInfo, allocInfoOut);
-                
+
                 Buffer resultBuffer;
-                
+
                 // Map memory if requested
                 if (flags & vma::AllocationCreateFlagBits::eMapped)
                     resultBuffer.mapping = allocInfoOut.pMappedData;
-                
+
                 // Get the GPU address of the buffer
                 const vk::BufferDeviceAddressInfo info =
                 {
                     .buffer = vmaBuffer
                 };
                 resultBuffer.address = m_device->getBufferAddress(info);
-                
+
                 resultBuffer.buffer = std::move(vmaBuffer);
-                
+
                 {
                     // Find leaks
                     static uint32_t counter = 0U;
@@ -580,16 +608,18 @@ namespace VanK
 #endif
                     }
                     std::string allocID = std::string("allocID: ") + std::to_string(counter++);
-                    resultBuffer.buffer.getAllocation().setName( allocID.c_str());
+                    resultBuffer.buffer.getAllocation().setName(allocID.c_str());
                 }
 
                 resultBuffer.size = size;
-        
+
                 return resultBuffer;
             }
 
             //*-- Destroy a buffer -*/
-            void destroyBuffer(Buffer buffer) const {  } // raii auto delete
+            void destroyBuffer(Buffer buffer) const
+            {
+            } // raii auto delete
 
             void copyBuffer(std::unique_ptr<vk::raii::CommandBuffer>& commandBuffer, Buffer& srcBuffer, Buffer& dstBuffer, vk::DeviceSize size)
             {
@@ -597,8 +627,8 @@ namespace VanK
             }
 
             void copyBufferToImage(std::unique_ptr<vk::raii::CommandBuffer>& commandBuffer, const Buffer& buffer, vk::raii::Image& image, uint32_t width,
-                                         uint32_t height,
-                                         uint64_t offset = 0, uint32_t mipLevel = 0, uint32_t face = 0)
+                                   uint32_t height,
+                                   uint64_t offset = 0, uint32_t mipLevel = 0, uint32_t face = 0)
             {
                 vk::BufferImageCopy region
                 {
@@ -628,7 +658,7 @@ namespace VanK
                     vma::MemoryUsage::eCpuToGpu,
                     vma::AllocationCreateFlagBits::eHostAccessSequentialWrite
                 );
-                
+
                 // Map and copy data to the staging buffer
                 try
                 {
@@ -657,13 +687,14 @@ namespace VanK
                 {
                     vma::AllocationCreateInfo allocInfo{};
                     allocInfo.usage = vma::MemoryUsage::eGpuOnly;
-                
-                    vma::AllocationInfo allocInfoOut{};  // for extra info if needed
+
+                    vma::AllocationInfo allocInfoOut{}; // for extra info if needed
                     vma::raii::Image vmaImage = m_allocator->createImage(imageInfo, allocInfo, allocInfoOut);
+                    
                     // should i DBG_VK_NAME or not good ? always where its used ???
                     Image resultImage;
-                    resultImage.image = std::move(vmaImage); 
-                    
+                    resultImage.image = std::move(vmaImage);
+
                     return resultImage;
                 }
                 catch (vk::SystemError& err)
@@ -671,6 +702,25 @@ namespace VanK
                     VK_CORE_ERROR("Failed to createImage!");
                     return {};
                 }
+            }
+          
+            vk::raii::ImageView createImageView
+            (
+                vk::raii::Image& image, vk::Format format,
+                vk::ImageAspectFlags aspectFlags,
+                uint32_t mipLevels, 
+                uint32_t layerCount = 1, 
+                vk::ImageViewType viewType = vk::ImageViewType::e2D
+            ) const
+            {
+                vk::ImageViewCreateInfo viewInfo
+                {
+                    .image = image,
+                    .viewType = viewType,
+                    .format = format,
+                    .subresourceRange = {aspectFlags, 0, mipLevels, 0, layerCount}
+                };
+                return vk::raii::ImageView(*m_device, viewInfo);
             }
 
             /*-- Destroy image --*/ // has to change once vma hpp
@@ -682,7 +732,7 @@ namespace VanK
                 imageRessource.view.clear();
             }
 
-           // maybe add createimageandupload template from nvidia vk_minimal_latest creates image and copybuffer all in one from above
+            // maybe add createimageandupload template from nvidia vk_minimal_latest creates image and copybuffer all in one from above
 
             /*--
              * The staging buffers are buffers that are used to transfer data from the CPU to the GPU.
@@ -698,7 +748,7 @@ namespace VanK
             void setLeakID(uint32_t id) { m_leakID = id; }
 
         private:
-             std::optional<vma::raii::Allocator> m_allocator;
+            std::optional<vma::raii::Allocator> m_allocator;
             const vk::raii::Device* m_device;
             std::vector<Buffer> m_stagingBuffers{};
             uint32_t m_leakID = ~0U;
@@ -739,21 +789,26 @@ namespace VanK
             }
             return "";
         }
+
         /*--
          * GBuffer creation info
         -*/
         struct GbufferCreateInfo
         {
         };
-        
+
         /*-
          * GBuffer - Multiple render targets with depth management
         -*/
         class GBuffer
         {
             GBuffer() = default;
-            ~GBuffer() { /*assert(m_createInfo.device == VK_NULL_HANDLE && "Missing deinit()");*/ }
-            
+
+            ~GBuffer()
+            {
+                /*assert(m_createInfo.device == VK_NULL_HANDLE && "Missing deinit()");*/
+            }
+
             /*--
              * Initialize the GBuffer with the specified configuration.
             -*/
@@ -764,23 +819,23 @@ namespace VanK
                 m_createInfo = createInfo; // Copy the creation info
                 create(cmd);
             }
-            
+
             // Destroy internal resources and reset its initial state
             void deinit()
             {
                 destroy();
                 /**this = {};*/
             }
-            
+
         private:
             void create(const vk::raii::CommandBuffer& cmd)
             {
             }
-            
+
             void destroy()
             {
             }
-            
+
             /*--
              * Resources holds all Vulkan objects for the GBuffer
              * This separation makes it easier to cleanup and recreate resources
@@ -800,6 +855,7 @@ namespace VanK
             std::vector<VkDescriptorSet> m_descriptorSet{}; // ImGui descriptor sets
         };
     }
+
     /*--
      * Samplers are limited in Vulkan.
      * This class is used to create and store samplers, and to avoid creating the same sampler multiple times.
@@ -899,7 +955,7 @@ namespace VanK
             return vk::raii::Sampler(*m_device, createInfo);
         }
     };
-    
+
     /*const std::vector<Vertex> vertices = {
         {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
         {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
@@ -916,7 +972,7 @@ namespace VanK
         0, 1, 2, 2, 3, 0,
         4, 5, 6, 6, 7, 4
     };*/
-    
+
 
     class VulkanRendererAPI : public RendererAPI
     {
@@ -924,21 +980,28 @@ namespace VanK
         VulkanRendererAPI();
         explicit VulkanRendererAPI(const Config& config);
         ~VulkanRendererAPI() override;
-        
+
         static VulkanRendererAPI& Get();
-        
+
         void Shutdown() override;
-        
+
         void init()
         {
             initVulkan();
         }
-        
+        bool HasRenderTargetPool() const
+        {
+            return !m_RenderTargetImages.empty();
+        }
+        utils::ImageResource& GetRenderTargetImage(uint32_t index) { return m_RenderTargetImages[index]; }
+        uint32_t AddRenderTargetImageToPool(utils::ImageResource&& imageResource);
+        void RemoveRenderTargetImageToPool(uint32_t index);
         uint32_t AddTextureToPool(utils::ImageResource&& imageResource);
         void RemoveTextureFromPool(uint32_t index);
-        
+
         /*-- Wait until GPU is done using the pipeline to safly destroy --*/
         void waitForGraphicsQueueIdle() override;
+
     private:
         VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) override;
         VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) override;
@@ -963,21 +1026,26 @@ namespace VanK
         void PushConstans(VanKCommandBuffer cmd, VanKShaderStageFlags stageFlags, uint32_t slot, const void* data, uint32_t dataSize) override;
         void Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;
         void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) override;
-        void DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
-        void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
+        void DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount,
+                               uint32_t stride) override;
+        void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                      uint32_t maxDrawCount, uint32_t stride) override;
         void DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
-        void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
+        void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                        uint32_t maxDrawCount, uint32_t stride) override;
         void EndRendering(VanKCommandBuffer cmd) override;
-        void SubmitRendering(VanKCommandBuffer cmd) override;
+        void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1) override;
         VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers) override;
         void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void EndComputePass(VanKComputePass* computePass) override;
+        void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) override;
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
-        void createInstanceLUTBuffer();
-        void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
-        void updateTopLevelAS(const glm::mat4 &model) override;
+        void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives,
+                                          std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
+        void updateTopLevelAS(const glm::mat4& model) override;
         void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
+
     public:
         struct PipelineResource
         {
@@ -988,12 +1056,18 @@ namespace VanK
             VanKComputePipelineSpecification computeSpec;
             VanKRaytracingPipelineSpecification raytracingSpec;
         };
+
         std::unordered_map<vk::Pipeline, PipelineResource> m_PipelineResources;
 
         vk::PipelineLayout m_currentGraphicPipelineLayout;
         vk::PipelineLayout m_currentComputePipelineLayout;
 
-        void RebuildSwapchain(bool vSyncVal) override { vSync = vSyncVal; recreateSwapChain(); }
+        void RebuildSwapchain(bool vSyncVal) override
+        {
+            vSync = vSyncVal;
+            recreateSwapChain();
+        }
+
         void setFramebufferResized(bool resized) { framebufferResized = resized; }
         uint32_t getAPIVersion() const { return apiVersion; }
         vk::raii::Device& GetDevice() { return device; }
@@ -1004,11 +1078,19 @@ namespace VanK
         utils::ImageResource& GetImageSource(uint32_t index) { return m_images[index]; }
         void InitImGui() override { initImGui(); }
         ImTextureID getImTextureID(uint32_t index = 0) const override { return reinterpret_cast<ImTextureID>(uiDescriptorSet[index]); }
-        void setViewportSize(Extent2D viewportSize) override { viewport = vk::Extent2D{viewportSize.width, viewportSize.height}; recreateImages(); }
-        void SetImGuiInit(bool init) override { imguiVulkanInitialized = init; } 
+
+        void setViewportSize(Extent2D viewportSize) override
+        {
+            device.waitIdle();
+            viewport = vk::Extent2D{viewportSize.width, viewportSize.height};
+            /*recreateImages();*/
+             createRaytraceStorageImageResources();
+        }
+
+        void SetImGuiInit(bool init) override { imguiVulkanInitialized = init; }
         bool isImGuiInit() const { return imguiVulkanInitialized; }
         static bool IsInitialized() { return s_instance != nullptr; }
-        int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) override;
+        int32_t ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y) override;
         uint32_t GetCurrentFrameIndex() override { return frameIndex; }
         void setEnableTimeStamp(bool temp) override { isTimeStapEnabled = temp; }
         bool getEnableTimeStamp() override { return isTimeStapEnabled; }
@@ -1018,6 +1100,11 @@ namespace VanK
         void StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) override;
         void StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) override;
         SamplerPool& getSamplerPool() { return m_samplerPool; }
+        vk::SurfaceFormatKHR getSwapchainFormat() const { return swapChainSurfaceFormat; }
+        vk::SampleCountFlagBits getMaxUsableSampleCount() const;
+        [[nodiscard]] vk::Format findDepthFormat() const;
+        std::vector<utils::ImageResource> m_images;
+        std::vector<utils::ImageResource> m_RenderTargetImages;
     private:
         inline static VulkanRendererAPI* s_instance = nullptr;
         SDL_Window* window = nullptr;
@@ -1040,9 +1127,9 @@ namespace VanK
 
         vk::raii::PipelineLayout* pipelineLayout = nullptr;
         vk::raii::Pipeline* graphicsPipeline = nullptr;
-        
-        std::vector<utils::ImageResource> m_images;
-        
+
+       
+
         vk::Extent2D viewport;
         vma::raii::Image sceneImage = nullptr;
         vk::raii::ImageView sceneImageView = nullptr;
@@ -1052,15 +1139,19 @@ namespace VanK
 
         vma::raii::Image depthImage = nullptr;
         vk::raii::ImageView depthImageView = nullptr;
-        
+
         vma::raii::Image entityImage = nullptr;
-        vk::raii::ImageView  entityImageView = nullptr;
-        
-        vma::raii::Image entityColorImage = nullptr;  // MSAA entity color image (like colorImage)
-        vk::raii::ImageView entityColorImageView = nullptr;  // View for MSAA entity color
-        
+        vk::raii::ImageView entityImageView = nullptr;
+
+        vma::raii::Image entityColorImage = nullptr; // MSAA entity color image (like colorImage)
+        vk::raii::ImageView entityColorImageView = nullptr; // View for MSAA entity color
+
+        vma::raii::Image raytraceStorageImage = nullptr;
+        vk::raii::ImageView raytraceStorageImageView = nullptr;
+
         SamplerPool m_samplerPool;
         vk::Sampler linearSampler = nullptr;
+
     public: //change this to priavte later ebcause of vulkantexture class getimtextureid
         /*vk::Sampler textureSampler = nullptr;*/
     private:
@@ -1078,7 +1169,7 @@ namespace VanK
         std::vector<vk::raii::CommandBuffer> commandBuffers;
         uint32_t imageIndex = {};
         vk::Result currentResult = {};
-        
+
         std::vector<vk::raii::Semaphore> presentCompleteSemaphores;
         std::vector<vk::raii::Semaphore> renderFinishedSemaphores;
         // Update timeline value for this frame
@@ -1092,7 +1183,7 @@ namespace VanK
         bool vSync = false;
         bool sceneImageInitialized = false;
         bool entityImageInitialized = false;
-        bool entityColorImageInitialized = false; 
+        bool entityColorImageInitialized = false;
         utils::Buffer entityReadbackBuffer;
         bool imguiVulkanInitialized = false;
         VanKRenderOption m_renderOption = {};
@@ -1103,14 +1194,14 @@ namespace VanK
         vk::raii::QueryPool queryPoolStatistics = nullptr;
         utils::Buffer queryStatisticsBuffer;
         VanKPipelineStatistics pipeStats;
-        
+
         //timestep
         vk::raii::QueryPool queryPoolTimeStep = nullptr;
         utils::Buffer queryTimeStepBuffer;
         bool isTimeStapEnabled = false;
         VanKTimestampPass timestamp;
         std::vector<VanKTimestampPass*> activeTimestamps;
-        
+
         uint32_t timeStampIndex = 0;
         uint32_t maxTimeStamp = 128;
 
@@ -1138,7 +1229,7 @@ namespace VanK
         void cleanup();
 
         void recreateSwapChain();
-        
+
         void recreateImages();
 
         void createInstance();
@@ -1167,40 +1258,40 @@ namespace VanK
         void createDepthResources();
         void createEntityResources();
         void createEntityColorResources();
+        void createRaytraceStorageImageResources();
 
         vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
                                        vk::FormatFeatureFlags features) const;
 
-        [[nodiscard]] vk::Format findDepthFormat() const;
+        
 
         static bool hasStencilComponent(vk::Format format);
-    
+
     public: //temp public
         void generateMipmaps(vk::raii::Image& image, vk::Format imageFormat, int32_t texWidth, int32_t texHeight,
                              uint32_t mipLevels, uint32_t layerCount = 1);
-    private: 
-        vk::SampleCountFlagBits getMaxUsableSampleCount();
 
+    private:
         void createTextureSampler();
-
-    public: //temp public
+        
         vk::raii::ImageView createImageView(vk::raii::Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags,
                                             uint32_t mipLevels, uint32_t layerCount = 1, vk::ImageViewType viewType = vk::ImageViewType::e2D);
-    private: 
+
+    private:
     public: //temp public
         void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples,
                          vk::Format format, vk::ImageTiling tiling,
                          vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
                          vk::raii::DeviceMemory& imageMemory);
-    
-    private: 
+
+    private:
         void createDescriptorPool();
 
         void createDescriptorSets();
-        
+
         void updateGraphicsDescriptorSet();
-       
-    private: 
+
+    private:
         uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
         void createCommandBuffers();
@@ -1209,14 +1300,14 @@ namespace VanK
 
         //statisitcs / timestamps ----
         void createQueryPool();
-        
+
         void createQueryBuffer();
-        
+
         void downloadQueryStatisticsBuffer();
-        
+
         void downloadQueryTimeStampBuffer();
         //------
-        
+
         static uint32_t chooseSwapMinImageCount(vk::SurfaceCapabilitiesKHR const& surfaceCapabilities);
 
         static vk::SurfaceFormatKHR chooseSwapSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& availableFormats);
@@ -1242,7 +1333,6 @@ namespace VanK
         case VanK_FORMAT_INVALID: return vk::Format::eUndefined;
         case VanK_Format_B8G8R8A8Srgb: return vk::Format::eB8G8R8A8Srgb;
         case VanK_FORMAT_R32_SINT: return vk::Format::eR32Sint;
-        
         }
         return vk::Format::eUndefined;
     }
@@ -1306,90 +1396,90 @@ namespace VanK
     }
 
     inline vk::BlendFactor ConvertToVkBlendFactor(VanKBlendFactor blendFactor)
+    {
+        switch (blendFactor)
         {
-            switch (blendFactor)
-            {
-            case VanK_BLEND_FACTOR_ZERO: return vk::BlendFactor::eZero;
-                case VanK_BLEND_FACTOR_ONE: return vk::BlendFactor::eOne;
-                case VanK_BLEND_FACTOR_SRC_COLOR: return vk::BlendFactor::eSrcColor;
-                case VanK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR: return vk::BlendFactor::eOneMinusSrcColor;
-                case VanK_BLEND_FACTOR_DST_COLOR: return vk::BlendFactor::eDstColor;
-                case VanK_BLEND_FACTOR_ONE_MINUS_DST_COLOR: return vk::BlendFactor::eOneMinusDstColor;
-                case VanK_BLEND_FACTOR_SRC_ALPHA: return vk::BlendFactor::eSrcAlpha;
-                case VanK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA: return vk::BlendFactor::eOneMinusSrcAlpha;
-                case VanK_BLEND_FACTOR_DST_ALPHA: return vk::BlendFactor::eDstAlpha;
-                case VanK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA: return vk::BlendFactor::eOneMinusDstAlpha;
-                case VanK_BLEND_FACTOR_CONSTANT_COLOR: return vk::BlendFactor::eConstantColor;
-                case VanK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR: return vk::BlendFactor::eOneMinusConstantColor;
-                case VanK_BLEND_FACTOR_CONSTANT_ALPHA: return vk::BlendFactor::eConstantAlpha;
-                case VanK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA: return vk::BlendFactor::eOneMinusConstantAlpha;
-                case VanK_BLEND_FACTOR_SRC_ALPHA_SATURATE: return vk::BlendFactor::eSrcAlphaSaturate;
-                case VanK_BLEND_FACTOR_SRC1_COLOR: return vk::BlendFactor::eSrc1Color;
-                case VanK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR: return vk::BlendFactor::eOneMinusSrc1Color;
-                case VanK_BLEND_FACTOR_SRC1_ALPHA: return vk::BlendFactor::eSrc1Alpha;
-                case VanK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA: return vk::BlendFactor::eOneMinusSrc1Alpha;
-            }
-            return vk::BlendFactor::eZero;
+        case VanK_BLEND_FACTOR_ZERO: return vk::BlendFactor::eZero;
+        case VanK_BLEND_FACTOR_ONE: return vk::BlendFactor::eOne;
+        case VanK_BLEND_FACTOR_SRC_COLOR: return vk::BlendFactor::eSrcColor;
+        case VanK_BLEND_FACTOR_ONE_MINUS_SRC_COLOR: return vk::BlendFactor::eOneMinusSrcColor;
+        case VanK_BLEND_FACTOR_DST_COLOR: return vk::BlendFactor::eDstColor;
+        case VanK_BLEND_FACTOR_ONE_MINUS_DST_COLOR: return vk::BlendFactor::eOneMinusDstColor;
+        case VanK_BLEND_FACTOR_SRC_ALPHA: return vk::BlendFactor::eSrcAlpha;
+        case VanK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA: return vk::BlendFactor::eOneMinusSrcAlpha;
+        case VanK_BLEND_FACTOR_DST_ALPHA: return vk::BlendFactor::eDstAlpha;
+        case VanK_BLEND_FACTOR_ONE_MINUS_DST_ALPHA: return vk::BlendFactor::eOneMinusDstAlpha;
+        case VanK_BLEND_FACTOR_CONSTANT_COLOR: return vk::BlendFactor::eConstantColor;
+        case VanK_BLEND_FACTOR_ONE_MINUS_CONSTANT_COLOR: return vk::BlendFactor::eOneMinusConstantColor;
+        case VanK_BLEND_FACTOR_CONSTANT_ALPHA: return vk::BlendFactor::eConstantAlpha;
+        case VanK_BLEND_FACTOR_ONE_MINUS_CONSTANT_ALPHA: return vk::BlendFactor::eOneMinusConstantAlpha;
+        case VanK_BLEND_FACTOR_SRC_ALPHA_SATURATE: return vk::BlendFactor::eSrcAlphaSaturate;
+        case VanK_BLEND_FACTOR_SRC1_COLOR: return vk::BlendFactor::eSrc1Color;
+        case VanK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR: return vk::BlendFactor::eOneMinusSrc1Color;
+        case VanK_BLEND_FACTOR_SRC1_ALPHA: return vk::BlendFactor::eSrc1Alpha;
+        case VanK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA: return vk::BlendFactor::eOneMinusSrc1Alpha;
         }
+        return vk::BlendFactor::eZero;
+    }
 
     inline vk::BlendOp ConvertToVkBlendOp(VanKBlendOp blendOp)
+    {
+        switch (blendOp)
         {
-            switch (blendOp)
-            {
-                case VanK_BLEND_OP_ADD: return vk::BlendOp::eAdd;
-                case VanK_BLEND_OP_SUBTRACT: return vk::BlendOp::eSubtract;
-                case VanK_BLEND_OP_REVERSE_SUBTRACT: return vk::BlendOp::eReverseSubtract;
-                case VanK_BLEND_OP_MIN: return vk::BlendOp::eMin;
-                case VanK_BLEND_OP_MAX: return vk::BlendOp::eMax;
-                case VanK_BLEND_OP_ZERO_EXT: return vk::BlendOp::eZeroEXT;
-                case VanK_BLEND_OP_SRC_EXT: return vk::BlendOp::eSrcEXT;
-                case VanK_BLEND_OP_DST_EXT: return vk::BlendOp::eDstEXT;
-                case VanK_BLEND_OP_SRC_OVER_EXT: return vk::BlendOp::eSrcOverEXT;
-                case VanK_BLEND_OP_DST_OVER_EXT: return vk::BlendOp::eDstOverEXT;
-                case VanK_BLEND_OP_SRC_IN_EXT: return vk::BlendOp::eSrcInEXT;
-                case VanK_BLEND_OP_DST_IN_EXT: return vk::BlendOp::eDstInEXT;
-                case VanK_BLEND_OP_SRC_OUT_EXT: return vk::BlendOp::eSrcOutEXT;
-                case VanK_BLEND_OP_DST_OUT_EXT: return vk::BlendOp::eDstOutEXT;
-                case VanK_BLEND_OP_SRC_ATOP_EXT: return vk::BlendOp::eSrcAtopEXT;
-                case VanK_BLEND_OP_DST_ATOP_EXT: return vk::BlendOp::eDstAtopEXT;
-                case VanK_BLEND_OP_XOR_EXT: return vk::BlendOp::eXorEXT;
-                case VanK_BLEND_OP_MULTIPLY_EXT: return vk::BlendOp::eMultiplyEXT;
-                case VanK_BLEND_OP_SCREEN_EXT: return vk::BlendOp::eScreenEXT;
-                case VanK_BLEND_OP_OVERLAY_EXT: return vk::BlendOp::eOverlayEXT;
-                case VanK_BLEND_OP_DARKEN_EXT: return vk::BlendOp::eDarkenEXT;
-                case VanK_BLEND_OP_LIGHTEN_EXT: return vk::BlendOp::eLightenEXT;
-                case VanK_BLEND_OP_COLORDODGE_EXT: return vk::BlendOp::eColordodgeEXT;
-                case VanK_BLEND_OP_COLORBURN_EXT: return vk::BlendOp::eColorburnEXT;
-                case VanK_BLEND_OP_HARDLIGHT_EXT: return vk::BlendOp::eHardlightEXT;
-                case VanK_BLEND_OP_SOFTLIGHT_EXT: return vk::BlendOp::eSoftlightEXT;
-                case VanK_BLEND_OP_DIFFERENCE_EXT: return vk::BlendOp::eDifferenceEXT;
-                case VanK_BLEND_OP_EXCLUSION_EXT: return vk::BlendOp::eExclusionEXT;
-                case VanK_BLEND_OP_INVERT_EXT: return vk::BlendOp::eInvertEXT;
-                case VanK_BLEND_OP_INVERT_RGB_EXT: return vk::BlendOp::eInvertRgbEXT;
-                case VanK_BLEND_OP_LINEARDODGE_EXT: return vk::BlendOp::eLineardodgeEXT;
-                case VanK_BLEND_OP_LINEARBURN_EXT: return vk::BlendOp::eLinearburnEXT;
-                case VanK_BLEND_OP_VIVIDLIGHT_EXT: return vk::BlendOp::eVividlightEXT;
-                case VanK_BLEND_OP_LINEARLIGHT_EXT: return vk::BlendOp::eLinearlightEXT;
-                case VanK_BLEND_OP_PINLIGHT_EXT: return vk::BlendOp::ePinlightEXT;
-                case VanK_BLEND_OP_HARDMIX_EXT: return vk::BlendOp::eHardmixEXT;
-                case VanK_BLEND_OP_HSL_HUE_EXT: return vk::BlendOp::eHslHueEXT;
-                case VanK_BLEND_OP_HSL_SATURATION_EXT: return vk::BlendOp::eHslSaturationEXT;
-                case VanK_BLEND_OP_HSL_COLOR_EXT: return vk::BlendOp::eHslColorEXT;
-                case VanK_BLEND_OP_HSL_LUMINOSITY_EXT: return vk::BlendOp::eHslLuminosityEXT;
-                case VanK_BLEND_OP_PLUS_EXT: return vk::BlendOp::ePlusEXT;
-                case VanK_BLEND_OP_PLUS_CLAMPED_EXT: return vk::BlendOp::ePlusClampedEXT;
-                case VanK_BLEND_OP_PLUS_CLAMPED_ALPHA_EXT: return vk::BlendOp::ePlusClampedAlphaEXT;
-                case VanK_BLEND_OP_PLUS_DARKER_EXT: return vk::BlendOp::ePlusDarkerEXT;
-                case VanK_BLEND_OP_MINUS_EXT: return vk::BlendOp::eMinusEXT;
-                case VanK_BLEND_OP_MINUS_CLAMPED_EXT: return vk::BlendOp::eMinusClampedEXT;
-                case VanK_BLEND_OP_CONTRAST_EXT: return vk::BlendOp::eContrastEXT;
-                case VanK_BLEND_OP_INVERT_OVG_EXT: return vk::BlendOp::eInvertOvgEXT;
-                case VanK_BLEND_OP_RED_EXT: return vk::BlendOp::eRedEXT;
-                case VanK_BLEND_OP_GREEN_EXT: return vk::BlendOp::eGreenEXT;
-                case VanK_BLEND_OP_BLUE_EXT: return vk::BlendOp::eBlueEXT;
-            }
-            return vk::BlendOp::eMin;
+        case VanK_BLEND_OP_ADD: return vk::BlendOp::eAdd;
+        case VanK_BLEND_OP_SUBTRACT: return vk::BlendOp::eSubtract;
+        case VanK_BLEND_OP_REVERSE_SUBTRACT: return vk::BlendOp::eReverseSubtract;
+        case VanK_BLEND_OP_MIN: return vk::BlendOp::eMin;
+        case VanK_BLEND_OP_MAX: return vk::BlendOp::eMax;
+        case VanK_BLEND_OP_ZERO_EXT: return vk::BlendOp::eZeroEXT;
+        case VanK_BLEND_OP_SRC_EXT: return vk::BlendOp::eSrcEXT;
+        case VanK_BLEND_OP_DST_EXT: return vk::BlendOp::eDstEXT;
+        case VanK_BLEND_OP_SRC_OVER_EXT: return vk::BlendOp::eSrcOverEXT;
+        case VanK_BLEND_OP_DST_OVER_EXT: return vk::BlendOp::eDstOverEXT;
+        case VanK_BLEND_OP_SRC_IN_EXT: return vk::BlendOp::eSrcInEXT;
+        case VanK_BLEND_OP_DST_IN_EXT: return vk::BlendOp::eDstInEXT;
+        case VanK_BLEND_OP_SRC_OUT_EXT: return vk::BlendOp::eSrcOutEXT;
+        case VanK_BLEND_OP_DST_OUT_EXT: return vk::BlendOp::eDstOutEXT;
+        case VanK_BLEND_OP_SRC_ATOP_EXT: return vk::BlendOp::eSrcAtopEXT;
+        case VanK_BLEND_OP_DST_ATOP_EXT: return vk::BlendOp::eDstAtopEXT;
+        case VanK_BLEND_OP_XOR_EXT: return vk::BlendOp::eXorEXT;
+        case VanK_BLEND_OP_MULTIPLY_EXT: return vk::BlendOp::eMultiplyEXT;
+        case VanK_BLEND_OP_SCREEN_EXT: return vk::BlendOp::eScreenEXT;
+        case VanK_BLEND_OP_OVERLAY_EXT: return vk::BlendOp::eOverlayEXT;
+        case VanK_BLEND_OP_DARKEN_EXT: return vk::BlendOp::eDarkenEXT;
+        case VanK_BLEND_OP_LIGHTEN_EXT: return vk::BlendOp::eLightenEXT;
+        case VanK_BLEND_OP_COLORDODGE_EXT: return vk::BlendOp::eColordodgeEXT;
+        case VanK_BLEND_OP_COLORBURN_EXT: return vk::BlendOp::eColorburnEXT;
+        case VanK_BLEND_OP_HARDLIGHT_EXT: return vk::BlendOp::eHardlightEXT;
+        case VanK_BLEND_OP_SOFTLIGHT_EXT: return vk::BlendOp::eSoftlightEXT;
+        case VanK_BLEND_OP_DIFFERENCE_EXT: return vk::BlendOp::eDifferenceEXT;
+        case VanK_BLEND_OP_EXCLUSION_EXT: return vk::BlendOp::eExclusionEXT;
+        case VanK_BLEND_OP_INVERT_EXT: return vk::BlendOp::eInvertEXT;
+        case VanK_BLEND_OP_INVERT_RGB_EXT: return vk::BlendOp::eInvertRgbEXT;
+        case VanK_BLEND_OP_LINEARDODGE_EXT: return vk::BlendOp::eLineardodgeEXT;
+        case VanK_BLEND_OP_LINEARBURN_EXT: return vk::BlendOp::eLinearburnEXT;
+        case VanK_BLEND_OP_VIVIDLIGHT_EXT: return vk::BlendOp::eVividlightEXT;
+        case VanK_BLEND_OP_LINEARLIGHT_EXT: return vk::BlendOp::eLinearlightEXT;
+        case VanK_BLEND_OP_PINLIGHT_EXT: return vk::BlendOp::ePinlightEXT;
+        case VanK_BLEND_OP_HARDMIX_EXT: return vk::BlendOp::eHardmixEXT;
+        case VanK_BLEND_OP_HSL_HUE_EXT: return vk::BlendOp::eHslHueEXT;
+        case VanK_BLEND_OP_HSL_SATURATION_EXT: return vk::BlendOp::eHslSaturationEXT;
+        case VanK_BLEND_OP_HSL_COLOR_EXT: return vk::BlendOp::eHslColorEXT;
+        case VanK_BLEND_OP_HSL_LUMINOSITY_EXT: return vk::BlendOp::eHslLuminosityEXT;
+        case VanK_BLEND_OP_PLUS_EXT: return vk::BlendOp::ePlusEXT;
+        case VanK_BLEND_OP_PLUS_CLAMPED_EXT: return vk::BlendOp::ePlusClampedEXT;
+        case VanK_BLEND_OP_PLUS_CLAMPED_ALPHA_EXT: return vk::BlendOp::ePlusClampedAlphaEXT;
+        case VanK_BLEND_OP_PLUS_DARKER_EXT: return vk::BlendOp::ePlusDarkerEXT;
+        case VanK_BLEND_OP_MINUS_EXT: return vk::BlendOp::eMinusEXT;
+        case VanK_BLEND_OP_MINUS_CLAMPED_EXT: return vk::BlendOp::eMinusClampedEXT;
+        case VanK_BLEND_OP_CONTRAST_EXT: return vk::BlendOp::eContrastEXT;
+        case VanK_BLEND_OP_INVERT_OVG_EXT: return vk::BlendOp::eInvertOvgEXT;
+        case VanK_BLEND_OP_RED_EXT: return vk::BlendOp::eRedEXT;
+        case VanK_BLEND_OP_GREEN_EXT: return vk::BlendOp::eGreenEXT;
+        case VanK_BLEND_OP_BLUE_EXT: return vk::BlendOp::eBlueEXT;
         }
+        return vk::BlendOp::eMin;
+    }
 
     inline vk::ColorComponentFlags ConvertToVkcolorWriteMask(VanKColorComponentFlags colorWriteMask)
     {
@@ -1417,7 +1507,7 @@ namespace VanK
         }
         return vk::CompareOp::eLess;
     }
-    
+
     inline vk::ShaderStageFlags ConvertToVkShaderStageFlagBits(VanKShaderStageFlags flags)
     {
         switch (flags)
@@ -1429,7 +1519,7 @@ namespace VanK
         }
         return vk::ShaderStageFlagBits::eAll;
     }
-    
+
     inline vk::AttachmentLoadOp ConvertToVkLoadOp(VanKLoadOp op)
     {
         switch (op)
@@ -1440,7 +1530,7 @@ namespace VanK
         default: return vk::AttachmentLoadOp::eDontCare; // safe fallback
         }
     }
-    
+
     inline vk::AttachmentStoreOp ConvertToVkStoreOp(VanKStoreOp op)
     {
         switch (op)
@@ -1455,7 +1545,7 @@ namespace VanK
             return vk::AttachmentStoreOp::eNone;
         }
     }
-    
+
     inline vk::ClearColorValue ConvertToVkClearColor(const VanK_FColor& color, vk::Format format)
     {
         vk::ClearColorValue clear = {};
@@ -1490,7 +1580,7 @@ namespace VanK
 
         return clear;
     }
-    
+
     inline vk::Format ConvertToVkFormat(VanKFormat format)
     {
         switch (format)
@@ -1498,7 +1588,7 @@ namespace VanK
         case VanK_Format_B8G8R8A8Srgb: return vk::Format::eB8G8R8A8Srgb;
         case VanK_FORMAT_R32_SINT: return vk::Format::eR32Sint;
         case VanK_FORMAT_INVALID: return vk::Format::eUndefined;
-        default : return vk::Format::eUndefined;
+        default: return vk::Format::eUndefined;
         }
     }
 }

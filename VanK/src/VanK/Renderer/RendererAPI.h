@@ -15,19 +15,19 @@ namespace VanK
     // Forward declare an opaque struct (incomplete type)
     struct VanKCommandBuffer_T;
     using VanKCommandBuffer = VanKCommandBuffer_T*;
-    
-    struct VanKTimestampPass 
+
+    struct VanKTimestampPass
     {
         uint32_t queryIndex;
-        uint64_t begin;         // GPU timestamp for start
-        uint64_t end;           // GPU timestamp for end
+        uint64_t begin; // GPU timestamp for start
+        uint64_t end; // GPU timestamp for end
     };
-    
+
     struct VanKPipelineStatistics
     {
         uint64_t clippingInvocations;
     };
-    
+
     struct VanKPipeLine_T;
     using VanKPipeLine = VanKPipeLine_T*;
 
@@ -40,8 +40,8 @@ namespace VanK
 
     struct VanKSpecializationInfo
     {
-        std::vector<VanKSpecializationMapEntries> MapEntries;     // Owns the entries
-        std::vector<uint8_t> Data;                                // Owns the raw data
+        std::vector<VanKSpecializationMapEntries> MapEntries; // Owns the entries
+        std::vector<uint8_t> Data; // Owns the raw data
 
         size_t dataSize() const { return Data.size(); }
         uint32_t mapEntryCount() const { return static_cast<uint32_t>(MapEntries.size()); }
@@ -102,14 +102,15 @@ namespace VanK
         VanK_FRONT_FACE_COUNTER_CLOCKWISE,
         VanK_FRONT_FACE_CLOCKWISE,
     };
-    
+
     struct VanKPipelineRasterizationStateCreateInfo
     {
         VanKPolygonMode VanKPolygon;
         VanKFrontFace VanKFrontFace;
     };
 
-    enum VanKLogicOp {
+    enum VanKLogicOp
+    {
         VanK_LOGIC_OP_CLEAR = 0,
         VanK_LOGIC_OP_AND = 1,
         VanK_LOGIC_OP_AND_REVERSE = 2,
@@ -151,7 +152,7 @@ namespace VanK
         VanK_BLEND_FACTOR_SRC1_ALPHA,
         VanK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA,
     };
-    
+
     enum VanKBlendOp
     {
         VanK_BLEND_OP_ADD,
@@ -214,6 +215,7 @@ namespace VanK
         VanK_COLOR_COMPONENT_B_BIT,
         VanK_COLOR_COMPONENT_A_BIT,
     };
+
     using VanKColorComponentFlags = uint32_t;
 
     struct VanKPipelineColorBlendAttachmentState
@@ -245,7 +247,7 @@ namespace VanK
         VanK_SAMPLE_COUNT_32_BIT,
         VanK_SAMPLE_COUNT_64_BIT
     };
-    
+
     struct VanKPipelineMultisampleStateCreateInfo
     {
         VanKSampleCountFlagBits sampleCount;
@@ -264,7 +266,7 @@ namespace VanK
         VanK_COMPARE_OP_GREATER_OR_EQUAL,
         VanK_COMPARE_OP_ALWAYS,
     };
-    
+
     struct VanKPipelineDepthStencilStateCreateInfo
     {
         bool depthTestEnable;
@@ -277,25 +279,26 @@ namespace VanK
         VanK_FORMAT_INVALID = 0,
         VanK_Format_B8G8R8A8Srgb,
         VanK_FORMAT_R32_SINT,
+        VanK_FORMAT_DEPTH_STENCIL
     };
-    
+
     struct VanKPipelineRenderingCreateInfo
     {
         std::vector<VanKFormat> VanKColorAttachmentFormats;
     };
-    
+
     enum VanKPipelineType
     {
-        VanK_Graphics,   // Vertex + Fragment
-        VanK_Mesh        // Mesh (+ optional Task) + Fragment
+        VanK_Graphics, // Vertex + Fragment
+        VanK_Mesh // Mesh (+ optional Task) + Fragment
     };
-    
+
     struct PushConstantRange
     {
         uint32_t Offset;
         uint32_t Size;
     };
-    
+
     struct VanKPipelineLayoutCreateInfo
     {
         std::vector<PushConstantRange> PushConstants;
@@ -305,10 +308,10 @@ namespace VanK
     {
         VanKPipelineType PipelineType;
         VanKPipelineShaderStageCreateInfo ShaderStageCreateInfo;
-        
+
         VanKPipelineVertexInputStateCreateInfo VertexInputStateCreateInfo; // only vertex not mesh
         VanKPipelineInputAssemblyStateCreateInfo InputAssemblyStateCreateInfo; // only vertex not mesh
-        
+
         VanKPipelineRasterizationStateCreateInfo RasterizationStateCreateInfo;
         VanKPipelineColorBlendStateCreateInfo ColorBlendStateCreateInfo;
         VanKPipelineMultisampleStateCreateInfo MultisampleStateCreateInfo;
@@ -326,7 +329,7 @@ namespace VanK
     {
         std::vector<PushConstantRange> PushConstants;
     };
-    
+
     struct VanKComputePipelineSpecification
     {
         VanKComputePipelineCreateInfo ComputePipelineCreateInfo;
@@ -340,7 +343,7 @@ namespace VanK
         std::span<Ref<IndirectBuffer>> VanKIndirectBuffers;
         std::span<Ref<IndirectBuffer>> VanKIndirectCountBuffers;
     };
-    
+
     struct VanKRaytracingPipelineSpecification
     {
         VanKPipelineShaderStageCreateInfo ShaderStageCreateInfo;
@@ -376,7 +379,7 @@ namespace VanK
         VanK_LOADOP_DONT_CARE = 2,
     };
 
-    enum  VanKStoreOp
+    enum VanKStoreOp
     {
         VanK_STOREOP_STORE,
         VanK_STOREOP_DONT_CARE,
@@ -393,9 +396,10 @@ namespace VanK
             uint32_t u[4];
         };
     };
-    
+
     struct VanKColorTargetInfo
     {
+        uint32_t imageIndex; // matches ResourceID.index
         VanKFormat format;
         VanKLoadOp loadOp;
         VanKStoreOp storeOp;
@@ -406,11 +410,122 @@ namespace VanK
 
     struct VanKDepthStencilTargetInfo
     {
+        uint32_t imageIndex; // matches ResourceID.index
+        VanKFormat format;
         VanKLoadOp loadOp;
         VanKStoreOp storeOp;
         VanK_FColor clearColor;
         /*Ref<Texture2D> depthStencilTexture = nullptr;*/ // shadowmap needed
     };
+
+    // Render Graph
+    enum class ResourceUsage
+    {
+        ComputeRead,
+        ComputeWrite,
+        ColorAttachment,
+        ResolveAttachment,
+        DepthAttachment,
+        ShaderRead,
+        IndirectRead,
+        TransferSrc,
+        TransferDst
+    };
+
+    enum class ResourceType : uint8_t
+    {
+        Image,
+        Buffer
+    };
+
+    struct ResourceID
+    {
+        ResourceType type;
+        union
+        {
+            uint32_t index;      // for images
+            VanKBuffer* buffer;  // for buffers
+        };
+
+        static ResourceID Image(uint32_t idx)
+        {
+            ResourceID id;
+            id.type = ResourceType::Image;
+            id.index = idx;
+            return id;
+        }
+
+        static ResourceID Buffer(VanKBuffer* buf)
+        {
+            ResourceID id;
+            id.type = ResourceType::Buffer;
+            id.buffer = buf;
+            return id;
+        }
+
+        bool operator==(const ResourceID& other) const
+        {
+            if (type != other.type) return false;
+            return type == ResourceType::Image ? index == other.index : buffer == other.buffer;
+        }
+    };
+
+    struct ResourceReadWrite
+    {
+        ResourceID id;
+        ResourceUsage usage;
+        std::optional<ResourceUsage> finalUsage;
+        VanKFormat format;
+        VanKLoadOp loadOp;
+        VanKStoreOp storeOp;
+        VanK_FColor clearColor;
+    };
+
+    struct ResourceState
+    {
+        enum class Stage
+        {
+            None,
+            TopOfPipe,
+            Compute,
+            ColorOutput,
+            DepthOutput,
+            Fragment,
+            Transfer,
+            DrawIndirect
+        } stage = Stage::None;
+
+        enum class Access
+        {
+            None,
+            ShaderRead,
+            ShaderWrite,
+            IndirectRead,
+            ColorWrite,
+            DepthWrite,
+            TransferRead,
+            TransferWrite
+        } access = Access::None;
+
+        enum class Layout
+        {
+            Undefined,
+            General,
+            ColorAttachment,
+            ResolveAttachment,
+            DepthAttachment,
+            ShaderReadOnly,
+            TransferSrc,
+            TransferDst
+        } layout = Layout::Undefined;
+
+        static ResourceState Undefined()
+        {
+            return {Stage::None, Access::None, Layout::Undefined};
+        }
+    };
+
+    // Render Graph----
 
     enum VanKRenderOption
     {
@@ -442,19 +557,22 @@ namespace VanK
         uint32_t height = 0;
     };
 
-    struct Extent2D { uint32_t width, height; };
-    
+    struct Extent2D
+    {
+        uint32_t width, height;
+    };
+
     enum class RenderAPIType
     {
         None = 0, Vulkan = 1, Metal = 2
     };
-    
+
     namespace shaderio
     {
         using namespace glm;
-        #include "shaderIO.h"
+#include "shaderIO.h"
     }
-    
+
     class RendererAPI
     {
     public:
@@ -490,19 +608,27 @@ namespace VanK
         virtual void PushConstans(VanKCommandBuffer cmd, VanKShaderStageFlags stageFlags, uint32_t slot, const void* data, uint32_t dataSize) = 0;
         virtual void Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) = 0;
         virtual void DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) = 0;
-        virtual void DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
-        virtual void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
+        virtual void DrawIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                       uint32_t maxDrawCount, uint32_t stride) = 0;
+        virtual void DrawIndexedIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                              uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
         virtual void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
-        virtual void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
+        virtual void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
+                                                uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;
-        virtual void SubmitRendering(VanKCommandBuffer cmd) = 0;
-        virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {}, std::span<Ref<IndirectBuffer>> countBuffers = {}) = 0;
+        virtual void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage) = 0;
+        virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {},
+                                                  std::span<Ref<IndirectBuffer>> countBuffers = {}) = 0;
         virtual void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
         virtual void EndComputePass(VanKComputePass* computePass) = 0;
-        virtual void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs) = 0;
-        virtual void updateTopLevelAS(const glm::mat4 &model) = 0;
-        virtual int32_t ReadEntityIDAtPixel(uint32_t x, uint32_t y) = 0;
+        // RenderGraph
+        virtual void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) = 0;
+        // RenderGraph
+        virtual void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives,
+                                                  std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs) = 0;
+        virtual void updateTopLevelAS(const glm::mat4& model) = 0;
+        virtual int32_t ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;
         virtual void setEnableTimeStamp(bool temp) = 0;
         virtual bool getEnableTimeStamp() = 0;
@@ -512,16 +638,18 @@ namespace VanK
         virtual void StartTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) = 0;
         virtual void StopTimeStamp(VanKCommandBuffer cmd, VanKTimestampPass& pass) = 0;
         //---------
-        
+
         static RenderAPIType GetAPI() { return s_API; }
         static void SetAPI(RenderAPIType api) { s_API = api; }
-        
+
         // --- New: Configuration ---
-        struct Config {
+        struct Config
+        {
             SDL_Window* window = nullptr;
         };
-        
+
         static std::unique_ptr<RendererAPI> Create(const Config& config);
+
     private:
         static RenderAPIType s_API;
     };

@@ -7,8 +7,9 @@
 [[vk::binding(0,2)]]
 RaytracingAccelerationStructure accelerationStructure;
 
-/* RWTexture2D<float4> image;
-struct CameraProperties
+[[vk::binding(1,2)]]
+RWTexture2D<float4> image;
+/*struct CameraProperties
 {
 	float4x4 viewInverse;
 	float4x4 projInverse;

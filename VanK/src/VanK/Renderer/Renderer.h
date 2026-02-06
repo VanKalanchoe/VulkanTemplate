@@ -68,7 +68,7 @@ namespace VanK
         static bool GetVSync() { return vSync; };
         static void QueVSyncChange(bool vSyncTemp) { vSync = vSyncTemp; s_VSyncChangeRequested = true; };
         static bool GetIsEditor() { return isEditor; }
-        static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); }
+        static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); CreateRenderTargets();}
         static void SetWindowMinimized(bool minimized) { windowMinimized = minimized; }
         static bool isWindowMinimized() { return windowMinimized; }
         static void SetLineWidth(float lineWidth) { m_LineWidth = lineWidth; }
@@ -81,12 +81,14 @@ namespace VanK
         static Ref<Texture2D>& getPinkTexture() { return pinkTexture; };
         inline static VanKTimestampPass computeCommandTask;
         inline static VanKTimestampPass renderPassMesh;
+        static void CreateRenderTargets();
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
                                                      VanKRaytracingPipelineSpecification* raytracingSpec, VanKPipeLine* pipeline, VanKShaderStageFlags flag);
         static void WatchShaderFiles();
         static void ReloadPipelines();
+        
         
     private:
         inline static bool isEditor = true; //remove from here
@@ -99,6 +101,15 @@ namespace VanK
         inline static VanKCullModeFlags cullMode = VanK_CULL_MODE_BACK_BIT;
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
+    public:
+        inline static Ref<RenderTargetImage> sceneImage; // resolve 
+        inline static Ref<RenderTargetImage> colorImage; // msaa
+        inline static Ref<RenderTargetImage> depthImage; // depth
+        inline static Ref<RenderTargetImage> entityImage; // resolve 
+        inline static Ref<RenderTargetImage> entityColorImage; // msaa
+    private:
+        
+        
         inline static VanKSamplerInfo skyboxSampler;
         
         // Graphics Pipelines
