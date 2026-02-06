@@ -185,6 +185,11 @@ namespace VanK
         {
             if (s_RendererAPI) s_RendererAPI->DrawMeshTasksIndirectCount(cmd, indirectBuffer, indirectBufferOffset, countBuffer, countBufferOffset, maxDrawCount, stride);
         }
+        
+        static void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height)
+        {
+            if (s_RendererAPI) s_RendererAPI->TraceRays(cmd, width, height);
+        }
 
         static void EndRendering(VanKCommandBuffer cmd)
         {

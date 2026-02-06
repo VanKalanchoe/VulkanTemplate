@@ -616,6 +616,7 @@ namespace VanK
         virtual void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
                                                 uint32_t maxDrawCount, uint32_t stride) = 0;
+        virtual void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;
         virtual void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage) = 0;
         virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {},

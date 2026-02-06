@@ -789,71 +789,6 @@ namespace VanK
             }
             return "";
         }
-
-        /*--
-         * GBuffer creation info
-        -*/
-        struct GbufferCreateInfo
-        {
-        };
-
-        /*-
-         * GBuffer - Multiple render targets with depth management
-        -*/
-        class GBuffer
-        {
-            GBuffer() = default;
-
-            ~GBuffer()
-            {
-                /*assert(m_createInfo.device == VK_NULL_HANDLE && "Missing deinit()");*/
-            }
-
-            /*--
-             * Initialize the GBuffer with the specified configuration.
-            -*/
-            void init(const vk::raii::CommandBuffer& cmd, const GbufferCreateInfo& createInfo)
-            {
-                /*ASSERT(m_createInfo.color.empty(), "Missing deinit()");*/
-                // The buffer must be cleared before creating a new one
-                m_createInfo = createInfo; // Copy the creation info
-                create(cmd);
-            }
-
-            // Destroy internal resources and reset its initial state
-            void deinit()
-            {
-                destroy();
-                /**this = {};*/
-            }
-
-        private:
-            void create(const vk::raii::CommandBuffer& cmd)
-            {
-            }
-
-            void destroy()
-            {
-            }
-
-            /*--
-             * Resources holds all Vulkan objects for the GBuffer
-             * This separation makes it easier to cleanup and recreate resources
-            -*/
-            struct Resources
-            {
-                /*std::vector<utils::Image> gBufferColor{}; // Color attachments
-                utils::Image gBufferDepth{}; // Optional depth attachment
-                VkImageView depthView{}; // View for the depth attachment
-                std::vector<VkDescriptorImageInfo> descriptor{}; // Descriptor info for each color attachment
-                std::vector<VkImageView> uiImageViews{}; // Special views for ImGui (alpha=1)*/
-            };
-
-            Resources m_res; // All Vulkan resources
-
-            GbufferCreateInfo m_createInfo{}; // Configuration
-            std::vector<VkDescriptorSet> m_descriptorSet{}; // ImGui descriptor sets
-        };
     }
 
     /*--
@@ -956,24 +891,6 @@ namespace VanK
         }
     };
 
-    /*const std::vector<Vertex> vertices = {
-        {{-0.5f, -0.5f, 0.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f, 0.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, 0.5f, 0.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, 0.5f, 0.0f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}},
-    
-        {{-0.5f, -0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
-        {{0.5f, -0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
-        {{0.5f, 0.5f, -0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
-        {{-0.5f, 0.5f, -0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
-    };
-    
-    const std::vector<uint16_t> indices = {
-        0, 1, 2, 2, 3, 0,
-        4, 5, 6, 6, 7, 4
-    };*/
-
-
     class VulkanRendererAPI : public RendererAPI
     {
     public:
@@ -1034,6 +951,7 @@ namespace VanK
         void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
                                         uint32_t maxDrawCount, uint32_t stride) override;
+        void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height) override;
         void EndRendering(VanKCommandBuffer cmd) override;
         void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1) override;
         VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers) override;
@@ -1124,37 +1042,14 @@ namespace VanK
         vk::SurfaceFormatKHR swapChainSurfaceFormat;
         vk::Extent2D swapChainExtent;
         std::vector<vk::raii::ImageView> swapChainImageViews;
-
-        vk::raii::PipelineLayout* pipelineLayout = nullptr;
-        vk::raii::Pipeline* graphicsPipeline = nullptr;
-
-       
-
+        
         vk::Extent2D viewport;
-        vma::raii::Image sceneImage = nullptr;
-        vk::raii::ImageView sceneImageView = nullptr;
-
-        vma::raii::Image colorImage = nullptr;
-        vk::raii::ImageView colorImageView = nullptr;
-
-        vma::raii::Image depthImage = nullptr;
-        vk::raii::ImageView depthImageView = nullptr;
-
-        vma::raii::Image entityImage = nullptr;
-        vk::raii::ImageView entityImageView = nullptr;
-
-        vma::raii::Image entityColorImage = nullptr; // MSAA entity color image (like colorImage)
-        vk::raii::ImageView entityColorImageView = nullptr; // View for MSAA entity color
-
+  
         vma::raii::Image raytraceStorageImage = nullptr;
         vk::raii::ImageView raytraceStorageImageView = nullptr;
-
+        
         SamplerPool m_samplerPool;
-        vk::Sampler linearSampler = nullptr;
 
-    public: //change this to priavte later ebcause of vulkantexture class getimtextureid
-        /*vk::Sampler textureSampler = nullptr;*/
-    private:
         vk::raii::DescriptorPool descriptorPool = nullptr;
         vk::raii::DescriptorPool uiDescriptorPool = nullptr; // imgui 
         vk::raii::DescriptorPool raytraceDescriptorPool = nullptr; // acceleration structure 
@@ -1245,26 +1140,16 @@ namespace VanK
         void createDynamicDispatcher();
 
         void createSwapChain();
-
-        //change this ? from chapter image view
+        
         void createImageViews();
 
         void createCommandPool();
-
-        void createSceneResources();
-
-        void createColorResources();
-
-        void createDepthResources();
-        void createEntityResources();
-        void createEntityColorResources();
+        
         void createRaytraceStorageImageResources();
 
         vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
                                        vk::FormatFeatureFlags features) const;
-
         
-
         static bool hasStencilComponent(vk::Format format);
 
     public: //temp public
@@ -1272,26 +1157,16 @@ namespace VanK
                              uint32_t mipLevels, uint32_t layerCount = 1);
 
     private:
-        void createTextureSampler();
-        
+        //temp raytracer
         vk::raii::ImageView createImageView(vk::raii::Image& image, vk::Format format, vk::ImageAspectFlags aspectFlags,
                                             uint32_t mipLevels, uint32_t layerCount = 1, vk::ImageViewType viewType = vk::ImageViewType::e2D);
-
-    private:
-    public: //temp public
-        void createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples,
-                         vk::Format format, vk::ImageTiling tiling,
-                         vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
-                         vk::raii::DeviceMemory& imageMemory);
-
-    private:
+        
         void createDescriptorPool();
 
         void createDescriptorSets();
 
         void updateGraphicsDescriptorSet();
-
-    private:
+        
         uint32_t findMemoryType(uint32_t typeFilter, vk::MemoryPropertyFlags properties);
 
         void createCommandBuffers();
@@ -1590,5 +1465,22 @@ namespace VanK
         case VanK_FORMAT_INVALID: return vk::Format::eUndefined;
         default: return vk::Format::eUndefined;
         }
+    }
+
+    inline vk::SampleCountFlagBits ConvertToVKSampleCount(VanKSampleCountFlagBits sampleCountEnum, vk::SampleCountFlags maxSamplesSupported)
+    {
+        // Map enum to actual numeric sample count
+        uint32_t sampleCount = 1u << static_cast<uint32_t>(sampleCountEnum); // 0 -> 1, 1 -> 2, 2 -> 4, 3 -> 8, etc.
+
+        // Find the highest supported sample count <= requested
+        if (sampleCount >= 64 && (maxSamplesSupported & vk::SampleCountFlagBits::e64)) return vk::SampleCountFlagBits::e64;
+        if (sampleCount >= 32 && (maxSamplesSupported & vk::SampleCountFlagBits::e32)) return vk::SampleCountFlagBits::e32;
+        if (sampleCount >= 16 && (maxSamplesSupported & vk::SampleCountFlagBits::e16)) return vk::SampleCountFlagBits::e16;
+        if (sampleCount >= 8  && (maxSamplesSupported & vk::SampleCountFlagBits::e8))  return vk::SampleCountFlagBits::e8;
+        if (sampleCount >= 4  && (maxSamplesSupported & vk::SampleCountFlagBits::e4))  return vk::SampleCountFlagBits::e4;
+        if (sampleCount >= 2  && (maxSamplesSupported & vk::SampleCountFlagBits::e2))  return vk::SampleCountFlagBits::e2;
+
+        // fallback
+        return vk::SampleCountFlagBits::e1;
     }
 }

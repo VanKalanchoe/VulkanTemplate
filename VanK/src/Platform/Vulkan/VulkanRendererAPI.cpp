@@ -82,14 +82,8 @@ namespace VanK
         viewport = swapChainExtent;
         createImageViews();
         createCommandPool();
-        createSceneResources();
-        createColorResources();
-        createDepthResources();
-        createEntityResources();
-        createEntityColorResources();
         createRaytraceStorageImageResources();
         m_samplerPool.init(device);
-        createTextureSampler(); // maybe integrate into texture class ? so every texture has a reference to it ? or maybe every texture has its own sampler idk
         createDescriptorPool();
         createDescriptorSets();
         createCommandBuffers();
@@ -105,9 +99,6 @@ namespace VanK
         /*IMGUI_CHECKVERSION();
         ImGui::CreateContext();
         ImGui::StyleColorsDark();*/
-
-        const vk::SamplerCreateInfo info{.magFilter = vk::Filter::eLinear, .minFilter = vk::Filter::eLinear};
-        linearSampler = m_samplerPool.acquireSampler(info);
 
         ImGui_ImplSDL3_InitForVulkan(window);
         static VkFormat imageFormats[] = {static_cast<VkFormat>(swapChainSurfaceFormat.format)};
@@ -132,18 +123,6 @@ namespace VanK
         ImGui_ImplVulkan_Init(&initInfo);
 
         ImGui::GetIO().ConfigFlags = ImGuiConfigFlags_DockingEnable | ImGuiConfigFlags_ViewportsEnable;
-
-        /*// Descriptor Set for ImGUI
-        uiDescriptorSet.resize(1);
-        if ((ImGui::GetCurrentContext() != nullptr) && ImGui::GetIO().BackendPlatformUserData != nullptr)
-        {
-            for (size_t d = 0; d < 1; ++d) // this is how many color attachments i have for now only color
-            {
-                uiDescriptorSet[d] = ImGui_ImplVulkan_AddTexture(linearSampler, *sceneImageView,
-                                                                 static_cast<VkImageLayout>(
-                                                                     vk::ImageLayout::eShaderReadOnlyOptimal));
-            }
-        }*/
     }
 
     void VulkanRendererAPI::cleanupSwapChain()
@@ -159,22 +138,7 @@ namespace VanK
         m_images.clear();
         
         m_RenderTargetImages.clear();
-
-        sceneImage.clear();
-        sceneImageView.clear();
-
-        colorImage.clear();
-        colorImageView.clear();
-
-        depthImage.clear();
-        depthImageView.clear();
-
-        entityColorImage.clear();
-        entityColorImageView.clear();
-
-        entityImage.clear();
-        entityImageView.clear();
-
+        
         raytraceStorageImage.clear();
         raytraceStorageImageView.clear();
 
@@ -518,8 +482,7 @@ namespace VanK
 
         swapChainImages = swapChain.getImages();
     }
-
-    //change this ? from chapter image view
+    
     void VulkanRendererAPI::createImageViews()
     {
         assert(swapChainImageViews.empty());
@@ -2057,6 +2020,11 @@ namespace VanK
         Unwrap(cmd).drawMeshTasksIndirectCountEXT(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
+    void VulkanRendererAPI::TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height)
+    {
+        Unwrap(cmd).traceRaysKHR(m_raygenRegion, m_missRegion, m_hitRegion, m_callableRegion, width, height, 1);
+    }
+
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
     {
         Unwrap(cmd).endRendering();
@@ -2343,114 +2311,7 @@ namespace VanK
         commandPool = vk::raii::CommandPool(device, poolInfo);
         DBG_VK_NAME(*commandPool);
     }
-
-    void VulkanRendererAPI::createSceneResources()
-    {
-        vk::Format colorFormat = swapChainSurfaceFormat.format;
-        // single-sampled and SAMPLED
-
-        vk::ImageCreateInfo imageInfo
-        {
-            .imageType = vk::ImageType::e2D, .format = colorFormat,
-            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
-            .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-
-        sceneImage = m_allocator.createImage(imageInfo).image;
-
-        DBG_VK_NAME(*sceneImage);
-
-        sceneImageView = createImageView(sceneImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
-        DBG_VK_NAME(*sceneImageView);
-    }
-
-    void VulkanRendererAPI::createColorResources()
-    {
-        vk::Format colorFormat = swapChainSurfaceFormat.format;
-
-        vk::ImageCreateInfo imageInfo
-        {
-            .imageType = vk::ImageType::e2D, .format = colorFormat,
-            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
-            .samples = msaaSamples, .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-
-        colorImage = m_allocator.createImage(imageInfo).image;
-
-        DBG_VK_NAME(*colorImage);
-
-        colorImageView = createImageView(colorImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
-        DBG_VK_NAME(*colorImageView);
-    }
-
-    void VulkanRendererAPI::createDepthResources()
-    {
-        vk::Format depthFormat = findDepthFormat();
-
-        vk::ImageCreateInfo imageInfo
-        {
-            .imageType = vk::ImageType::e2D, .format = depthFormat,
-            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
-            .samples = msaaSamples, .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eDepthStencilAttachment,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-
-        depthImage = m_allocator.createImage(imageInfo).image;
-
-        DBG_VK_NAME(*depthImage);
-
-        depthImageView = createImageView(depthImage, depthFormat, vk::ImageAspectFlagBits::eDepth, 1);
-        DBG_VK_NAME(*depthImageView);
-    }
-
-    void VulkanRendererAPI::createEntityResources()
-    {
-        vk::Format colorFormat = vk::Format::eR32Sint;
-        // single-sampled and SAMPLED
-
-        vk::ImageCreateInfo imageInfo
-        {
-            .imageType = vk::ImageType::e2D, .format = colorFormat,
-            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
-            .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-
-        entityImage = m_allocator.createImage(imageInfo).image;
-
-        DBG_VK_NAME(*entityImage);
-
-        entityImageView = createImageView(entityImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
-        DBG_VK_NAME(*entityImageView);
-    }
-
-    void VulkanRendererAPI::createEntityColorResources()
-    {
-        vk::Format colorFormat = vk::Format::eR32Sint;
-
-        vk::ImageCreateInfo imageInfo
-        {
-            .imageType = vk::ImageType::e2D, .format = colorFormat,
-            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
-            .samples = msaaSamples, .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-
-        entityColorImage = m_allocator.createImage(imageInfo).image;
-
-        DBG_VK_NAME(*entityColorImage);
-
-        entityColorImageView = createImageView(entityColorImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
-        DBG_VK_NAME(*entityColorImageView);
-    }
-
+    
     void VulkanRendererAPI::createRaytraceStorageImageResources()
     {
         vk::Format colorFormat = vk::Format::eR8G8B8A8Unorm;
@@ -2598,30 +2459,7 @@ namespace VanK
 
         return vk::SampleCountFlagBits::e1;
     }
-
-    void VulkanRendererAPI::createTextureSampler()
-    {
-        /*vk::PhysicalDeviceProperties properties = physicalDevice.getProperties();
-        vk::SamplerCreateInfo samplerInfo
-        {
-            .magFilter = vk::Filter::eLinear,
-            .minFilter = vk::Filter::eLinear,
-            .mipmapMode = vk::SamplerMipmapMode::eLinear,
-            .addressModeU = vk::SamplerAddressMode::eRepeat,
-            .addressModeV = vk::SamplerAddressMode::eRepeat,
-            .addressModeW = vk::SamplerAddressMode::eRepeat,
-            .mipLodBias = 0.0f, // only works if it has enoug miplevels is miplevel is max 1 then making this 10 crashes
-            .anisotropyEnable = vk::True,
-            .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
-            .compareEnable = vk::False,
-            .compareOp = vk::CompareOp::eAlways,
-            .minLod = 0.0f, // the higher this is the lower the resolution 0 is max res
-            .maxLod = VK_LOD_CLAMP_NONE
-        };
-        /*textureSampler = vk::raii::Sampler(device, samplerInfo);#1#
-        textureSampler = m_samplerPool.acquireSampler(samplerInfo);*/
-    }
-
+    
     vk::raii::ImageView VulkanRendererAPI::createImageView(vk::raii::Image& image, vk::Format format,
                                                            vk::ImageAspectFlags aspectFlags,
                                                            uint32_t mipLevels, uint32_t layerCount, vk::ImageViewType viewType)
@@ -2635,32 +2473,7 @@ namespace VanK
         };
         return vk::raii::ImageView(device, viewInfo);
     }
-
-    void VulkanRendererAPI::createImage(uint32_t width, uint32_t height, uint32_t mipLevels, vk::SampleCountFlagBits numSamples,
-                                        vk::Format format, vk::ImageTiling tiling,
-                                        vk::ImageUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Image& image,
-                                        vk::raii::DeviceMemory& imageMemory)
-    {
-        vk::ImageCreateInfo imageInfo
-        {
-            .imageType = vk::ImageType::e2D, .format = format,
-            .extent = {width, height, 1}, .mipLevels = mipLevels, .arrayLayers = 1,
-            .samples = numSamples, .tiling = tiling,
-            .usage = usage, .sharingMode = vk::SharingMode::eExclusive
-        };
-
-        image = vk::raii::Image(device, imageInfo);
-
-        vk::MemoryRequirements memRequirements = image.getMemoryRequirements();
-        vk::MemoryAllocateInfo allocInfo{
-            .allocationSize = memRequirements.size,
-            .memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties)
-        };
-        imageMemory = vk::raii::DeviceMemory(device, allocInfo);
-        image.bindMemory(imageMemory, 0);
-    }
-
-
+    
     void VulkanRendererAPI::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
     {
         vk::BufferCreateInfo bufferInfo{
@@ -2683,27 +2496,6 @@ namespace VanK
         bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
         buffer.bindMemory(bufferMemory, 0);
     }
-
-    /*void VulkanRendererAPI::createInstanceLUTBuffer()
-    {
-#if LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
-        // TASK09: build a buffer to store the instance look-up table
-        vk::DeviceSize bufferSize = sizeof(InstanceLUT) * instanceLUTs.size();
-
-        vk::raii::Buffer       stagingBuffer({});
-        vk::raii::DeviceMemory stagingBufferMemory({});
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
-
-        void *dataStaging = stagingBufferMemory.mapMemory(0, bufferSize);
-        memcpy(dataStaging, instanceLUTs.data(), bufferSize);
-        stagingBufferMemory.unmapMemory();
-
-        createBuffer(bufferSize, vk::BufferUsageFlagBits::eTransferDst | vk::BufferUsageFlagBits::eStorageBuffer,
-                     vk::MemoryPropertyFlagBits::eDeviceLocal, instanceLUTBuffer, instanceLUTBufferMemory);
-
-        copyBuffer(stagingBuffer, instanceLUTBuffer, bufferSize);
-#endif        // LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
-    }*/
 
     void VulkanRendererAPI::createAccelerationStructures
     (
