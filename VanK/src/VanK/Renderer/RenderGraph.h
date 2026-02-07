@@ -8,12 +8,22 @@
 
 namespace VanK
 {
+    struct Subpass
+    {
+        std::string name;
+        std::function<void()> execute;
+    };
+
     struct Pass
     {
         std::string name;
-        std::vector<ResourceReadWrite>  reads;
+        std::vector<ResourceReadWrite> reads;
         std::vector<ResourceReadWrite> writes;
         std::function<void()> execute;
+
+        std::vector<Subpass> subpasses;
+
+        Subpass& AddSubpass(const std::string& name, std::function<void()> fn);
     };
 
     struct Edge
@@ -23,7 +33,7 @@ namespace VanK
         ResourceUsage usage;
         bool isRead; // true = read, false = write
     };
-    
+
     class RenderGraph
     {
     public:
@@ -33,7 +43,7 @@ namespace VanK
         void Execute(VanKCommandBuffer cmd);
         void Reset();
         void DumpGraphviz(const std::string& filename) const;
-        
+
     private:
         std::vector<Pass> passes;
         std::vector<std::vector<Edge>> edges;

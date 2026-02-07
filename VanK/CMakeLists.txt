@@ -24,6 +24,7 @@ find_package (yaml-cpp CONFIG REQUIRED)
 find_package (box2d CONFIG REQUIRED)
 find_package(meshoptimizer CONFIG REQUIRED)
 find_package(fastgltf CONFIG REQUIRED)
+find_package( GameNetworkingSockets )
 
 include(FetchContent)
 
@@ -183,5 +184,5 @@ add_chapter(
     #SHADER shaderIO.h QuadShader.slang DrawIndirectShader.slang
     #MODELS
     #TEXTURES texture.jpg viking_room2.ktx2
-    LIBS Vulkan::cppm SDL3::SDL3 glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf
+    LIBS Vulkan::cppm SDL3::SDL3 glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf GameNetworkingSockets::static
 )

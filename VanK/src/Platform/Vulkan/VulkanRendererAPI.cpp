@@ -2130,7 +2130,7 @@ namespace VanK
                     vk::ImageAspectFlagBits::eColor
                 );
 
-                vk::ImageSubresourceLayers subresource{};
+                vk::ImageSubresourceLayers subresource;
                 subresource.aspectMask = vk::ImageAspectFlagBits::eColor;
                 subresource.baseArrayLayer = 0;
                 subresource.layerCount = 1;

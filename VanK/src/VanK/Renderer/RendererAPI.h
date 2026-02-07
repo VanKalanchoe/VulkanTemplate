@@ -435,7 +435,8 @@ namespace VanK
     enum class ResourceType : uint8_t
     {
         Image,
-        Buffer
+        Buffer,
+        Dummy
     };
 
     struct ResourceID
@@ -447,6 +448,8 @@ namespace VanK
             VanKBuffer* buffer;  // for buffers
         };
 
+        ResourceID() : type(ResourceType::Dummy), buffer(0) {}
+        
         static ResourceID Image(uint32_t idx)
         {
             ResourceID id;
@@ -462,16 +465,31 @@ namespace VanK
             id.buffer = buf;
             return id;
         }
+        
+        static ResourceID Dummy()
+        {
+            ResourceID id;
+            id.type = ResourceType::Dummy;
+            id.index = 0;
+            return id;
+        }
 
         bool operator==(const ResourceID& other) const
         {
             if (type != other.type) return false;
-            return type == ResourceType::Image ? index == other.index : buffer == other.buffer;
+            switch (type)
+            {
+            case ResourceType::Image: return index == other.index;
+            case ResourceType::Buffer: return buffer == other.buffer;
+            case ResourceType::Dummy: return true; // all Dummy resources considered equal
+            }
+            return false;
         }
     };
 
     struct ResourceReadWrite
     {
+        std::string name;
         ResourceID id;
         ResourceUsage usage;
         std::optional<ResourceUsage> finalUsage;

@@ -16,6 +16,7 @@
     "freetype",
     "skia",
     "meshoptimizer",
-    "fastgltf"
+    "fastgltf",
+    "gamenetworkingsockets"
   ]
 } 
