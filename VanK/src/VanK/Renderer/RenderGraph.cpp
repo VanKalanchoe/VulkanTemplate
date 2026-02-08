@@ -25,23 +25,28 @@ namespace VanK
 {
     ResourceState StateFromUsage(ResourceUsage usage)
     {
+        // Layout for images
+        // Stage for Buffers
+        // maybe i should seperate resourcestate _> iamgestage bufferstate since buffers dont have transfersrc transfer dts only transferstage
         switch (usage)
         {
-        case ResourceUsage::ComputeRead: return {ResourceState::Stage::Compute, ResourceState::Access::ShaderRead, ResourceState::Layout::General};
-        case ResourceUsage::ComputeWrite: return {ResourceState::Stage::Compute, ResourceState::Access::ShaderWrite, ResourceState::Layout::General};
-        case ResourceUsage::ColorAttachment: return {ResourceState::Stage::ColorOutput, ResourceState::Access::ColorWrite, ResourceState::Layout::ColorAttachment};
-        case ResourceUsage::DepthAttachment: return {ResourceState::Stage::DepthOutput, ResourceState::Access::DepthWrite, ResourceState::Layout::DepthAttachment};
-        case ResourceUsage::ShaderRead: return {ResourceState::Stage::Fragment, ResourceState::Access::ShaderRead, ResourceState::Layout::ShaderReadOnly};
-        case ResourceUsage::TransferSrc: return {ResourceState::Stage::Transfer, ResourceState::Access::TransferRead, ResourceState::Layout::TransferSrc};
-        case ResourceUsage::TransferDst: return {ResourceState::Stage::Transfer, ResourceState::Access::TransferWrite, ResourceState::Layout::TransferDst};
-        case ResourceUsage::IndirectRead: return {ResourceState::Stage::DrawIndirect, ResourceState::Access::IndirectRead, ResourceState::Layout::General};
+        case ResourceUsage::ComputeRead: return {ResourceState::Stage::Compute, ResourceState::Layout::General};
+        case ResourceUsage::ComputeWrite: return {ResourceState::Stage::Compute, ResourceState::Layout::General};
+        case ResourceUsage::ColorAttachment: return {ResourceState::Stage::None, ResourceState::Layout::ColorAttachment};
+        case ResourceUsage::DepthAttachment: return {ResourceState::Stage::None, ResourceState::Layout::DepthAttachment};
+        case ResourceUsage::ShaderRead: return {ResourceState::Stage::Fragment, ResourceState::Layout::ShaderReadOnly};
+        case ResourceUsage::TransferSrc: return {ResourceState::Stage::Transfer, ResourceState::Layout::TransferSrc};
+        case ResourceUsage::TransferDst: return {ResourceState::Stage::Transfer,  ResourceState::Layout::TransferDst};
+        case ResourceUsage::IndirectRead: return {ResourceState::Stage::DrawIndirect, ResourceState::Layout::General};
+        case ResourceUsage::StorageRead: return {ResourceState::Stage::None,  ResourceState::Layout::General };
+        case ResourceUsage::StorageWrite: return {ResourceState::Stage::None, ResourceState::Layout::General }; 
         }
         return {};
     }
 
     inline bool operator==(const ResourceState& a, const ResourceState& b)
     {
-        return a.stage == b.stage && a.access == b.access && a.layout == b.layout;
+        return a.stage == b.stage && a.layout == b.layout;
     }
 
     inline bool operator!=(const ResourceState& a, const ResourceState& b)

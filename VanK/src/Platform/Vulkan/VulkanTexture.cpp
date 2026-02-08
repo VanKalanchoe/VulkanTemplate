@@ -372,7 +372,7 @@ namespace VanK
             return; // No textures to remove
         }
         
-        instance.waitForGraphicsQueueIdle();
+        /*instance.waitForGraphicsQueueIdle();*/
             
         // Only remove handle if ImGui Vulkan is still alive
         if (m_ImGuiHandle && instance.isImGuiInit())
@@ -455,6 +455,25 @@ namespace VanK
             format = instance.findDepthFormat();
         else
             format = (specification.Format != ImageFormat::None) ? ConvertImageFormat(specification.Format) : instance.getSwapchainFormat().format;
+        
+        vk::ImageUsageFlags usage;
+        if (specification.depthImage)
+        {
+            usage = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+        }
+        else if (specification.isResolveImage)
+        {
+            usage = vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment;
+        }
+        else
+        {
+            usage = vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc;
+        }
+        
+        if (specification.isStorageImage)
+        {
+            usage |= vk::ImageUsageFlagBits::eStorage;
+        }
 
         // Create the texture image
         vk::ImageCreateInfo imageInfo
@@ -462,7 +481,7 @@ namespace VanK
             .imageType = vk::ImageType::e2D, .format = format,
             .extent = {specification.Width, specification.Height, 1}, .mipLevels = 1, .arrayLayers = 1,
             .samples = ConvertToVKSampleCount(specification.SampleCount, instance.getMaxUsableSampleCount()), .tiling = vk::ImageTiling::eOptimal,
-            .usage = (specification.depthImage) ? vk::ImageUsageFlagBits::eDepthStencilAttachment : (specification.isResolveImage) ? vk::ImageUsageFlagBits::eTransientAttachment | vk::ImageUsageFlagBits::eColorAttachment  : vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
+            .usage = usage,
             .sharingMode = vk::SharingMode::eExclusive
         };
 

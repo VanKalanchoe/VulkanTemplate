@@ -91,7 +91,7 @@ namespace VanK
         
         
     private:
-        inline static bool isEditor = true; //remove from here
+        inline static bool isEditor = false; //remove from here
         inline static bool vSync = false;
         inline static bool s_VSyncChangeRequested = false;
         inline static bool windowMinimized = false;
@@ -107,6 +107,7 @@ namespace VanK
         inline static Ref<RenderTargetImage> depthImage; // depth
         inline static Ref<RenderTargetImage> entityImage; // resolve 
         inline static Ref<RenderTargetImage> entityColorImage; // msaa
+        inline static Ref<RenderTargetImage> rayTracingImage; // rayTracing Storage Image
     private:
         
         

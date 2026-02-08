@@ -185,7 +185,7 @@ namespace VanK
             case vk::ImageLayout::eTransferSrcOptimal:
                 return std::make_tuple(vk::PipelineStageFlagBits2::eTransfer, vk::AccessFlagBits2::eTransferRead);
             case vk::ImageLayout::eGeneral:
-                return std::make_tuple(vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eTransfer,
+                return std::make_tuple(vk::PipelineStageFlagBits2::eComputeShader | vk::PipelineStageFlagBits2::eRayTracingShaderKHR | vk::PipelineStageFlagBits2::eTransfer,
                                        vk::AccessFlagBits2::eMemoryRead | vk::AccessFlagBits2::eMemoryWrite |
                                        vk::AccessFlagBits2::eTransferWrite);
             case vk::ImageLayout::ePresentSrcKHR:
@@ -933,7 +933,8 @@ namespace VanK
         void BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline) override;
         void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) override;
         void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info) override;
-        void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) override;
+        void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing = false) override;
+        void BindRayTracing(VanKCommandBuffer cmd, uint32_t renderTargetImageIndex);
         void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport) override;
         void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) override;
         void SetLineWidth(VanKCommandBuffer cmd, float lineWidth) override;
@@ -960,7 +961,7 @@ namespace VanK
         void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) override;
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
         void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives,
-                                          std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
+                                          std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs, uint32_t renderTargetImageIndex) override;
         void updateTopLevelAS(const glm::mat4& model) override;
         void copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size);
 
@@ -979,6 +980,7 @@ namespace VanK
 
         vk::PipelineLayout m_currentGraphicPipelineLayout;
         vk::PipelineLayout m_currentComputePipelineLayout;
+        vk::PipelineLayout m_currentRaytracingPipelineLayout;
 
         void RebuildSwapchain(bool vSyncVal) override
         {
@@ -1001,8 +1003,6 @@ namespace VanK
         {
             device.waitIdle();
             viewport = vk::Extent2D{viewportSize.width, viewportSize.height};
-            /*recreateImages();*/
-             createRaytraceStorageImageResources();
         }
 
         void SetImGuiInit(bool init) override { imguiVulkanInitialized = init; }
@@ -1044,12 +1044,7 @@ namespace VanK
         std::vector<vk::raii::ImageView> swapChainImageViews;
         
         vk::Extent2D viewport;
-  
-        vma::raii::Image raytraceStorageImage = nullptr;
-        vk::raii::ImageView raytraceStorageImageView = nullptr;
-        
         SamplerPool m_samplerPool;
-
         vk::raii::DescriptorPool descriptorPool = nullptr;
         vk::raii::DescriptorPool uiDescriptorPool = nullptr; // imgui 
         vk::raii::DescriptorPool raytraceDescriptorPool = nullptr; // acceleration structure 
@@ -1144,8 +1139,6 @@ namespace VanK
         void createImageViews();
 
         void createCommandPool();
-        
-        void createRaytraceStorageImageResources();
 
         vk::Format findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
                                        vk::FormatFeatureFlags features) const;
@@ -1390,7 +1383,7 @@ namespace VanK
         case VanKGraphics: return vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         case VanKCompute: return vk::ShaderStageFlagBits::eCompute;
         case VanKMesh: return vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment;
-        case VanKRaytracing: return vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eMissKHR | vk::ShaderStageFlagBits::eClosestHitKHR;
+        case VanKRaytracing: return vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR;
         }
         return vk::ShaderStageFlagBits::eAll;
     }

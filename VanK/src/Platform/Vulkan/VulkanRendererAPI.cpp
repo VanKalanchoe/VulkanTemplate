@@ -26,6 +26,7 @@ printf("\n");                                                                   
 #include "VulkanShader.h"
 #include "VanK/Core/core.h"
 #include "VanK/Core/logger.h"
+#include "VanK/Renderer/Texture.h"
 
 namespace VanK
 {
@@ -82,7 +83,6 @@ namespace VanK
         viewport = swapChainExtent;
         createImageViews();
         createCommandPool();
-        createRaytraceStorageImageResources();
         m_samplerPool.init(device);
         createDescriptorPool();
         createDescriptorSets();
@@ -138,9 +138,6 @@ namespace VanK
         m_images.clear();
         
         m_RenderTargetImages.clear();
-        
-        raytraceStorageImage.clear();
-        raytraceStorageImageView.clear();
 
         // Clean up entity readback buffer
         entityReadbackBuffer.buffer.clear(); // Add this line
@@ -173,7 +170,6 @@ namespace VanK
         createDepthResources(); //depth
         createEntityResources(); //entity
         createEntityColorResources();
-        createRaytraceStorageImageResources();
         sceneImageInitialized = false;
         entityImageInitialized = false;
         entityColorImageInitialized = false;
@@ -1074,6 +1070,7 @@ namespace VanK
         std::vector<vk::PushConstantRange> vkPushConstants;
         vkPushConstants.reserve(raytracingPipelineSpecification.PipelineLayoutInfo.PushConstants.size());
         vk::ShaderStageFlags stageFlags = ConvertToVkShaderStageFlagBits(VanKRaytracing);
+        
         for (const auto pushRange : raytracingPipelineSpecification.PipelineLayoutInfo.PushConstants)
         {
             vkPushConstants.push_back(vk::PushConstantRange{stageFlags, pushRange.Offset, pushRange.Size});
@@ -1086,10 +1083,10 @@ namespace VanK
             .pushConstantRangeCount = static_cast<uint32_t>(vkPushConstants.size()),
             .pPushConstantRanges = vkPushConstants.data()
         };
-
+        
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
         DBG_VK_NAME(*tempPipelineLayout);
-
+ 
         vk::StructureChain
             <
                 vk::PhysicalDeviceProperties2,
@@ -1129,10 +1126,10 @@ namespace VanK
         resource.raytracingSpec = raytracingPipelineSpecification;
 
         auto rawHandle = *resource.pipeline; // raw VkPipeline before moving
-        m_currentGraphicPipelineLayout = *resource.layout;
+        m_currentRaytracingPipelineLayout = *resource.layout;
         m_PipelineResources.emplace(rawHandle, std::move(resource));
 
-        std::cout << "Ray tracing pipeline layout created successfully\n";
+        std::cout << "Ray tracing pipeline created successfully\n";
 
         return Wrap(rawHandle);
     }
@@ -1453,22 +1450,6 @@ namespace VanK
         }
     }
     
-    vk::AccessFlags2 AccessFromResourceState(ResourceState state)
-    {
-        using Access = ResourceState::Access;
-        switch (state.access)
-        {
-        case Access::ShaderRead:       return vk::AccessFlagBits2::eShaderRead;
-        case Access::ShaderWrite:      return vk::AccessFlagBits2::eShaderWrite;
-        case Access::ColorWrite:       return vk::AccessFlagBits2::eColorAttachmentWrite;
-        case Access::DepthWrite:       return vk::AccessFlagBits2::eDepthStencilAttachmentWrite;
-        case Access::TransferRead:     return vk::AccessFlagBits2::eTransferRead;
-        case Access::TransferWrite:    return vk::AccessFlagBits2::eTransferWrite;
-        case Access::IndirectRead:  return vk::AccessFlagBits2::eIndirectCommandRead;
-        default:                       return {};
-        }
-    }
-    
     void VulkanRendererAPI::InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired)
     {
         if (id.type == ResourceType::Image)
@@ -1520,8 +1501,8 @@ namespace VanK
             vk::PipelineStageFlags2 srcStage = StageFromResourceState(last);
             vk::PipelineStageFlags2 dstStage = StageFromResourceState(desired);
 
-            vk::AccessFlags2 srcAccess = AccessFromResourceState(last);
-            vk::AccessFlags2 dstAccess = AccessFromResourceState(desired);
+            vk::AccessFlags2 srcAccess = utils::inferAccessMaskFromStage(srcStage, true);
+            vk::AccessFlags2 dstAccess = utils::inferAccessMaskFromStage(dstStage, false);
 
             utils::cmdBufferMemoryBarrier
             (
@@ -1635,16 +1616,27 @@ namespace VanK
             return;
         }
 
-        vk::PipelineBindPoint vkBindPoint = (pipelineBindPoint == VanKPipelineBindPoint::Graphics) ? vk::PipelineBindPoint::eGraphics : vk::PipelineBindPoint::eCompute;
+        vk::PipelineBindPoint vkBindPoint = {};
 
+        switch (pipelineBindPoint)
+        {
+            case VanKPipelineBindPoint::Graphics: vkBindPoint = vk::PipelineBindPoint::eGraphics; break;
+            case VanKPipelineBindPoint::Compute: vkBindPoint = vk::PipelineBindPoint::eCompute; break;
+            case VanKPipelineBindPoint::Raytracing: vkBindPoint = vk::PipelineBindPoint::eRayTracingKHR; break;
+        default: std::cout << "[VulkanRendererAPI::BindPipeline] Invalid pipeline bind point:" << '\n'; break;
+        }
+        
         Unwrap(cmd).bindPipeline(vkBindPoint, pipelineToBind);
 
         // Update current pipeline layout for push descriptors / push constants
         if (pipelineBindPoint == VanKPipelineBindPoint::Graphics)
             m_currentGraphicPipelineLayout = layoutToBind;
-        else
+        else if (pipelineBindPoint == VanKPipelineBindPoint::Compute)
             m_currentComputePipelineLayout = layoutToBind;
+        else if (pipelineBindPoint == VanKPipelineBindPoint::Raytracing)
+            m_currentRaytracingPipelineLayout = layoutToBind;
     }
+    
 #ifndef LAB_TASK_LEVEL
 #	define LAB_TASK_LEVEL 11
 #endif
@@ -1686,6 +1678,7 @@ namespace VanK
 
         if (bindPoint == VanKPipelineBindPoint::Graphics) layout = m_currentGraphicPipelineLayout;
         if (bindPoint == VanKPipelineBindPoint::Compute) layout = m_currentComputePipelineLayout;
+        if (bindPoint == VanKPipelineBindPoint::Raytracing) layout = m_currentRaytracingPipelineLayout;
 
         VulkanUniformBuffer* vulkanUBO = dynamic_cast<VulkanUniformBuffer*>(buffer);
         if (!vulkanUBO)
@@ -1713,9 +1706,13 @@ namespace VanK
         {
             stage_flags = vk::ShaderStageFlagBits::eCompute;
         }
-        else
+        else if (bindPoint == VanKPipelineBindPoint::Graphics)
         {
             stage_flags = vk::ShaderStageFlagBits::eAllGraphics;
+        }
+        else if (bindPoint == VanKPipelineBindPoint::Raytracing)
+        {
+            stage_flags = vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR;
         }
 
         // Push layout information with updated data
@@ -1901,7 +1898,17 @@ namespace VanK
         {
             layout = m_currentComputePipelineLayout;
         }
-
+        else if (flag & (vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR |vk::ShaderStageFlagBits::eMissKHR))
+        {
+            layout = m_currentRaytracingPipelineLayout;
+        }
+        
+        if (!layout)
+        {
+            std::cout << "ERROR: PushConstants layout is NULL for raytracing!" << std::endl;
+            return;
+        }
+        
         vk::PushConstantsInfo pushConstantsInfo
         {
             .layout = layout,
@@ -2234,8 +2241,9 @@ namespace VanK
         }
     }
 
-    void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
+    void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing)
     {
+        //layout could be raytracing no or should BindRayTracing handle textures to ?
         // Ensure the descriptor set exists and the first handle is valid
         if (descriptorSets.empty())
         {
@@ -2258,20 +2266,57 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
         {
-            .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
-            .layout = m_currentGraphicPipelineLayout,
+            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics,
+            .layout = (isRayTracing) ? m_currentRaytracingPipelineLayout : m_currentGraphicPipelineLayout,
             .firstSet = 0,
             .descriptorSetCount = 1,
             .pDescriptorSets = &rawDescriptorSet,
         };
         Unwrap(cmd).bindDescriptorSets2(bindDescriptorSetsInfo);
-
+    }
+    
+    void VulkanRendererAPI::BindRayTracing(VanKCommandBuffer cmd, uint32_t renderTargetImageIndex)
+    {
         // Ensure the descriptor set exists and the first handle is valid
         if (raytraceDescriptorSet.empty())
         {
             std::cout << "Descriptor set array is empty!" << std::endl;
             return;
         }
+        
+        vk::WriteDescriptorSetAccelerationStructureKHR asInfo{
+            .accelerationStructureCount = 1,
+            .pAccelerationStructures = {&*tlas}
+        };
+
+        vk::WriteDescriptorSet asWrite{
+            .pNext = &asInfo,
+            .dstSet = raytraceDescriptorSet[0],
+            .dstBinding = 0,
+            .dstArrayElement = 0,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
+        };
+
+        vk::DescriptorImageInfo imageInfo
+        {
+            .sampler = VK_NULL_HANDLE,
+            .imageView = m_RenderTargetImages[renderTargetImageIndex].view,
+            .imageLayout = vk::ImageLayout::eGeneral
+        };
+
+        vk::WriteDescriptorSet imageWrite
+        {
+            .dstSet = raytraceDescriptorSet[0],
+            .dstBinding = 1,
+            .descriptorCount = 1,
+            .descriptorType = vk::DescriptorType::eStorageImage,
+            .pImageInfo = &imageInfo
+        };
+
+        std::array<vk::WriteDescriptorSet, 2> descriptorWrites{asWrite, imageWrite};
+
+        device.updateDescriptorSets(descriptorWrites, {});
 
         //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
         // TextureSamplerBinding is empty check rendererapi strcut
@@ -2288,8 +2333,8 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInforay =
         {
-            .stageFlags = vk::ShaderStageFlagBits::eAllGraphics,
-            .layout = m_currentGraphicPipelineLayout,
+            .stageFlags = vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
+            .layout = m_currentRaytracingPipelineLayout,
             .firstSet = 2,
             .descriptorSetCount = 1,
             .pDescriptorSets = &rawDescriptorSetRay,
@@ -2310,28 +2355,6 @@ namespace VanK
         };
         commandPool = vk::raii::CommandPool(device, poolInfo);
         DBG_VK_NAME(*commandPool);
-    }
-    
-    void VulkanRendererAPI::createRaytraceStorageImageResources()
-    {
-        vk::Format colorFormat = vk::Format::eR8G8B8A8Unorm;
-        // single-sampled and SAMPLED
-
-        vk::ImageCreateInfo imageInfo
-        {
-            .imageType = vk::ImageType::e2D, .format = colorFormat,
-            .extent = {viewport.width, viewport.height, 1}, .mipLevels = 1, .arrayLayers = 1,
-            .samples = vk::SampleCountFlagBits::e1, .tiling = vk::ImageTiling::eOptimal,
-            .usage = vk::ImageUsageFlagBits::eStorage | vk::ImageUsageFlagBits::eColorAttachment | vk::ImageUsageFlagBits::eSampled | vk::ImageUsageFlagBits::eTransferSrc,
-            .sharingMode = vk::SharingMode::eExclusive
-        };
-
-        raytraceStorageImage = m_allocator.createImage(imageInfo).image;
-
-        DBG_VK_NAME(*raytraceStorageImage);
-
-        raytraceStorageImageView = createImageView(raytraceStorageImage, colorFormat, vk::ImageAspectFlagBits::eColor, 1);
-        DBG_VK_NAME(*raytraceStorageImageView);
     }
 
     vk::Format VulkanRendererAPI::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
@@ -2503,7 +2526,8 @@ namespace VanK
         const StorageBuffer& indexBuffer,
         std::vector<shaderio::MeshletPrimitive>& primitives,
         std::vector<shaderio::Material>& materials,
-        std::vector<shaderio::InstanceLUT>& instanceLUTs
+        std::vector<shaderio::InstanceLUT>& instanceLUTs,
+        uint32_t renderTargetImageIndex
     )
     {
 #if LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
@@ -2748,7 +2772,7 @@ namespace VanK
         utils::endSingleTimeCommands(*cmd, queue);
 #endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
 
-        vk::WriteDescriptorSetAccelerationStructureKHR asInfo{
+        /*vk::WriteDescriptorSetAccelerationStructureKHR asInfo{
             .accelerationStructureCount = 1,
             .pAccelerationStructures = {&*tlas}
         };
@@ -2762,13 +2786,15 @@ namespace VanK
             .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
         };
 
-        vk::DescriptorImageInfo imageInfo{
+        vk::DescriptorImageInfo imageInfo
+        {
             .sampler = VK_NULL_HANDLE,
-            .imageView = raytraceStorageImageView,
+            .imageView = m_RenderTargetImages[renderTargetImageIndex].view,
             .imageLayout = vk::ImageLayout::eGeneral
         };
 
-        vk::WriteDescriptorSet imageWrite{
+        vk::WriteDescriptorSet imageWrite
+        {
             .dstSet = raytraceDescriptorSet[0],
             .dstBinding = 1,
             .descriptorCount = 1,
@@ -2776,9 +2802,9 @@ namespace VanK
             .pImageInfo = &imageInfo
         };
 
-        std::array<vk::WriteDescriptorSet, 2> descriptorWrites{asWrite, imageWrite};
+        std::array descriptorWrites{asWrite, imageWrite};
 
-        device.updateDescriptorSets(descriptorWrites, {});
+        device.updateDescriptorSets(descriptorWrites, {});*/
     }
 
     void VulkanRendererAPI::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
@@ -2981,7 +3007,7 @@ namespace VanK
                         .binding = 0,
                         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                         .descriptorCount = numTextures,
-                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics
+                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR
                     },
 
                     // This is if we would add another binding for the scene info, but instead we make another set, see below
@@ -3035,7 +3061,7 @@ namespace VanK
             // TASK04: The acceleration structure uses binding 1
             std::array layoutBindings =
             {
-                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute, nullptr),
+                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR, nullptr),
             };
 
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
@@ -3054,8 +3080,8 @@ namespace VanK
             // Use descriptor set 0 for global data
             // TASK04: The acceleration structure uses binding 1
             std::array layoutBindings =
-            {
-                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eFragment, nullptr),
+            {//fragmnet for rayQuerys
+                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR, nullptr),
                 vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
                                                nullptr)
             };

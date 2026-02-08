@@ -111,9 +111,14 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->BeginRendering(cmd, color_target_info, num_color_targets, depth_stencil_target_info);
         }
 
-        static void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings)
+        static void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing = false)
         {
-            if (s_RendererAPI) s_RendererAPI->BindFragmentSamplers(cmd, firstSlot, samplers, num_bindings);
+            if (s_RendererAPI) s_RendererAPI->BindFragmentSamplers(cmd, firstSlot, samplers, num_bindings, isRayTracing);
+        }
+        
+        static void BindRayTracing(VanKCommandBuffer cmd, uint32_t renderTargetImageIndex)
+        {
+            if (s_RendererAPI) s_RendererAPI->BindRayTracing(cmd, renderTargetImageIndex);
         }
         
         static void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport)
@@ -234,9 +239,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->InsertBarrier(cmd, id, last, desired);
         }
         
-        static void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs)
+        static void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs, uint32_t renderTargetImageIndex)
         {
-            if (s_RendererAPI) s_RendererAPI->createAccelerationStructures(vertexBuffer, indexBuffer, primitives, materials, instanceLUTs);
+            if (s_RendererAPI) s_RendererAPI->createAccelerationStructures(vertexBuffer, indexBuffer, primitives, materials, instanceLUTs, renderTargetImageIndex);
         }
         
         static void updateTopLevelAS(const glm::mat4 &model)

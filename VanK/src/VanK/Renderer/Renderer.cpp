@@ -136,6 +136,10 @@ namespace VanK
         glm::mat4 view{1.0f};
         glm::mat4 proj{1.0f};
         glm::mat4 viewProj{1.0f};
+        
+        glm::mat4 viewInverse{1.0f};
+        glm::mat4 projInverse{1.0f};
+        glm::mat4 viewProjInverse{1.0f};
 
         glm::mat4 frozenView{1.0f};
         glm::mat4 frozenProj{1.0f};
@@ -960,9 +964,14 @@ namespace VanK
 
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
-        scenesData.view = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * glm::inverse(transform);;
+        scenesData.view = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * glm::inverse(transform);
         scenesData.proj = camera.GetProjection();
         scenesData.viewProj = camera.GetProjection() * scenesData.view;
+        
+        scenesData.viewInverse = glm::inverse(scenesData.view);
+        scenesData.projInverse = glm::inverse(scenesData.proj);
+        scenesData.viewProjInverse = glm::inverse(scenesData.viewProj);
+        
         /*scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};*/
         scenesData.frustum = Frustum(scenesData.viewProj);
         scenesData.FrustumCullEnabled = FrustumCullEnabled;
@@ -996,6 +1005,11 @@ namespace VanK
         scenesData.view = camera.GetViewMatrix();
         scenesData.proj = camera.GetProjection();
         scenesData.viewProj = camera.GetViewProjection();
+        
+        scenesData.viewInverse = glm::inverse(scenesData.view);
+        scenesData.projInverse = glm::inverse(scenesData.proj);
+        scenesData.viewProjInverse = glm::inverse(scenesData.viewProj);
+        
         scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};
         scenesData.frustum = Frustum(scenesData.viewProj);
         scenesData.FrustumCullEnabled = FrustumCullEnabled;
@@ -1347,6 +1361,22 @@ namespace VanK
         uint32_t MaterialIndex;
         uint64_t sceneData;
     };
+    
+    struct PushConstantRayTrace
+    {
+        uint64_t sceneData;
+        uint64_t vertexBuffer;
+        uint64_t indexBuffer;
+        uint64_t meshletVerticesBuffer;
+        uint64_t meshletTrianglesBuffer;
+        uint64_t meshletBuffer;
+        uint64_t meshletPrimitives;
+        uint64_t meshDraws;
+        uint64_t materialBuffer;
+        uint64_t instanceLutBuffer;
+        uint64_t lightsBuffer;
+        uint32_t skyBoxIndex;
+    };
 
     struct ModelPrimitive
     {
@@ -1493,20 +1523,23 @@ namespace VanK
         entityImage.reset();
         entityColorImage.reset();
         depthImage.reset();
-
+        rayTracingImage.reset();
+        // since those all are renderiamges i could put viewportsize inside vulkantexture class or call it once that inits it so i dont have to
+        // provide myself here every time but this might be not needed if integrated into rendergraph
         // Create new render targets with current viewport size
         sceneImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
-        std::cout << "sceneImage created at index: " << sceneImage->GetRenderImageIndex() << " size: " << sceneImage->GetWidth() << "x" << sceneImage->GetHeight() << std::endl;
-
-        colorImage = RenderTargetImage::Create({
-            .Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .isResolveImage = true, .resolveTargetID = sceneImage->GetRenderImageIndex()
-        });
+        
+        colorImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, 
+            .SampleCount = 64, .isResolveImage = true, .resolveTargetID = sceneImage->GetRenderImageIndex()});
+        
         entityImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT});
-        entityColorImage = RenderTargetImage::Create({
-            .Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT, .SampleCount = 64, .isResolveImage = true,
-            .resolveTargetID = entityImage->GetRenderImageIndex()
-        });
+        
+        entityColorImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT,
+            .SampleCount = 64, .isResolveImage = true, .resolveTargetID = entityImage->GetRenderImageIndex()});
+        
         depthImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .depthImage = true});
+        
+        rayTracingImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::RGBA8, .isStorageImage = true});
     }
 
     void Renderer::Init(Window& window)
@@ -1713,7 +1746,7 @@ namespace VanK
 
         VanKPipelineLayoutCreateInfo rtPipelineLayoutCreateInfo
         {
-            .PushConstants = {PushConstantRange{0, sizeof(uint32_t)}}
+            .PushConstants = {PushConstantRange{0, sizeof(PushConstantRayTrace)}}
         };
 
         VanKRaytracingPipelineSpecification raytracingPipelineSpecification
@@ -1746,19 +1779,17 @@ namespace VanK
 
         whiteTexture = TextureImporter::LoadTexture2D("");
         pinkTexture = TextureImporter::LoadTexture2D("", {.defaultColor = glm::vec4(1.0f, 0.0f, 1.0f, 1.0f)});
-        vikingRoom = TextureImporter::LoadTexture2D("assets/textures/viking_room.ktx2", {.FlipTexture = true});
-        ChernoLogo = TextureImporter::LoadTexture2D("assets/textures/ChernoLogo.ktx2");
+        /*vikingRoom = TextureImporter::LoadTexture2D("assets/textures/viking_room.ktx2", {.FlipTexture = true});
+        ChernoLogo = TextureImporter::LoadTexture2D("assets/textures/ChernoLogo.ktx2");*/
         BRDF2DLUT = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/lol.ktx2", {.FlipTexture = true, .SamplerInfo = skyboxSampler});
-        /*
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/irradiance.ktx2", {.SamplerInfo = skyboxSampler});
         prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/prefilter.ktx2", {.SamplerInfo = skyboxSampler});
-        */
-        cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSky.ktx2", {.SamplerInfo = skyboxSampler});
+        /*cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSky.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyIrradiance.ktx2",
                                                        {.SamplerInfo = skyboxSampler});
         prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyPrefilter.ktx2",
-                                                      {.SamplerInfo = skyboxSampler});
+                                                      {.SamplerInfo = skyboxSampler});*/
 
         /*
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/nightSky/nightSkyCube.ktx2", {.SamplerInfo = skyboxSampler});
@@ -1806,12 +1837,13 @@ namespace VanK
         /*ModelHandle bhudda = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
         /*ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/cornell_box/scene.gltf");*/
-        ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");
+        ModelHandle cornellBox2 = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Original.gltf");
+        /*ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");*/
         /*ModelHandle plantOnTable = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/plantOnTable/Untitled.gltf");*/
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
         /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
         /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
-        runtimePlant = BuildRuntimeModel(spheres);
+        runtimePlant = BuildRuntimeModel(cornellBox2);
         //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
@@ -1988,7 +2020,7 @@ namespace VanK
             ImGui::End();
         }
 
-        RenderCommand::SubmitRendering(cmd, sceneImage->GetRenderImageIndex());
+        RenderCommand::SubmitRendering(cmd, rayTracingImage->GetRenderImageIndex());
 
         RenderCommand::EndCommandBuffer(cmd);
 
@@ -2051,8 +2083,8 @@ namespace VanK
             m_TransferBuffer->Upload(cmd, *vertexBuffer, geometry.vertices, 0, false);
 
             m_TransferBuffer->Upload(cmd, *indexBuffer, geometry.indices, 0, false);
-
-            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives, materials, instanceLUTs);
+            // note descriptor update for tlas and storageimage are inside here maybe move out once descriptor heap is implemented ashole
+            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives, materials, instanceLUTs, rayTracingImage->GetRenderImageIndex());
 
             m_TransferBuffer->Upload(cmd, *instanceLutsBuffer, instanceLUTs, 0, false);
 
@@ -2096,8 +2128,8 @@ namespace VanK
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
 
         graph.Reset();
-
-        {
+        
+        /*{
             auto& compute = graph.AddPass("Compute Mesh Tasks");
             compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
             compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite}};
@@ -2107,7 +2139,7 @@ namespace VanK
 
                 /*
                 VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, {});
-                */
+                #1#
 
                 RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
 
@@ -2122,7 +2154,7 @@ namespace VanK
                 RenderCommand::DispatchCompute({}, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
                 /*
-                RenderCommand::EndComputePass(computePass);*/
+                RenderCommand::EndComputePass(computePass);#1#
             };
         }
 
@@ -2135,6 +2167,7 @@ namespace VanK
             MeshDraw.writes =
             {
                 // can use this system to create the texture here to automate fully dont forget tho somehow needs to be able to rebuild when viewport changes
+                // check beginrendering i think depth aline is not supported currectlny because of viewport fix it
                 {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead},
                 {
                     "colorImage", ResourceID::Image(colorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
@@ -2189,7 +2222,7 @@ namespace VanK
                 //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
                 RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
 
-                /*meshTasks.clear();*/
+                /*meshTasks.clear();#1#
             });
 
             MeshDraw.AddSubpass("Sprites", []
@@ -2295,9 +2328,50 @@ namespace VanK
                     RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
                 }
             });
-        }
+        }*/
+        // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
+        auto& RayTrace = graph.AddPass("RayTracing");
+        RayTrace.reads =
+        {
+    
+        };
+        RayTrace.writes =
+        {
+            {"rayTraceImage", ResourceID::Image(rayTracingImage->GetRenderImageIndex()), ResourceUsage::StorageWrite, ResourceUsage::ShaderRead}
+        };
+        RayTrace.execute = []
+        {
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingPipeline);
+            
+            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, true);
+            
+            RenderCommand::BindRayTracing(cmd, rayTracingImage->GetRenderImageIndex());
+            
+            PushConstantRayTrace pushRayTrace
+            {
+                .sceneData = sceneBuffer->GetBufferAddress(),
+                .vertexBuffer = vertexBuffer->GetBufferAddress(),
+                .indexBuffer = indexBuffer->GetBufferAddress(),
+                .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
+                .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
+                .meshletBuffer = meshletBuffer->GetBufferAddress(),
+                .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
+                .meshDraws = meshDrawBuffer->GetBufferAddress(),
+                .materialBuffer = materialBuffer->GetBufferAddress(),
+                .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
+                .lightsBuffer = lightsBuffer->GetBufferAddress(),
+                .skyBoxIndex = cubemap->GetTextureIndex()
+            };
+            
+            RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
+            
+            RenderCommand::TraceRays(cmd, m_ViewportSize.width, m_ViewportSize.height);
+        };
 
         graph.Build();
+        // make a graph send to imgui image to render into viewprot instead of hardocing sceneimage much better i think
+        // chatpgt meine fresse sagt mann kann blittingen die hurent sotrage image von raytgracing mutter 
+        // mvoe storage image to rendertarget image in my renderer jsut neeed to add storage image flag in texture creation check that out
         //graph.DumpGraphviz("rendergraph.dot");
         graph.Execute(cmd);
 

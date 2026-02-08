@@ -24,7 +24,7 @@ struct InstanceLUT
 {
     uint32_t materialID;
     uint32_t indexBufferOffset;
-     uint32_t firstVertex;
+    uint32_t firstVertex;
 };
 
 struct Material

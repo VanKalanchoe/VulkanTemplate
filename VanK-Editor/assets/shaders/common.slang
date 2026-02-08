@@ -181,6 +181,10 @@ public struct SceneData
     public column_major float4x4 proj;
     public column_major float4x4 viewProj;
 
+    public column_major float4x4 viewInverse;
+    public column_major float4x4 projInverse;
+    public column_major float4x4 viewProjInverse;
+
     public column_major float4x4 frozenView;
     public column_major float4x4 frozenProj;
     public column_major float4x4 frozenViewProj;

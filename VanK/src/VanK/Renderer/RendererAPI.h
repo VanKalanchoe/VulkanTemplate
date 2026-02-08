@@ -423,6 +423,8 @@ namespace VanK
     {
         ComputeRead,
         ComputeWrite,
+        StorageRead,
+        StorageWrite,
         ColorAttachment,
         ResolveAttachment,
         DepthAttachment,
@@ -510,21 +512,10 @@ namespace VanK
             DepthOutput,
             Fragment,
             Transfer,
-            DrawIndirect
+            DrawIndirect,
+            RayTracing
         } stage = Stage::None;
-
-        enum class Access
-        {
-            None,
-            ShaderRead,
-            ShaderWrite,
-            IndirectRead,
-            ColorWrite,
-            DepthWrite,
-            TransferRead,
-            TransferWrite
-        } access = Access::None;
-
+        
         enum class Layout
         {
             Undefined,
@@ -539,7 +530,7 @@ namespace VanK
 
         static ResourceState Undefined()
         {
-            return {Stage::None, Access::None, Layout::Undefined};
+            return {Stage::None, Layout::Undefined};
         }
     };
 
@@ -616,7 +607,8 @@ namespace VanK
         virtual void BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline) = 0;
         virtual void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) = 0;
         virtual void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info) = 0;
-        virtual void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings) = 0;
+        virtual void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing) = 0;
+        virtual void BindRayTracing(VanKCommandBuffer cmd, uint32_t renderTargetImageIndex) = 0;
         virtual void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport) = 0;
         virtual void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) = 0;
         virtual void SetLineWidth(VanKCommandBuffer cmd, float lineWidth) = 0;
@@ -645,7 +637,7 @@ namespace VanK
         virtual void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) = 0;
         // RenderGraph
         virtual void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives,
-                                                  std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs) = 0;
+                                                  std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs, uint32_t renderTargetImageIndex) = 0;
         virtual void updateTopLevelAS(const glm::mat4& model) = 0;
         virtual int32_t ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;

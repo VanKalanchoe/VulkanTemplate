@@ -124,6 +124,8 @@ namespace VanK
         bool depthImage = false;
         bool isResolveImage = false; // do you want a resolved target
         uint32_t resolveTargetID = UINT32_MAX; // optional, ID of the resolved image
+        
+        bool isStorageImage = false; // for storage images RayTracing
     };
     
     class RenderTarget
