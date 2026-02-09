@@ -174,14 +174,6 @@ namespace VanK
         uint32_t totalCulled{0};
     };
 
-    /*struct Vertex
-    {
-        glm::vec3 position{0.0f};
-        glm::vec2 texcoords{0.0f};
-        glm::vec3 normals{0.0f};
-        glm::vec4 tangents{0.0f};
-    };*/
-
     struct Meshlet
     {
         glm::vec4 meshletBoundingSphere;
@@ -197,40 +189,6 @@ namespace VanK
         uint32_t meshletVerticesCount;
         uint32_t meshletTriangleCount;
     };
-
-    /*
-    struct MeshletPrimitive
-    {
-        uint32_t meshletOffset{0};
-        uint32_t meshletCount{0};
-        uint32_t materialIndex{0};
-        uint32_t padding1{0};
-        // {3} center, {1} radius
-        glm::vec4 boundingSphere{};
-    };*/
-
-    /*struct Material
-    {
-        uint32_t albedoTexture{0};
-        uint32_t normalTexture{0};
-        uint32_t metallicRoughnessTexture{0};
-        
-        uint32_t specularTexture{0};
-        uint32_t emissiveTexture{0};
-        uint32_t ambientOcclusionTexture{0};
-
-        glm::vec4 diffuseFactor{1};
-        float metallicFactor{1};
-        float roughnessFactor{1};
-        
-        glm::vec4 specularFactor{1};
-        glm::vec3 emissiveFactor{0};
-        float ambientOcclusionFactor{1};
-
-        bool transparent{false};
-
-        float transmissionFactor{0}; // 0 = opaque, 1 = full transparent
-    };*/
 
     static std::vector<shaderio::Material> materials;
     static std::vector<shaderio::InstanceLUT> instanceLUTs;
@@ -397,6 +355,7 @@ namespace VanK
 
         mat.specularFactor = glm::vec4(1.0f);
         mat.emissiveFactor = glm::vec3(0.0f);
+        mat.emissiveStrength = 1.0f;
         mat.ambientOcclusionFactor = 1.0f;
 
         mat.transparent = false;
@@ -514,7 +473,6 @@ namespace VanK
         // -----------------------------
         // EMISSIVE
         // -----------------------------
-        mat.emissiveFactor = glm::vec3(0.0f); // default white
         if (gltfMat.emissiveFactor.size() == 3)
         {
             mat.emissiveFactor = glm::vec3(
@@ -531,7 +489,17 @@ namespace VanK
             if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::SRGBA8))
                 mat.emissiveTexture = t->GetTextureIndex();
         }
-
+        
+        auto extIt = gltfMat.extensions.find("KHR_materials_emissive_strength");
+        if (extIt != gltfMat.extensions.end())
+        {
+            const tinygltf::Value& ext = extIt->second;
+            if (ext.Has("emissiveStrength"))
+            {
+                mat.emissiveStrength = static_cast<float>(ext.Get("emissiveStrength").GetNumberAsDouble());
+            }
+        }
+        
         // -----------------------------
         // AMBIENT OCCLUSION
         // -----------------------------

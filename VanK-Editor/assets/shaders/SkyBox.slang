@@ -24,7 +24,6 @@ static const float4 positions[8] =
     float4(-1,  1,  1, 1)  // 7
 };
 
-
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(32, 1, 1)]

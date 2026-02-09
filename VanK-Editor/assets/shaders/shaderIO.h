@@ -43,6 +43,7 @@ struct Material
     
     vec4 specularFactor;
     vec3 emissiveFactor;
+    float emissiveStrength;
     float ambientOcclusionFactor;
 
     bool transparent;

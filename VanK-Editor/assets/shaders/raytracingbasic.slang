@@ -103,11 +103,39 @@ void raygenerationMain()
     
     // Get the final color from the ray tracing result
     float3 color = payload.color;
+
+    float exposure = 1.0;
+color *= exposure;
+    color = ACESFilm(color);
+/*     color = Uncharted2Tonemap(color);
+    color = color * (1.0f / Uncharted2Tonemap((11.2f).xxx)); */
+
+    // simple gamma correction
+    color = pow(color, 1.0 / 2.2);
     
     // Write the result to the output image
     outImage[int2(launchID)] = float4(color, 1.0);
 }
-
+float3 ACESFilm(float3 x)
+{
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return saturate((x*(a*x+b))/(x*(c*x+d)+e));
+}
+float3 Uncharted2Tonemap(float3 color)
+{
+	float A = 0.15;
+	float B = 0.50;
+	float C = 0.10;
+	float D = 0.20;
+	float E = 0.02;
+	float F = 0.30;
+	float W = 11.2;
+	return ((color*(A*color+C*B)+D*E)/(color*(A*color+B)+D*F))-E/F;
+}
 // Closest hit shader - called when ray hits geometry
 [shader("closesthit")]
 void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
@@ -155,21 +183,21 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     float3 albedo = mat.diffuseFactor.xyz;
     float metallic = mat.metallicFactor;
     float roughness = mat.roughnessFactor;
-    float3 emissive = mat.emissiveFactor;
+    float3 emissive = mat.emissiveFactor * mat.emissiveStrength;
 
     float3 lightColor = float3(1.0, 1.0, 1.0);
-    float3 lightDir = float3(1.0, 1.0, 1.0);
-
+    float3 lightDir = float3(0.0, 1.0, 1.0);
+ 
 	float3 N = normalize(worldNormal);
     float3 V = -WorldRayDirection();
-    float3 L = normalize(lightDir);
+    float3 L = normalize(lightDir - worldPos);
 
     // Test for shadows
-    float shadowFactor = testShadow(worldPos, N, lightDir);
+    float shadowFactor = testShadow(worldPos, N, lightDir - worldPos);
 
     // Calculate PBR lighting with shadow factor
 	float3 color = pbrMetallicRoughness(albedo, metallic, roughness, N, V, L);
-    color *= lightColor * 4.0f/* * sceneInfo.punctualLights[0].intensity */ * shadowFactor;
+    color *= lightColor /* * 4.0f *//* * sceneInfo.punctualLights[0].intensity */ * shadowFactor;
 
     // ADD emissive AFTER lighting
     color += emissive;
