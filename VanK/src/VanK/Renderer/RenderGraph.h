@@ -33,6 +33,12 @@ namespace VanK
         ResourceUsage usage;
         bool isRead; // true = read, false = write
     };
+    
+    struct FinalOutput
+    {
+        uint32_t renderImageIndex;
+        ImTextureID imGuiID;
+    };
 
     class RenderGraph
     {
@@ -43,14 +49,19 @@ namespace VanK
         void Execute(VanKCommandBuffer cmd);
         void Reset();
         void DumpGraphviz(const std::string& filename) const;
+        
+        // --- Final output getter/setter ---
+        void SetFinalOutput(uint32_t id, ImTextureID imGuiID) { finalOutput = FinalOutput{id, imGuiID};   }
+        FinalOutput GetFinalOutput() const { return finalOutput; }
 
     private:
         std::vector<Pass> passes;
         std::vector<std::vector<Edge>> edges;
         std::vector<Pass*> sorted;
+        
+        FinalOutput finalOutput = {};
 
         void BuildEdges();
-        static bool WritesWhatBReads(const Pass& A, const Pass& B);
         void TopologicalSort();
     };
 }

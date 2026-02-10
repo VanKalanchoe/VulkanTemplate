@@ -6,6 +6,8 @@
 #include <functional>
 #include <unordered_set>
 
+#include "Renderer.h"
+
 namespace std
 {
     template <>
@@ -158,6 +160,18 @@ namespace VanK
             if (!colorAttachments.empty() || depthAttachment.has_value())
             {
                 RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), *depthAttachment);
+                
+                Extent2D viewPortRenderer = Renderer::GetViewportSize();
+                
+                VanKViewport viewPort = {0, static_cast<float>(viewPortRenderer.height), static_cast<float>(viewPortRenderer.width), -static_cast<float>(viewPortRenderer.height), 0, 1};
+                RenderCommand::SetViewport(cmd, 1, viewPort);
+                
+                VankRect rect = {0, 0, viewPortRenderer.width, viewPortRenderer.height};
+                RenderCommand::SetScissor(cmd, 1, rect);
+
+                RenderCommand::SetLineWidth(cmd, Renderer::GetLineWidth());
+
+                RenderCommand::SetCullMode(cmd, Renderer::GetCullMode());
             }
 
             // ---- Execute pass ----

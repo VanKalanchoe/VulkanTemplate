@@ -106,9 +106,6 @@ void raygenerationMain()
     
     // Get the final color from the ray tracing result
     float3 color = payload.color;
-
-    // simple gamma correction
-    color = pow(color, 1.0 / 2.2);
     
     // Write the result to the output image
     outImage[int2(launchID)] = float4(color, 1.0);

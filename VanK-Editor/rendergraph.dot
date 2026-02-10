@@ -13,14 +13,14 @@ digraph RenderGraph {
       label="Inputs";
       style=dashed;
       color="#666666";
-      res_buf2041729968224 [label="localMeshTaskSubmitBuffer\nComputeRead", shape=ellipse, fillcolor="#607D8B"];
+      res_buf1438247292304 [label="localMeshTaskSubmitBuffer\nComputeRead", shape=ellipse, fillcolor="#607D8B"];
     }
     pass0_center [label="Compute Mesh Tasks", width=0, height=0, style=invis];
     subgraph cluster_outputs0 {
       label="Outputs";
       style=dashed;
       color="#666666";
-      res_buf2041729969824 [label="meshTaskSubmitBuffer\nComputeWrite", shape=ellipse, fillcolor="#607D8B"];
+      res_buf1438247295984 [label="meshTaskSubmitBuffer\nComputeWrite", shape=ellipse, fillcolor="#607D8B"];
     }
   }
 
@@ -33,7 +33,6 @@ digraph RenderGraph {
       label="Inputs";
       style=dashed;
       color="#666666";
-      res_dummy2042077107384 [label="testRead\nComputeRead", shape=ellipse, fillcolor="#607D8B"];
     }
     pass1_sub0 [label="PBR", fillcolor="#2d2d2d"];
     pass1_sub1 [label="Sprites", fillcolor="#2d2d2d"];
@@ -51,13 +50,13 @@ digraph RenderGraph {
       label="Outputs";
       style=dashed;
       color="#666666";
-      res_img10 [label="sceneImage\nResolveAttachment → ShaderRead", shape=ellipse, fillcolor="#607D8B"];
-      res_img11 [label="colorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
-      res_img12 [label="entityImage\nResolveAttachment", shape=ellipse, fillcolor="#607D8B"];
-      res_img13 [label="entityColorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
-      res_img14 [label="depthImage\nDepthAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img12 [label="sceneImage\nResolveAttachment → ShaderRead", shape=ellipse, fillcolor="#607D8B"];
+      res_img13 [label="colorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img14 [label="entityImage\nResolveAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img15 [label="entityColorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img16 [label="depthImage\nDepthAttachment", shape=ellipse, fillcolor="#607D8B"];
     }
   }
 
-  res_buf2041729969824 -> pass1_sub0 [label="IndirectRead", color="#4FC3F7", style=dashed];
+  res_buf1438247295984 -> pass1_sub0 [label="IndirectRead", color="#4FC3F7", style=dashed];
 }

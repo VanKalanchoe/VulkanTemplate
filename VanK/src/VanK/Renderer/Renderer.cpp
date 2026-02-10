@@ -21,8 +21,6 @@
 #include "MSDFData.h"
 #include "VanK/Asset/AssetManager.h"
 
-#include "VanK/Renderer/RenderGraph.h"
-
 namespace VanK
 {
     static std::vector<std::unique_ptr<filewatch::FileWatch<std::string>>> s_ShaderWatcher;
@@ -1477,8 +1475,6 @@ namespace VanK
     std::vector<Lights> lights;
     RuntimeModel runtimePlant;
 
-    static RenderGraph graph;
-
     void Renderer::CreateRenderTargets()
     {
         std::cout << "CreateRenderTargets called with viewport: " << m_ViewportSize.width << "x" << m_ViewportSize.height << std::endl;
@@ -1523,6 +1519,7 @@ namespace VanK
         CreateRenderTargets();
 
         // Shader creation
+        auto FinalRender = GetShaderLibrary().Load("FinalRender", "FinalRender.slang");
         auto MeshTaskSubmit = GetShaderLibrary().Load("MeshTaskSubmit", "MeshTaskSubmit.slang");
         auto MeshShader = GetShaderLibrary().Load("MeshShader", "MeshShader.slang");
         auto MeshQuad = GetShaderLibrary().Load("MeshQuad", "MeshQuad.slang");
@@ -1640,6 +1637,12 @@ namespace VanK
             .RenderingCreateInfo = RenderingCreateInfo,
             .PipelineLayoutInfo = PipelineLayoutCreateInfo,
         };
+        
+        m_FinalRenderPipelineSpecification = GraphicsPipelineSpecification;
+        m_FinalRenderPipelineSpecification.PipelineType = VanK_Mesh;
+        m_FinalRenderPipelineSpecification.ShaderStageCreateInfo.VanKShader = FinalRender;
+        m_FinalRenderPipeline = RenderCommand::createGraphicsPipeline(m_FinalRenderPipelineSpecification);
+        RegisterPipelineForShaderWatcher("FinalRender", "FinalRender.slang", &m_FinalRenderPipelineSpecification, nullptr, nullptr, &m_FinalRenderPipeline, VanKGraphics);
 
         m_MeshPipelineSpecification = GraphicsPipelineSpecification;
         m_MeshPipelineSpecification.PipelineType = VanK_Mesh;
@@ -1965,7 +1968,7 @@ namespace VanK
 
     void Renderer::EndSubmit()
     {
-        Flush();
+        /*Flush();*/ // done inside editorlayer on render
 
         if (isEditor)
         {
@@ -1988,6 +1991,29 @@ namespace VanK
             ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
             ImGui::End();
         }
+        //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
+        /*auto& finalRender = renderGraph.AddPass("Swapchain");
+        finalRender.reads = 
+            {
+                /*{
+                    "sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead
+                }#1#
+            };
+        finalRender.writes = {};
+        finalRender.execute = []
+        {
+            
+        };*/
+        
+        renderGraph.Build();
+        // make a graph send to imgui image to render into viewprot instead of hardocing sceneimage much better i think
+        // chatpgt meine fresse sagt mann kann blittingen die hurent sotrage image von raytgracing mutter 
+        // mvoe storage image to rendertarget image in my renderer jsut neeed to add storage image flag in texture creation check that out
+        /*renderGraph.DumpGraphviz("rendergraph.dot");*/
+        renderGraph.Execute(cmd);
+
+        // copy raytrace image into swapchain iamge idk if thats good since i have scene image to how do i combine them both together ?
+        // submit rendering is not correct either should it be inside the graph ? idk
 
         RenderCommand::SubmitRendering(cmd, rayTracingImage->GetRenderImageIndex());
 
@@ -2096,10 +2122,10 @@ namespace VanK
         //lines
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
 
-        graph.Reset();
+        renderGraph.Reset();
         // between compute and raster is no barrier
         {
-            auto& compute = graph.AddPass("Compute Mesh Tasks");
+            auto& compute = renderGraph.AddPass("Compute Mesh Tasks");
             compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
             compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite}};
             compute.execute = []
@@ -2128,7 +2154,7 @@ namespace VanK
         }
 
         {
-            auto& MeshDraw = graph.AddPass("Mesh Draw");
+            auto& MeshDraw = renderGraph.AddPass("Mesh Draw");
             MeshDraw.reads =
             {
                 {"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::IndirectRead}
@@ -2155,16 +2181,6 @@ namespace VanK
             MeshDraw.AddSubpass("PBR", []
             {
                 GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
-
-                VanKViewport viewPort = {0, static_cast<float>(m_ViewportSize.height), static_cast<float>(m_ViewportSize.width), -static_cast<float>(m_ViewportSize.height), 0, 1};
-                RenderCommand::SetViewport(cmd, 1, viewPort);
-
-                VankRect rect = {0, 0, m_ViewportSize.width, m_ViewportSize.height};
-                RenderCommand::SetScissor(cmd, 1, rect);
-
-                RenderCommand::SetLineWidth(cmd, m_LineWidth);
-
-                RenderCommand::SetCullMode(cmd, cullMode);
 
                 RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
@@ -2301,7 +2317,8 @@ namespace VanK
             });
         }
         // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
-        /*auto& RayTrace = graph.AddPass("RayTracing");
+        /*
+        auto& RayTrace = graph.AddPass("RayTracing");
         RayTrace.reads =
         {
     
@@ -2316,7 +2333,7 @@ namespace VanK
             
             RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, true);
             
-            RenderCommand::BindRayTracing(cmd, rayTracingImage->GetRenderImageIndex());
+            RenderCommand::BindRayTracing(cmd, false, rayTracingImage->GetRenderImageIndex());
             
             PushConstantRayTrace pushRayTrace
             {
@@ -2337,17 +2354,10 @@ namespace VanK
             RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
             
             RenderCommand::TraceRays(cmd, m_ViewportSize.width, m_ViewportSize.height);
-        };*/
-
-        graph.Build();
-        // make a graph send to imgui image to render into viewprot instead of hardocing sceneimage much better i think
-        // chatpgt meine fresse sagt mann kann blittingen die hurent sotrage image von raytgracing mutter 
-        // mvoe storage image to rendertarget image in my renderer jsut neeed to add storage image flag in texture creation check that out
-        //graph.DumpGraphviz("rendergraph.dot");
-        graph.Execute(cmd);
-
-        // copy raytrace image into swapchain iamge idk if thats good since i have scene image to how do i combine them both together ?
-        // submit rendering is not correct either should it be inside the graph ? idk
+        };
+        */
+        
+        renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());
     }
 
     struct PipelineReloadEntry

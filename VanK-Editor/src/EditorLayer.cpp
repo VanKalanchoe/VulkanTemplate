@@ -162,7 +162,7 @@ namespace VanK
 
     void EditorLayer::OnRender()
     {
-        /*Renderer::Flush();*/
+        Renderer::Flush();
     }
 
     void EditorLayer::OnImGuiRender()
@@ -409,7 +409,7 @@ namespace VanK
         ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
         m_ViewportSize = {viewportPanelSize.x, viewportPanelSize.y};
 
-        auto textureID = Renderer::sceneImage->getImTextureID();
+        auto textureID = Renderer::GetRenderGraph().GetFinalOutput().imGuiID;
         if (textureID)
         {
             ImGui::Image(textureID, ImVec2(m_ViewportSize.x, m_ViewportSize.y), ImVec2(0, 0), ImVec2(1, 1));

@@ -2266,8 +2266,8 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
         {
-            .stageFlags = /*(isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR : */vk::ShaderStageFlagBits::eAllGraphics,
-            .layout = /*(isRayTracing) ? m_currentRaytracingPipelineLayout :*/ m_currentGraphicPipelineLayout,
+            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics,
+            .layout = (isRayTracing) ? m_currentRaytracingPipelineLayout : m_currentGraphicPipelineLayout,
             .firstSet = 0,
             .descriptorSetCount = 1,
             .pDescriptorSets = &rawDescriptorSet,
@@ -2285,6 +2285,7 @@ namespace VanK
         }
         
         std::vector<vk::WriteDescriptorSet> descriptorWrites;
+        descriptorWrites.reserve(2);
         
         vk::WriteDescriptorSetAccelerationStructureKHR asInfo
         {

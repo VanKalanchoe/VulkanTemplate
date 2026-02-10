@@ -8,6 +8,8 @@
 #include "VanK/Asset/TextureImporter.h"
 #include "VanK/Scene/Components.h"
 
+#include "VanK/Renderer/RenderGraph.h"
+
 namespace VanK
 {
     class Renderer
@@ -69,6 +71,7 @@ namespace VanK
         static void QueVSyncChange(bool vSyncTemp) { vSync = vSyncTemp; s_VSyncChangeRequested = true; };
         static bool GetIsEditor() { return isEditor; }
         static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); CreateRenderTargets();}
+        static Extent2D GetViewportSize() { return m_ViewportSize; }
         static void SetWindowMinimized(bool minimized) { windowMinimized = minimized; }
         static bool isWindowMinimized() { return windowMinimized; }
         static void SetLineWidth(float lineWidth) { m_LineWidth = lineWidth; }
@@ -82,15 +85,16 @@ namespace VanK
         inline static VanKTimestampPass computeCommandTask;
         inline static VanKTimestampPass renderPassMesh;
         static void CreateRenderTargets();
+        static RenderGraph GetRenderGraph() { return renderGraph; };
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
                                                      VanKRaytracingPipelineSpecification* raytracingSpec, VanKPipeLine* pipeline, VanKShaderStageFlags flag);
         static void WatchShaderFiles();
         static void ReloadPipelines();
-        
-        
+    
     private:
+        inline static RenderGraph renderGraph;
         inline static bool isEditor = true; //remove from here
         inline static bool vSync = false;
         inline static bool s_VSyncChangeRequested = false;
@@ -108,12 +112,13 @@ namespace VanK
         inline static Ref<RenderTargetImage> entityImage; // resolve 
         inline static Ref<RenderTargetImage> entityColorImage; // msaa
         inline static Ref<RenderTargetImage> rayTracingImage; // rayTracing Storage Image
-    private:
-        
-        
+
         inline static VanKSamplerInfo skyboxSampler;
         
         // Graphics Pipelines
+        inline static VanKPipeLine m_FinalRenderPipeline = {};
+        inline static VanKGraphicsPipelineSpecification m_FinalRenderPipelineSpecification = {};
+        
         inline static VanKPipeLine m_MeshPipeline = {};
         inline static VanKGraphicsPipelineSpecification m_MeshPipelineSpecification = {};
         
