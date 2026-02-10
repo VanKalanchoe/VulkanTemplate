@@ -116,9 +116,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->BindFragmentSamplers(cmd, firstSlot, samplers, num_bindings, isRayTracing);
         }
         
-        static void BindRayTracing(VanKCommandBuffer cmd, uint32_t renderTargetImageIndex)
+        static void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery = false, uint32_t renderTargetImageIndex = -1)
         {
-            if (s_RendererAPI) s_RendererAPI->BindRayTracing(cmd, renderTargetImageIndex);
+            if (s_RendererAPI) s_RendererAPI->BindRayTracing(cmd, useRayQuery, renderTargetImageIndex);
         }
         
         static void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport)

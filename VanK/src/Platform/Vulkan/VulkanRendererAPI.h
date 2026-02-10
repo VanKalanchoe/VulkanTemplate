@@ -934,7 +934,7 @@ namespace VanK
         void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) override;
         void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info) override;
         void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing = false) override;
-        void BindRayTracing(VanKCommandBuffer cmd, uint32_t renderTargetImageIndex);
+        void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex);
         void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport) override;
         void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) override;
         void SetLineWidth(VanKCommandBuffer cmd, float lineWidth) override;

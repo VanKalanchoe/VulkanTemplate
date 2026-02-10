@@ -384,6 +384,7 @@ namespace VanK
         }
         else if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness")) // Old PBR
         {
+            assert("Currently not supported by shader");
             const auto& ext = gltfMat.extensions.at("KHR_materials_pbrSpecularGlossiness");
 
             // Diffuse texture
@@ -2052,7 +2053,7 @@ namespace VanK
 
             m_TransferBuffer->Upload(cmd, *indexBuffer, geometry.indices, 0, false);
             // note descriptor update for tlas and storageimage are inside here maybe move out once descriptor heap is implemented ashole
-            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives, materials, instanceLUTs, rayTracingImage->GetRenderImageIndex());
+            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives, materials, instanceLUTs, sceneImage->GetRenderImageIndex());
 
             m_TransferBuffer->Upload(cmd, *instanceLutsBuffer, instanceLUTs, 0, false);
 
@@ -2096,8 +2097,8 @@ namespace VanK
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
 
         graph.Reset();
-        
-        /*{
+        // between compute and raster is no barrier
+        {
             auto& compute = graph.AddPass("Compute Mesh Tasks");
             compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
             compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite}};
@@ -2107,7 +2108,7 @@ namespace VanK
 
                 /*
                 VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, {});
-                #1#
+                */
 
                 RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
 
@@ -2122,7 +2123,7 @@ namespace VanK
                 RenderCommand::DispatchCompute({}, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
                 /*
-                RenderCommand::EndComputePass(computePass);#1#
+                RenderCommand::EndComputePass(computePass);*/
             };
         }
 
@@ -2167,7 +2168,9 @@ namespace VanK
 
                 RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, false);
+                
+                RenderCommand::BindRayTracing(cmd, true);
 
                 TaskMeshPipelinePushConstant pushData
                 {
@@ -2190,7 +2193,7 @@ namespace VanK
                 //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
                 RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
 
-                /*meshTasks.clear();#1#
+                /*meshTasks.clear();*/
             });
 
             MeshDraw.AddSubpass("Sprites", []
@@ -2296,9 +2299,9 @@ namespace VanK
                     RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
                 }
             });
-        }*/
+        }
         // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
-        auto& RayTrace = graph.AddPass("RayTracing");
+        /*auto& RayTrace = graph.AddPass("RayTracing");
         RayTrace.reads =
         {
     
@@ -2334,7 +2337,7 @@ namespace VanK
             RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
             
             RenderCommand::TraceRays(cmd, m_ViewportSize.width, m_ViewportSize.height);
-        };
+        };*/
 
         graph.Build();
         // make a graph send to imgui image to render into viewprot instead of hardocing sceneimage much better i think

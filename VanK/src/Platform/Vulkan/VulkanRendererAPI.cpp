@@ -2247,7 +2247,7 @@ namespace VanK
         // Ensure the descriptor set exists and the first handle is valid
         if (descriptorSets.empty())
         {
-            std::cout << "Descriptor set array is empty!" << std::endl;
+            std::cout << "Descriptor set array is empty!" << '\n';
             return;
         }
 
@@ -2261,13 +2261,13 @@ namespace VanK
         vk::DescriptorSet rawDescriptorSet = *descriptorSets[0];
         if (!*descriptorSets[0] || rawDescriptorSet == VK_NULL_HANDLE)
         {
-            std::cout << "Descriptor set raw handle is invalid!" << std::endl;
+            std::cout << "Descriptor set raw handle is invalid!" << '\n';
             return;
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
         {
-            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics,
-            .layout = (isRayTracing) ? m_currentRaytracingPipelineLayout : m_currentGraphicPipelineLayout,
+            .stageFlags = /*(isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR : */vk::ShaderStageFlagBits::eAllGraphics,
+            .layout = /*(isRayTracing) ? m_currentRaytracingPipelineLayout :*/ m_currentGraphicPipelineLayout,
             .firstSet = 0,
             .descriptorSetCount = 1,
             .pDescriptorSets = &rawDescriptorSet,
@@ -2275,21 +2275,25 @@ namespace VanK
         Unwrap(cmd).bindDescriptorSets2(bindDescriptorSetsInfo);
     }
     
-    void VulkanRendererAPI::BindRayTracing(VanKCommandBuffer cmd, uint32_t renderTargetImageIndex)
+    void VulkanRendererAPI::BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex)
     {
         // Ensure the descriptor set exists and the first handle is valid
         if (raytraceDescriptorSet.empty())
         {
-            std::cout << "Descriptor set array is empty!" << std::endl;
+            std::cout << "Descriptor set array is empty!" << '\n';
             return;
         }
         
-        vk::WriteDescriptorSetAccelerationStructureKHR asInfo{
+        std::vector<vk::WriteDescriptorSet> descriptorWrites;
+        
+        vk::WriteDescriptorSetAccelerationStructureKHR asInfo
+        {
             .accelerationStructureCount = 1,
             .pAccelerationStructures = {&*tlas}
         };
 
-        vk::WriteDescriptorSet asWrite{
+        vk::WriteDescriptorSet asWrite
+        {
             .pNext = &asInfo,
             .dstSet = raytraceDescriptorSet[0],
             .dstBinding = 0,
@@ -2297,25 +2301,28 @@ namespace VanK
             .descriptorCount = 1,
             .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
         };
-
-        vk::DescriptorImageInfo imageInfo
+        descriptorWrites.emplace_back(asWrite);
+        
+        if (!useRayQuery)
         {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = m_RenderTargetImages[renderTargetImageIndex].view,
-            .imageLayout = vk::ImageLayout::eGeneral
-        };
+            vk::DescriptorImageInfo imageInfo
+            {
+                .sampler = VK_NULL_HANDLE,
+                .imageView = m_RenderTargetImages[renderTargetImageIndex].view,
+                .imageLayout = vk::ImageLayout::eGeneral
+            };
 
-        vk::WriteDescriptorSet imageWrite
-        {
-            .dstSet = raytraceDescriptorSet[0],
-            .dstBinding = 1,
-            .descriptorCount = 1,
-            .descriptorType = vk::DescriptorType::eStorageImage,
-            .pImageInfo = &imageInfo
-        };
-
-        std::array<vk::WriteDescriptorSet, 2> descriptorWrites{asWrite, imageWrite};
-
+            vk::WriteDescriptorSet imageWrite
+            {
+                .dstSet = raytraceDescriptorSet[0],
+                .dstBinding = 1,
+                .descriptorCount = 1,
+                .descriptorType = vk::DescriptorType::eStorageImage,
+                .pImageInfo = &imageInfo
+            };
+            descriptorWrites.emplace_back(imageWrite);
+        }
+        
         device.updateDescriptorSets(descriptorWrites, {});
 
         //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
@@ -2328,13 +2335,13 @@ namespace VanK
         vk::DescriptorSet rawDescriptorSetRay = *raytraceDescriptorSet[0];
         if (!*raytraceDescriptorSet[0] || rawDescriptorSetRay == VK_NULL_HANDLE)
         {
-            std::cout << "Descriptor set raw handle is invalid!" << std::endl;
+            std::cout << "Descriptor set raw handle is invalid!" << '\n';
             return;
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInforay =
         {
-            .stageFlags = vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
-            .layout = m_currentRaytracingPipelineLayout,
+            .stageFlags = (useRayQuery) ? vk::ShaderStageFlagBits::eAllGraphics : vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
+            .layout = (useRayQuery) ? m_currentGraphicPipelineLayout : m_currentRaytracingPipelineLayout,
             .firstSet = 2,
             .descriptorSetCount = 1,
             .pDescriptorSets = &rawDescriptorSetRay,
@@ -3056,9 +3063,6 @@ namespace VanK
 
         // Second this is another set which will be pushed
         {
-            // This is the scene buffer information
-            // Use descriptor set 0 for global data
-            // TASK04: The acceleration structure uses binding 1
             std::array layoutBindings =
             {
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR, nullptr),
@@ -3076,9 +3080,6 @@ namespace VanK
 
         // acceleration structure
         {
-            // This is the scene buffer information
-            // Use descriptor set 0 for global data
-            // TASK04: The acceleration structure uses binding 1
             std::array layoutBindings =
             {//fragmnet for rayQuerys
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR, nullptr),

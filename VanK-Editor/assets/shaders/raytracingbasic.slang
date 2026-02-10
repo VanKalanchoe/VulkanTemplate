@@ -11,6 +11,9 @@ RaytracingAccelerationStructure topLevelAS;
 RWTexture2D<float4> outImage;
 
 [[vk::binding(0, 0)]]
+Sampler2D texture[];
+
+[[vk::binding(0, 0)]]
 SamplerCube cubes[];
 
 struct PushConstant 
@@ -104,38 +107,13 @@ void raygenerationMain()
     // Get the final color from the ray tracing result
     float3 color = payload.color;
 
-    float exposure = 1.0;
-color *= exposure;
-    color = ACESFilm(color);
-/*     color = Uncharted2Tonemap(color);
-    color = color * (1.0f / Uncharted2Tonemap((11.2f).xxx)); */
-
     // simple gamma correction
     color = pow(color, 1.0 / 2.2);
     
     // Write the result to the output image
     outImage[int2(launchID)] = float4(color, 1.0);
 }
-float3 ACESFilm(float3 x)
-{
-    const float a = 2.51;
-    const float b = 0.03;
-    const float c = 2.43;
-    const float d = 0.59;
-    const float e = 0.14;
-    return saturate((x*(a*x+b))/(x*(c*x+d)+e));
-}
-float3 Uncharted2Tonemap(float3 color)
-{
-	float A = 0.15;
-	float B = 0.50;
-	float C = 0.10;
-	float D = 0.20;
-	float E = 0.02;
-	float F = 0.30;
-	float W = 11.2;
-	return ((color*(A*color+C*B)+D*E)/(color*(A*color+B)+D*F))-E/F;
-}
+
 // Closest hit shader - called when ray hits geometry
 [shader("closesthit")]
 void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
@@ -148,12 +126,13 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     InstanceLUT lut = pushConstant.instanceLutBuffer[NonUniformResourceIndex(instanceID)];
 
     // 2. Get meshlet primitive info for this instance
-    MeshletPrimitive prim = pushConstant.meshletPrimitive[NonUniformResourceIndex(instanceID)];
+    uint indexOffset = lut.indexBufferOffset;
+    uint vertexOffset = lut.firstVertex;
 
     // 3. Map triangle index to global vertex indices
-    uint i0 = pushConstant.indexBuffer[prim.indexOffset + triID * 3 + 0] + lut.firstVertex;
-    uint i1 = pushConstant.indexBuffer[prim.indexOffset + triID * 3 + 1] + lut.firstVertex;
-    uint i2 = pushConstant.indexBuffer[prim.indexOffset + triID * 3 + 2] + lut.firstVertex;
+    uint i0 = pushConstant.indexBuffer[indexOffset + (triID * 3 + 0)] + vertexOffset;
+    uint i1 = pushConstant.indexBuffer[indexOffset + (triID * 3 + 1)] + vertexOffset;
+    uint i2 = pushConstant.indexBuffer[indexOffset + (triID * 3 + 2)] + vertexOffset;
 
     // 4. Fetch vertices
     Vertex v0 = pushConstant.vertexBuffer[i0];
@@ -161,13 +140,11 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     Vertex v2 = pushConstant.vertexBuffer[i2];
 
     // 5. Interpolate attributes using barycentrics
-    float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, 
-                         attr.barycentrics.x, 
-                         attr.barycentrics.y);
+    float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    float2 uv       = bary.x * v0.texcoords + bary.y * v1.texcoords + bary.z * v2.texcoords;
 
     float3 localPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
     float3 localN   = normalize(bary.x * v0.normals + bary.y * v1.normals + bary.z * v2.normals);
-    float2 uv       = bary.x * v0.texcoords + bary.y * v1.texcoords + bary.z * v2.texcoords;
 
     // 6. Transform to world space (like ObjectToWorld in tutorial)
     float4 worldPos4 = mul(pushConstant.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(localPos, 1.0));
@@ -180,7 +157,10 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     Material mat = pushConstant.materialBuffer[NonUniformResourceIndex(materialID)];
 
 	// Simple PBR shading
-    float3 albedo = mat.diffuseFactor.xyz;
+    float4 albedo = mat.diffuseFactor;
+    if (mat.albedoTexture != 0) // when converting i did al ltextures srgb idk if thats good
+        albedo *= /* fromsrgb */(texture[mat.albedoTexture].SampleLevel(uv, 0.0)); // could be wrong srgb or not
+    
     float metallic = mat.metallicFactor;
     float roughness = mat.roughnessFactor;
     float3 emissive = mat.emissiveFactor * mat.emissiveStrength;
@@ -196,7 +176,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     float shadowFactor = testShadow(worldPos, N, lightDir - worldPos);
 
     // Calculate PBR lighting with shadow factor
-	float3 color = pbrMetallicRoughness(albedo, metallic, roughness, N, V, L);
+	float3 color = pbrMetallicRoughness(albedo.rgb, metallic, roughness, N, V, L);
     color *= lightColor /* * 4.0f *//* * sceneInfo.punctualLights[0].intensity */ * shadowFactor;
 
     // ADD emissive AFTER lighting

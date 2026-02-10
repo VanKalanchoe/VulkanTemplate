@@ -453,10 +453,11 @@ void apply_reflection(float3 P, float3 N, inout float4 baseColor, InstanceLUT* i
 
 // TASK05: Implement ray query shadows
 bool in_shadow(float3 P, InstanceLUT* instanceLUTBuffer, Vertex* vertexBuffer, uint32_t* indexBuffer, Material* materialBuffer)
-{
+{//tutorial didnt use bias but fixes artifact
+   /*  float bias = max(0.0001, 0.001 * length(P));  */
    // Build the shadow ray from the world position toward the light
     RayDesc shadowRayDesc;
-    shadowRayDesc.Origin = P;
+    shadowRayDesc.Origin = P /* +  bias */;
     shadowRayDesc.Direction = normalize(lightDir);
     shadowRayDesc.TMin = EPSILON;
     shadowRayDesc.TMax = 1e4;
@@ -509,7 +510,7 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
 {
     Material mats = pushConstant.materialBuffer[vertexInput.materialIndex];
 
-    float3 emissive = mats.emissiveFactor; // constant color
+    float3 emissive = mats.emissiveFactor * mats.emissiveStrength; // constant color
     if (mats.emissiveTexture != 0)
     {
         emissive *= /* fromsrgb */(texture[mats.emissiveTexture].Sample(vertexInput.texcoords)).rgb;
@@ -526,11 +527,11 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     // Alpha test
     if(albedo.a < 0.5)
         discard;
-/* 
-    if(mats.metallicFactor > 0)
-        apply_reflection(P, NR, albedo, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer, pushConstant.materialBuffer, pushConstant.sceneData.cameraWorldPos);
 
-    bool inShadow = in_shadow(P, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer, pushConstant.materialBuffer);
+   /*  if(mats.metallicFactor > 0)
+        apply_reflection(P, NR, albedo, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer, pushConstant.materialBuffer, pushConstant.sceneData.cameraWorldPos);
+ */
+  /*   bool inShadow = in_shadow(P, pushConstant.instanceLutBuffer, pushConstant.vertexBuffer, pushConstant.indexBuffer, pushConstant.materialBuffer);
     
     // Darken if in shadow
     if(inShadow)
