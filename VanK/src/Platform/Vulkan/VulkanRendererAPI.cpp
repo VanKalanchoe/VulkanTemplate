@@ -102,23 +102,21 @@ namespace VanK
 
         ImGui_ImplSDL3_InitForVulkan(window);
         static VkFormat imageFormats[] = {static_cast<VkFormat>(swapChainSurfaceFormat.format)};
-        ImGui_ImplVulkan_InitInfo initInfo = {
-            .Instance = *instance,
-            .PhysicalDevice = *physicalDevice,
-            .Device = *device,
-            .QueueFamily = queueIndex,
-            .Queue = *queue,
-            .DescriptorPool = *uiDescriptorPool,
-            .MinImageCount = 2,
-            .ImageCount = MAX_FRAMES_IN_FLIGHT,
-            .UseDynamicRendering = true,
-            .PipelineRenderingCreateInfo = // Dynamic rendering
-            {
-                .sType = static_cast<VkStructureType>(vk::StructureType::ePipelineRenderingCreateInfo),
-                .colorAttachmentCount = 1,
-                .pColorAttachmentFormats = imageFormats
-            },
-        };
+        
+        ImGui_ImplVulkan_InitInfo initInfo{};
+        initInfo.ApiVersion = apiVersion,
+        initInfo.Instance = *instance,
+        initInfo.PhysicalDevice = *physicalDevice,
+        initInfo.Device = *device,
+        initInfo.QueueFamily = queueIndex,
+        initInfo.Queue = *queue,
+        initInfo.DescriptorPool = *uiDescriptorPool,
+        initInfo.MinImageCount = 2,
+        initInfo.ImageCount = MAX_FRAMES_IN_FLIGHT,
+        initInfo.UseDynamicRendering = true,
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = static_cast<VkStructureType>(vk::StructureType::ePipelineRenderingCreateInfo);
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
+        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = imageFormats;
 
         ImGui_ImplVulkan_Init(&initInfo);
 
@@ -136,7 +134,7 @@ namespace VanK
     {
         // Clear the pool on the renderer side so it doesn't hold dangling references
         m_images.clear();
-        
+
         m_RenderTargetImages.clear();
 
         // Clean up entity readback buffer
@@ -478,7 +476,7 @@ namespace VanK
 
         swapChainImages = swapChain.getImages();
     }
-    
+
     void VulkanRendererAPI::createImageViews()
     {
         assert(swapChainImageViews.empty());
@@ -543,7 +541,7 @@ namespace VanK
         }
         return desc;
     }
-    
+
     uint32_t VulkanRendererAPI::AddRenderTargetImageToPool(utils::ImageResource&& imageResource)
     {
         // Add the texture to the image vector
@@ -1070,7 +1068,7 @@ namespace VanK
         std::vector<vk::PushConstantRange> vkPushConstants;
         vkPushConstants.reserve(raytracingPipelineSpecification.PipelineLayoutInfo.PushConstants.size());
         vk::ShaderStageFlags stageFlags = ConvertToVkShaderStageFlagBits(VanKRaytracing);
-        
+
         for (const auto pushRange : raytracingPipelineSpecification.PipelineLayoutInfo.PushConstants)
         {
             vkPushConstants.push_back(vk::PushConstantRange{stageFlags, pushRange.Offset, pushRange.Size});
@@ -1083,10 +1081,10 @@ namespace VanK
             .pushConstantRangeCount = static_cast<uint32_t>(vkPushConstants.size()),
             .pPushConstantRanges = vkPushConstants.data()
         };
-        
+
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
         DBG_VK_NAME(*tempPipelineLayout);
- 
+
         vk::StructureChain
             <
                 vk::PhysicalDeviceProperties2,
@@ -1439,17 +1437,17 @@ namespace VanK
         using Stage = ResourceState::Stage;
         switch (state.stage)
         {
-        case Stage::TopOfPipe:     return vk::PipelineStageFlagBits2::eTopOfPipe;
-        case Stage::Compute:       return vk::PipelineStageFlagBits2::eComputeShader;
-        case Stage::ColorOutput:   return vk::PipelineStageFlagBits2::eColorAttachmentOutput;
-        case Stage::DepthOutput:   return vk::PipelineStageFlagBits2::eAllCommands; // Vulkan has no direct DepthOutput stage
-        case Stage::Fragment:      return vk::PipelineStageFlagBits2::eFragmentShader;
-        case Stage::Transfer:      return vk::PipelineStageFlagBits2::eTransfer;
+        case Stage::TopOfPipe: return vk::PipelineStageFlagBits2::eTopOfPipe;
+        case Stage::Compute: return vk::PipelineStageFlagBits2::eComputeShader;
+        case Stage::ColorOutput: return vk::PipelineStageFlagBits2::eColorAttachmentOutput;
+        case Stage::DepthOutput: return vk::PipelineStageFlagBits2::eAllCommands; // Vulkan has no direct DepthOutput stage
+        case Stage::Fragment: return vk::PipelineStageFlagBits2::eFragmentShader;
+        case Stage::Transfer: return vk::PipelineStageFlagBits2::eTransfer;
         case Stage::DrawIndirect: return vk::PipelineStageFlagBits2::eDrawIndirect;
-        default:                   return vk::PipelineStageFlagBits2::eAllCommands;
+        default: return vk::PipelineStageFlagBits2::eAllCommands;
         }
     }
-    
+
     void VulkanRendererAPI::InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired)
     {
         if (id.type == ResourceType::Image)
@@ -1474,7 +1472,7 @@ namespace VanK
             vk::ImageLayout oldLayout = toVkLayout(last.layout);
             vk::ImageLayout newLayout = toVkLayout(desired.layout);
 
-            if (oldLayout == newLayout) 
+            if (oldLayout == newLayout)
                 return; // no barrier needed
 
             auto [srcStage, srcAccess] = utils::makePipelineStageAccessTuple(oldLayout);
@@ -1620,12 +1618,16 @@ namespace VanK
 
         switch (pipelineBindPoint)
         {
-            case VanKPipelineBindPoint::Graphics: vkBindPoint = vk::PipelineBindPoint::eGraphics; break;
-            case VanKPipelineBindPoint::Compute: vkBindPoint = vk::PipelineBindPoint::eCompute; break;
-            case VanKPipelineBindPoint::Raytracing: vkBindPoint = vk::PipelineBindPoint::eRayTracingKHR; break;
-        default: std::cout << "[VulkanRendererAPI::BindPipeline] Invalid pipeline bind point:" << '\n'; break;
+        case VanKPipelineBindPoint::Graphics: vkBindPoint = vk::PipelineBindPoint::eGraphics;
+            break;
+        case VanKPipelineBindPoint::Compute: vkBindPoint = vk::PipelineBindPoint::eCompute;
+            break;
+        case VanKPipelineBindPoint::Raytracing: vkBindPoint = vk::PipelineBindPoint::eRayTracingKHR;
+            break;
+        default: std::cout << "[VulkanRendererAPI::BindPipeline] Invalid pipeline bind point:" << '\n';
+            break;
         }
-        
+
         Unwrap(cmd).bindPipeline(vkBindPoint, pipelineToBind);
 
         // Update current pipeline layout for push descriptors / push constants
@@ -1636,7 +1638,7 @@ namespace VanK
         else if (pipelineBindPoint == VanKPipelineBindPoint::Raytracing)
             m_currentRaytracingPipelineLayout = layoutToBind;
     }
-    
+
 #ifndef LAB_TASK_LEVEL
 #	define LAB_TASK_LEVEL 11
 #endif
@@ -1738,7 +1740,7 @@ namespace VanK
     )
     {
         DBG_VK_SCOPE(Unwrap(cmd)); // <-- Helps to debug in NSight
-        
+
         // Depth attachment
         vk::RenderingAttachmentInfo depthAttachment{};
         if (depth_stencil_target_info.format != VanK_FORMAT_INVALID)
@@ -1779,21 +1781,21 @@ namespace VanK
                 attachment.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
 
                 // Resolve mode: simple heuristic (could store per-resource if needed)
-                attachment.resolveMode = (ct.format == VanK_FORMAT_R32_SINT) 
-                    ? vk::ResolveModeFlagBits::eSampleZero 
-                    : vk::ResolveModeFlagBits::eAverage;
+                attachment.resolveMode = (ct.format == VanK_FORMAT_R32_SINT)
+                                             ? vk::ResolveModeFlagBits::eSampleZero
+                                             : vk::ResolveModeFlagBits::eAverage;
             }
 
             colorAttachments.push_back(attachment);
         }
-        
+
         auto& firstColor = m_RenderTargetImages[color_target_info[0].imageIndex];
 
-        vk::Extent2D renderExtent {
+        vk::Extent2D renderExtent{
             firstColor.extent.width,
             firstColor.extent.height
         };
-        
+
         vk::RenderingInfo renderingInfo =
         {
             .renderArea = {.offset = {0, 0}, .extent = renderExtent},
@@ -1898,17 +1900,17 @@ namespace VanK
         {
             layout = m_currentComputePipelineLayout;
         }
-        else if (flag & (vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR |vk::ShaderStageFlagBits::eMissKHR))
+        else if (flag & (vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR))
         {
             layout = m_currentRaytracingPipelineLayout;
         }
-        
+
         if (!layout)
         {
             std::cout << "ERROR: PushConstants layout is NULL for raytracing!" << std::endl;
             return;
         }
-        
+
         vk::PushConstantsInfo pushConstantsInfo
         {
             .layout = layout,
@@ -2058,7 +2060,7 @@ namespace VanK
                 vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage,
                 vk::ImageAspectFlagBits::eColor
             );
-            
+
             // Second pass: draw ImGui to swapchain image
             vk::RenderingAttachmentInfo swapColorAttachment =
             {
@@ -2107,7 +2109,7 @@ namespace VanK
         if (m_renderOption == VanK_Render_Swapchain)
         {
             Unwrap(cmd).endRendering();
-            
+
             if (renderTargetImage != -1)
             {
                 // Transition images before blit
@@ -2195,9 +2197,9 @@ namespace VanK
             else
             {
                 VK_CORE_ERROR("SubmitRendering Swapchain no renderTargetImage provided fallback to direct SwapChain");
-                
-                vk::ClearColorValue clearColor{ std::array{0.5f,0.5f,0.5f,1.0f} };
-                
+
+                vk::ClearColorValue clearColor{std::array{0.5f, 0.5f, 0.5f, 1.0f}};
+
                 vk::ImageSubresourceRange range;
                 range.aspectMask = vk::ImageAspectFlagBits::eColor;
                 range.baseMipLevel = 0;
@@ -2217,13 +2219,13 @@ namespace VanK
                     vk::ImageAspectFlagBits::eColor
                 );
 
-                vk::ImageSubresourceRange ranges[] = { range };
+                vk::ImageSubresourceRange ranges[] = {range};
 
                 Unwrap(cmd).clearColorImage(
                     swapChainImages[imageIndex],
                     vk::ImageLayout::eTransferDstOptimal,
                     clearColor, // pass by reference, not pointer
-                    ranges      // ArrayProxy will implicitly wrap the array
+                    ranges // ArrayProxy will implicitly wrap the array
                 );
 
                 utils::transition_image_layout(
@@ -2274,7 +2276,7 @@ namespace VanK
         };
         Unwrap(cmd).bindDescriptorSets2(bindDescriptorSetsInfo);
     }
-    
+
     void VulkanRendererAPI::BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex)
     {
         // Ensure the descriptor set exists and the first handle is valid
@@ -2283,10 +2285,10 @@ namespace VanK
             std::cout << "Descriptor set array is empty!" << '\n';
             return;
         }
-        
+
         std::vector<vk::WriteDescriptorSet> descriptorWrites;
         descriptorWrites.reserve(2);
-        
+
         vk::WriteDescriptorSetAccelerationStructureKHR asInfo
         {
             .accelerationStructureCount = 1,
@@ -2303,7 +2305,7 @@ namespace VanK
             .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
         };
         descriptorWrites.emplace_back(asWrite);
-        
+
         if (!useRayQuery)
         {
             vk::DescriptorImageInfo imageInfo
@@ -2323,7 +2325,7 @@ namespace VanK
             };
             descriptorWrites.emplace_back(imageWrite);
         }
-        
+
         device.updateDescriptorSets(descriptorWrites, {});
 
         //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
@@ -2490,7 +2492,7 @@ namespace VanK
 
         return vk::SampleCountFlagBits::e1;
     }
-    
+
     vk::raii::ImageView VulkanRendererAPI::createImageView(vk::raii::Image& image, vk::Format format,
                                                            vk::ImageAspectFlags aspectFlags,
                                                            uint32_t mipLevels, uint32_t layerCount, vk::ImageViewType viewType)
@@ -2504,7 +2506,7 @@ namespace VanK
         };
         return vk::raii::ImageView(device, viewInfo);
     }
-    
+
     void VulkanRendererAPI::createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory)
     {
         vk::BufferCreateInfo bufferInfo{
@@ -3066,7 +3068,9 @@ namespace VanK
         {
             std::array layoutBindings =
             {
-                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1, vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR, nullptr),
+                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1,
+                                               vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR
+                                               | vk::ShaderStageFlagBits::eMissKHR, nullptr),
             };
 
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
@@ -3082,8 +3086,11 @@ namespace VanK
         // acceleration structure
         {
             std::array layoutBindings =
-            {//fragmnet for rayQuerys
-                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR, nullptr),
+            {
+                //fragmnet for rayQuerys
+                vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1,
+                                               vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
+                                               nullptr),
                 vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
                                                nullptr)
             };
