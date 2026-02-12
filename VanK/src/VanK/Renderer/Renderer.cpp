@@ -2015,7 +2015,7 @@ namespace VanK
         // copy raytrace image into swapchain iamge idk if thats good since i have scene image to how do i combine them both together ?
         // submit rendering is not correct either should it be inside the graph ? idk
 
-        RenderCommand::SubmitRendering(cmd, rayTracingImage->GetRenderImageIndex());
+        RenderCommand::SubmitRendering(cmd, renderGraph.GetFinalOutput().renderImageIndex);
 
         RenderCommand::EndCommandBuffer(cmd);
 
@@ -2123,7 +2123,7 @@ namespace VanK
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
 
         renderGraph.Reset();
-        // between compute and raster is no barrier
+        /*// between compute and raster is no barrier
         {
             auto& compute = renderGraph.AddPass("Compute Mesh Tasks");
             compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
@@ -2134,7 +2134,7 @@ namespace VanK
 
                 /*
                 VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, {});
-                */
+                #1#
 
                 RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
 
@@ -2149,7 +2149,7 @@ namespace VanK
                 RenderCommand::DispatchCompute({}, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
                 /*
-                RenderCommand::EndComputePass(computePass);*/
+                RenderCommand::EndComputePass(computePass);#1#
             };
         }
 
@@ -2209,7 +2209,7 @@ namespace VanK
                 //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
                 RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
 
-                /*meshTasks.clear();*/
+                /*meshTasks.clear();#1#
             });
 
             MeshDraw.AddSubpass("Sprites", []
@@ -2315,10 +2315,9 @@ namespace VanK
                     RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
                 }
             });
-        }
+        }*/
         // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
-        /*
-        auto& RayTrace = graph.AddPass("RayTracing");
+        auto& RayTrace = renderGraph.AddPass("RayTracing");
         RayTrace.reads =
         {
     
@@ -2355,9 +2354,8 @@ namespace VanK
             
             RenderCommand::TraceRays(cmd, m_ViewportSize.width, m_ViewportSize.height);
         };
-        */
-        
-        renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());
+        //change this give image make internal indexing
+        renderGraph.SetFinalOutput(rayTracingImage->GetRenderImageIndex(), rayTracingImage->getImTextureID());
     }
 
     struct PipelineReloadEntry

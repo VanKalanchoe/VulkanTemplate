@@ -354,12 +354,12 @@ namespace VanK
     {
         std::cout << "Destroying: " << m_Specification.Name << '\n';
         
-        auto& instance = VulkanRendererAPI::Get();
-        
         // Check 2: Is the renderer properly initialized?
         if (!VulkanRendererAPI::IsInitialized())
             return; // Renderer not initialized
         
+        auto& instance = VulkanRendererAPI::Get();
+    
         // Check 3: Is our texture index valid?
         if (m_TextureIndex == UINT32_MAX)
         {

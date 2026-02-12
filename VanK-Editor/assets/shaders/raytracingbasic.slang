@@ -76,6 +76,7 @@ void raygenerationMain()
     SceneData sceneInfo = pushConstant.sceneData[0];
 
     // Set ray tracing flags (0 = no special flags)
+    //RAY_FLAG_CULL_BACK_FACING_TRIANGLES
     const uint rayFlags = 0;
     
     // Convert pixel coordinates to normalized device coordinates (NDC)

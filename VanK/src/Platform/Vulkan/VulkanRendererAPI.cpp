@@ -42,13 +42,13 @@ namespace VanK
 
     VulkanRendererAPI::~VulkanRendererAPI()
     {
-        std::cout << "VulkanRendererAPI::~VulkanRendererAPI()" << std::endl;
+        std::cout << "VulkanRendererAPI::~VulkanRendererAPI()" << '\n';
         VulkanRendererAPI::Shutdown(); // ???????
     }
 
     VulkanRendererAPI& VulkanRendererAPI::Get()
     {
-        if (!s_instance)
+        if (s_instance == nullptr)
         {
             // If no instance is set, this will crash - which is what we want
             // because it means we're trying to use Vulkan before it's initialized
@@ -64,6 +64,9 @@ namespace VanK
         {
             s_instance = nullptr;
         }*/
+
+        s_instance = nullptr;
+        
         device.waitIdle();
         /*DestroyAllPipelines();// todo idk where to put this will see*/
         cleanup();
