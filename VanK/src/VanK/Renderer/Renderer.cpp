@@ -2202,7 +2202,7 @@ namespace VanK
                 {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead},
                 {
                     "colorImage", ResourceID::Image(colorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
-                    VanK_FColor{.f = {0.0f, 0.0f, 0.0f, 0.0f}}
+                    VanK_FColor{.f = {0.0f, 0.0f, 0.0f, 1.0f}}
                 },
                 {"entityImage", ResourceID::Image(entityImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment},
                 {
@@ -2422,7 +2422,7 @@ namespace VanK
         };
         
         //change this give image make internal indexing
-        renderGraph.SetFinalOutput(finalImage->GetRenderImageIndex(), finalImage->getImTextureID());
+        renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());
     }
 
     struct PipelineReloadEntry
