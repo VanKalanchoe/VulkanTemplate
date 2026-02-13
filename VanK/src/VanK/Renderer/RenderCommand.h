@@ -116,9 +116,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->BindFragmentSamplers(cmd, firstSlot, samplers, num_bindings, isRayTracing);
         }
         
-        static void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery = false, uint32_t renderTargetImageIndex = -1)
+        static void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery = false, uint32_t renderTargetImageIndex = -1, bool isfinalRenderPass = false, uint32_t rasterRenderTargetImageIndex = UINT32_MAX, uint32_t rayTraceRenderTargetImageIndex = UINT32_MAX)
         {
-            if (s_RendererAPI) s_RendererAPI->BindRayTracing(cmd, useRayQuery, renderTargetImageIndex);
+            if (s_RendererAPI) s_RendererAPI->BindRayTracing(cmd, useRayQuery, renderTargetImageIndex, isfinalRenderPass, rasterRenderTargetImageIndex, rayTraceRenderTargetImageIndex);
         }
         
         static void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport)
@@ -199,6 +199,11 @@ namespace VanK
         static void EndRendering(VanKCommandBuffer cmd)
         {
             if (s_RendererAPI) s_RendererAPI->EndRendering(cmd);
+        }
+        
+        static void RenderImGui(VanKCommandBuffer cmd)
+        {
+            if (s_RendererAPI) s_RendererAPI->RenderImGui(cmd);
         }
 
         static void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1)

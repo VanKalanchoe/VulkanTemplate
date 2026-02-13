@@ -934,7 +934,7 @@ namespace VanK
         void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) override;
         void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info) override;
         void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing = false) override;
-        void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex);
+        void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex, bool isfinalRenderPass = false, uint32_t rasterRenderTargetImageIndex = UINT32_MAX, uint32_t rayTraceRenderTargetImageIndex = UINT32_MAX) override;
         void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, VanKViewport viewport) override;
         void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) override;
         void SetLineWidth(VanKCommandBuffer cmd, float lineWidth) override;
@@ -954,6 +954,7 @@ namespace VanK
                                         uint32_t maxDrawCount, uint32_t stride) override;
         void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height) override;
         void EndRendering(VanKCommandBuffer cmd) override;
+        void RenderImGui(VanKCommandBuffer cmd) override;
         void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1) override;
         VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers) override;
         void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;

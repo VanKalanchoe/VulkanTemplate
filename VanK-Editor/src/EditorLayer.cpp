@@ -138,7 +138,7 @@ namespace VanK
             }
         }
 
-        /*// Mouse Selection
+        // Mouse Selection
         auto [mx, my] = ImGui::GetMousePos();
         mx -= m_ViewportBounds[0].x;
         my -= m_ViewportBounds[0].y;
@@ -149,13 +149,13 @@ namespace VanK
 
         if (mouseX >= 0 && mouseY >= 0 && mouseX < (int)viewportSize.x && mouseY < (int)viewportSize.y)
         {
-            /*ScopeTimer timer("MousePicking");#1#
+            /*ScopeTimer timer("MousePicking");*/
             // Retrieve the pixel data (ID) from the calculated index
             // reading only 1 pixel right now but if multi select maybe i need full viewport ? 
             int pixelData = RenderCommand::ReadEntityIDAtPixel(Renderer::entityImage->GetRenderImageIndex(), mouseX, mouseY); // chnage this
 
             m_HoveredEntity = pixelData == -1 ? Entity() : Entity((entt::entity)pixelData, m_ActiveScene.get());
-        }*/
+        }
 
         OnOverlayRender();
     }

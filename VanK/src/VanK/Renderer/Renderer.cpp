@@ -1505,6 +1505,8 @@ namespace VanK
         depthImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .depthImage = true});
         
         rayTracingImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::RGBA8, .isStorageImage = true});
+        
+        finalImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
     }
 
     void Renderer::Init(Window& window)
@@ -1641,6 +1643,23 @@ namespace VanK
         m_FinalRenderPipelineSpecification = GraphicsPipelineSpecification;
         m_FinalRenderPipelineSpecification.PipelineType = VanK_Mesh;
         m_FinalRenderPipelineSpecification.ShaderStageCreateInfo.VanKShader = FinalRender;
+        const std::vector<VanKPipelineColorBlendAttachmentState> ColorBlendAttachmentStates2 =
+        {
+            {
+                .blendEnable = true,
+                .srcColorBlendFactor = VanK_BLEND_FACTOR_SRC_ALPHA,
+                .dstColorBlendFactor = VanK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .colorBlendOp = VanK_BLEND_OP_ADD,
+                .srcAlphaBlendFactor = VanK_BLEND_FACTOR_SRC_ALPHA,
+                .dstAlphaBlendFactor = VanK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+                .alphaBlendOp = VanK_BLEND_OP_ADD,
+                .colorWriteMask = VanK_COLOR_COMPONENT_R_BIT | VanK_COLOR_COMPONENT_G_BIT | VanK_COLOR_COMPONENT_B_BIT | VanK_COLOR_COMPONENT_A_BIT,
+            }
+        };
+        m_FinalRenderPipelineSpecification.ColorBlendStateCreateInfo.VanKColorBlendAttachmentState = ColorBlendAttachmentStates2;
+        
+        m_FinalRenderPipelineSpecification.MultisampleStateCreateInfo.sampleCount = VanK_SAMPLE_COUNT_1_BIT;
+        m_FinalRenderPipelineSpecification.RenderingCreateInfo.VanKColorAttachmentFormats = {VanK_Format_B8G8R8A8Srgb};
         m_FinalRenderPipeline = RenderCommand::createGraphicsPipeline(m_FinalRenderPipelineSpecification);
         RegisterPipelineForShaderWatcher("FinalRender", "FinalRender.slang", &m_FinalRenderPipelineSpecification, nullptr, nullptr, &m_FinalRenderPipeline, VanKGraphics);
 
@@ -1991,19 +2010,36 @@ namespace VanK
             ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
             ImGui::End();
         }
+     
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
-        /*auto& finalRender = renderGraph.AddPass("Swapchain");
+        auto& finalRender = renderGraph.AddPass("Swapchain");
         finalRender.reads = 
+        {
+            {"finalImage", ResourceID::Image(renderGraph.GetFinalOutput().renderImageIndex), ResourceUsage::ShaderRead},
+        };
+        finalRender.writes = 
+        {
             {
-                /*{
-                    "sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead
-                }#1#
-            };
-        finalRender.writes = {};
+                "SwapChainImage",
+                ResourceID::Image(UINT32_MAX),
+                ResourceUsage::ColorAttachment,
+                ResourceUsage::PresentSrc, VanK_FORMAT_SWAPCHAIN,
+                VanK_LOADOP_CLEAR,
+                VanK_STOREOP_STORE,
+                VanK_FColor{.f = {1.0f, 0.0f, 1.0f, 1.0f}}
+            }
+        };
         finalRender.execute = []
         {
+            /*RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_FinalRenderPipeline);
+            /*
+            RenderCommand::BindRayTracing(cmd, true, sceneImage->GetRenderImageIndex(), true);
+            #1#
+            RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);*/
             
-        };*/
+            if (isEditor)
+                RenderCommand::RenderImGui(cmd);
+        };
         
         renderGraph.Build();
         // make a graph send to imgui image to render into viewprot instead of hardocing sceneimage much better i think
@@ -2011,11 +2047,11 @@ namespace VanK
         // mvoe storage image to rendertarget image in my renderer jsut neeed to add storage image flag in texture creation check that out
         /*renderGraph.DumpGraphviz("rendergraph.dot");*/
         renderGraph.Execute(cmd);
-
+        
         // copy raytrace image into swapchain iamge idk if thats good since i have scene image to how do i combine them both together ?
         // submit rendering is not correct either should it be inside the graph ? idk
 
-        RenderCommand::SubmitRendering(cmd, renderGraph.GetFinalOutput().renderImageIndex);
+        /*RenderCommand::SubmitRendering(cmd, renderGraph.GetFinalOutput().renderImageIndex);*/
 
         RenderCommand::EndCommandBuffer(cmd);
 
@@ -2123,8 +2159,8 @@ namespace VanK
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
 
         renderGraph.Reset();
-        /*// between compute and raster is no barrier
-        {
+        // between compute and raster is no barrier
+        /*{
             auto& compute = renderGraph.AddPass("Compute Mesh Tasks");
             compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
             compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite}};
@@ -2151,7 +2187,7 @@ namespace VanK
                 /*
                 RenderCommand::EndComputePass(computePass);#1#
             };
-        }
+        }*/
 
         {
             auto& MeshDraw = renderGraph.AddPass("Mesh Draw");
@@ -2166,7 +2202,7 @@ namespace VanK
                 {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead},
                 {
                     "colorImage", ResourceID::Image(colorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
-                    VanK_FColor{.f = {0.2f, 0.2f, 0.2f, 1.0f}}
+                    VanK_FColor{.f = {0.0f, 0.0f, 0.0f, 0.0f}}
                 },
                 {"entityImage", ResourceID::Image(entityImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment},
                 {
@@ -2178,10 +2214,11 @@ namespace VanK
                     VanK_FColor{.f = {0.0f}}
                 }
             };
-            MeshDraw.AddSubpass("PBR", []
+            /* MeshDraw.AddSubpass("PBR", []
             {
                 GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
 
+               
                 RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
                 RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, false);
@@ -2210,7 +2247,7 @@ namespace VanK
                 RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
 
                 /*meshTasks.clear();#1#
-            });
+            });*/
 
             MeshDraw.AddSubpass("Sprites", []
             {
@@ -2296,7 +2333,7 @@ namespace VanK
                 }
             });
 
-            MeshDraw.AddSubpass("SkyBox", []
+            /*MeshDraw.AddSubpass("SkyBox", []
             {
                 // skybox always last
                 {
@@ -2314,8 +2351,8 @@ namespace VanK
 
                     RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
                 }
-            });
-        }*/
+            });*/
+        }
         // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
         auto& RayTrace = renderGraph.AddPass("RayTracing");
         RayTrace.reads =
@@ -2354,8 +2391,38 @@ namespace VanK
             
             RenderCommand::TraceRays(cmd, m_ViewportSize.width, m_ViewportSize.height);
         };
+        
+        //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
+        auto& finalRender = renderGraph.AddPass("Swapchain");
+        finalRender.reads = 
+        {
+                {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ShaderRead},
+                {"rayTracingImage", ResourceID::Image(rayTracingImage->GetRenderImageIndex()), ResourceUsage::ShaderRead}
+        };
+        finalRender.writes = 
+        {
+            {
+                "finalImage",
+                ResourceID::Image(finalImage->GetRenderImageIndex()),
+                ResourceUsage::ColorAttachment,
+                ResourceUsage::ShaderRead, 
+                VanK_Format_B8G8R8A8Srgb,
+                VanK_LOADOP_CLEAR,
+                VanK_STOREOP_STORE,
+                VanK_FColor{.f = {0.0f, 1.0f, 0.0f, 1.0f}}
+            }
+        };
+        finalRender.execute = []
+        {
+            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_FinalRenderPipeline);
+            
+            RenderCommand::BindRayTracing(cmd, true, {}, true, sceneImage->GetRenderImageIndex(), rayTracingImage->GetRenderImageIndex());
+            
+            RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
+        };
+        
         //change this give image make internal indexing
-        renderGraph.SetFinalOutput(rayTracingImage->GetRenderImageIndex(), rayTracingImage->getImTextureID());
+        renderGraph.SetFinalOutput(finalImage->GetRenderImageIndex(), finalImage->getImTextureID());
     }
 
     struct PipelineReloadEntry

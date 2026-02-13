@@ -66,7 +66,7 @@ namespace VanK
         }*/
 
         s_instance = nullptr;
-        
+
         device.waitIdle();
         /*DestroyAllPipelines();// todo idk where to put this will see*/
         cleanup();
@@ -105,19 +105,19 @@ namespace VanK
 
         ImGui_ImplSDL3_InitForVulkan(window);
         static VkFormat imageFormats[] = {static_cast<VkFormat>(swapChainSurfaceFormat.format)};
-        
+
         ImGui_ImplVulkan_InitInfo initInfo{};
         initInfo.ApiVersion = apiVersion,
-        initInfo.Instance = *instance,
-        initInfo.PhysicalDevice = *physicalDevice,
-        initInfo.Device = *device,
-        initInfo.QueueFamily = queueIndex,
-        initInfo.Queue = *queue,
-        initInfo.DescriptorPool = *uiDescriptorPool,
-        initInfo.MinImageCount = 2,
-        initInfo.ImageCount = MAX_FRAMES_IN_FLIGHT,
-        initInfo.UseDynamicRendering = true,
-        initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = static_cast<VkStructureType>(vk::StructureType::ePipelineRenderingCreateInfo);
+            initInfo.Instance = *instance,
+            initInfo.PhysicalDevice = *physicalDevice,
+            initInfo.Device = *device,
+            initInfo.QueueFamily = queueIndex,
+            initInfo.Queue = *queue,
+            initInfo.DescriptorPool = *uiDescriptorPool,
+            initInfo.MinImageCount = 2,
+            initInfo.ImageCount = MAX_FRAMES_IN_FLIGHT,
+            initInfo.UseDynamicRendering = true,
+            initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.sType = static_cast<VkStructureType>(vk::StructureType::ePipelineRenderingCreateInfo);
         initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
         initInfo.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = imageFormats;
 
@@ -1468,6 +1468,7 @@ namespace VanK
                 case ResourceState::Layout::ShaderReadOnly: return vk::ImageLayout::eShaderReadOnlyOptimal;
                 case ResourceState::Layout::TransferDst: return vk::ImageLayout::eTransferDstOptimal;
                 case ResourceState::Layout::TransferSrc: return vk::ImageLayout::eTransferSrcOptimal;
+                case ResourceState::Layout::PresentSrc: return vk::ImageLayout::ePresentSrcKHR;
                 default: return vk::ImageLayout::eUndefined;
                 }
             };
@@ -1485,7 +1486,7 @@ namespace VanK
             utils::transition_image_layout
             (
                 Unwrap(cmd),
-                m_RenderTargetImages[id.index].image,
+                (id.index == UINT32_MAX) ? swapChainImages[imageIndex] : m_RenderTargetImages[id.index].image,
                 oldLayout,
                 newLayout,
                 srcAccess,
@@ -1767,37 +1768,54 @@ namespace VanK
         for (uint32_t i = 0; i < num_color_targets; i++)
         {
             const auto& ct = color_target_info[i];
-            auto& colorImageTarget = m_RenderTargetImages[ct.imageIndex];
 
             vk::RenderingAttachmentInfo attachment{};
-            attachment.imageView = colorImageTarget.view;
+            if (ct.format == VanK_FORMAT_SWAPCHAIN)
+            {
+                attachment.imageView = swapChainImageViews[imageIndex];
+            }
+            else
+            {
+                auto& colorImageTarget = m_RenderTargetImages[ct.imageIndex];
+                attachment.imageView = colorImageTarget.view;
+
+                // Handle resolve images
+                if (colorImageTarget.isResolveImage)
+                {
+                    auto& resolveImageTarget = m_RenderTargetImages[colorImageTarget.resolveTargetID];
+                    attachment.resolveImageView = resolveImageTarget.view;
+                    attachment.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
+
+                    // Resolve mode: simple heuristic (could store per-resource if needed)
+                    attachment.resolveMode = (ct.format == VanK_FORMAT_R32_SINT)
+                                                 ? vk::ResolveModeFlagBits::eSampleZero
+                                                 : vk::ResolveModeFlagBits::eAverage;
+                }
+            }
             attachment.imageLayout = vk::ImageLayout::eColorAttachmentOptimal;
             attachment.loadOp = ConvertToVkLoadOp(ct.loadOp);
             attachment.storeOp = ConvertToVkStoreOp(ct.storeOp);
             attachment.clearValue = ConvertToVkClearColor(ct.clearColor, ConvertToVkFormat(ct.format));
 
-            // Handle resolve images
-            if (colorImageTarget.isResolveImage)
-            {
-                auto& resolveImageTarget = m_RenderTargetImages[colorImageTarget.resolveTargetID];
-                attachment.resolveImageView = resolveImageTarget.view;
-                attachment.resolveImageLayout = vk::ImageLayout::eColorAttachmentOptimal;
-
-                // Resolve mode: simple heuristic (could store per-resource if needed)
-                attachment.resolveMode = (ct.format == VanK_FORMAT_R32_SINT)
-                                             ? vk::ResolveModeFlagBits::eSampleZero
-                                             : vk::ResolveModeFlagBits::eAverage;
-            }
-
             colorAttachments.push_back(attachment);
         }
 
-        auto& firstColor = m_RenderTargetImages[color_target_info[0].imageIndex];
+        vk::Extent2D renderExtent{};
 
-        vk::Extent2D renderExtent{
-            firstColor.extent.width,
-            firstColor.extent.height
-        };
+        if (color_target_info[0].format == VanK_FORMAT_SWAPCHAIN)
+        {
+            renderExtent = swapChainExtent;
+        }
+        else
+        {
+            auto& firstColor = m_RenderTargetImages[color_target_info[0].imageIndex];
+
+            renderExtent =
+            {
+                firstColor.extent.width,
+                firstColor.extent.height
+            };
+        }
 
         vk::RenderingInfo renderingInfo =
         {
@@ -2046,9 +2064,16 @@ namespace VanK
         m_hasActiveRenderPass = false;
     }
 
+    void VulkanRendererAPI::RenderImGui(VanKCommandBuffer cmd)
+    {
+        ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
+
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
+    }
+
     void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage)
     {
-        if (m_renderOption == VanK_Render_ImGui || m_renderOption == VanK_Render_Swapchain)
+        if (m_renderOption == VanK_Render_ImGui)
         {
             // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
             utils::transition_image_layout
@@ -2082,10 +2107,7 @@ namespace VanK
             };
 
             Unwrap(cmd).beginRendering(renderingInfo2);
-        }
 
-        if (m_renderOption == VanK_Render_ImGui)
-        {
             ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
 
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
@@ -2111,9 +2133,21 @@ namespace VanK
 
         if (m_renderOption == VanK_Render_Swapchain)
         {
-            Unwrap(cmd).endRendering();
+            // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
+            utils::transition_image_layout
+            (
+                Unwrap(cmd),
+                swapChainImages[imageIndex],
+                sceneImageInitialized ? vk::ImageLayout::ePresentSrcKHR : vk::ImageLayout::eUndefined,
+                vk::ImageLayout::eColorAttachmentOptimal,
+                {}, // srcAccessMask (no need to wait for previous operations)
+                vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
+                vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
+                vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage,
+                vk::ImageAspectFlagBits::eColor
+            );
 
-            if (renderTargetImage != -1)
+            if (renderTargetImage != UINT32_MAX)
             {
                 // Transition images before blit
                 utils::transition_image_layout
@@ -2210,7 +2244,8 @@ namespace VanK
                 range.baseArrayLayer = 0;
                 range.layerCount = 1;
 
-                utils::transition_image_layout(
+                utils::transition_image_layout
+                (
                     Unwrap(cmd),
                     swapChainImages[imageIndex],
                     vk::ImageLayout::eColorAttachmentOptimal,
@@ -2224,7 +2259,8 @@ namespace VanK
 
                 vk::ImageSubresourceRange ranges[] = {range};
 
-                Unwrap(cmd).clearColorImage(
+                Unwrap(cmd).clearColorImage
+                (
                     swapChainImages[imageIndex],
                     vk::ImageLayout::eTransferDstOptimal,
                     clearColor, // pass by reference, not pointer
@@ -2280,7 +2316,15 @@ namespace VanK
         Unwrap(cmd).bindDescriptorSets2(bindDescriptorSetsInfo);
     }
 
-    void VulkanRendererAPI::BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex)
+    void VulkanRendererAPI::BindRayTracing
+    (
+        VanKCommandBuffer cmd,
+        bool useRayQuery,
+        uint32_t renderTargetImageIndex,
+        bool isfinalRenderPass,
+        uint32_t rasterRenderTargetImageIndex,
+        uint32_t rayTraceRenderTargetImageIndex
+    )
     {
         // Ensure the descriptor set exists and the first handle is valid
         if (raytraceDescriptorSet.empty())
@@ -2292,43 +2336,88 @@ namespace VanK
         std::vector<vk::WriteDescriptorSet> descriptorWrites;
         descriptorWrites.reserve(2);
 
-        vk::WriteDescriptorSetAccelerationStructureKHR asInfo
+        if (!isfinalRenderPass)
         {
-            .accelerationStructureCount = 1,
-            .pAccelerationStructures = {&*tlas}
-        };
-
-        vk::WriteDescriptorSet asWrite
-        {
-            .pNext = &asInfo,
-            .dstSet = raytraceDescriptorSet[0],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
-        };
-        descriptorWrites.emplace_back(asWrite);
-
-        if (!useRayQuery)
-        {
-            vk::DescriptorImageInfo imageInfo
+            vk::WriteDescriptorSetAccelerationStructureKHR asInfo
             {
-                .sampler = VK_NULL_HANDLE,
-                .imageView = m_RenderTargetImages[renderTargetImageIndex].view,
-                .imageLayout = vk::ImageLayout::eGeneral
+                .accelerationStructureCount = 1,
+                .pAccelerationStructures = {&*tlas}
             };
 
-            vk::WriteDescriptorSet imageWrite
+            vk::WriteDescriptorSet asWrite
             {
+                .pNext = &asInfo,
                 .dstSet = raytraceDescriptorSet[0],
-                .dstBinding = 1,
+                .dstBinding = 0,
+                .dstArrayElement = 0,
                 .descriptorCount = 1,
-                .descriptorType = vk::DescriptorType::eStorageImage,
-                .pImageInfo = &imageInfo
+                .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
             };
-            descriptorWrites.emplace_back(imageWrite);
-        }
+            descriptorWrites.emplace_back(asWrite);
 
+            if (!useRayQuery)
+            {
+                vk::DescriptorImageInfo imageInfo
+                {
+                    .sampler = VK_NULL_HANDLE,
+                    .imageView = m_RenderTargetImages[renderTargetImageIndex].view,
+                    .imageLayout = vk::ImageLayout::eGeneral
+                };
+
+                vk::WriteDescriptorSet imageWrite
+                {
+                    .dstSet = raytraceDescriptorSet[0],
+                    .dstBinding = 1,
+                    .descriptorCount = 1,
+                    .descriptorType = vk::DescriptorType::eStorageImage,
+                    .pImageInfo = &imageInfo
+                };
+                descriptorWrites.emplace_back(imageWrite);
+            }
+        }
+        else
+        {
+            if (rasterRenderTargetImageIndex != UINT32_MAX)
+            {
+                vk::DescriptorImageInfo imageInfo
+                {
+                    .sampler = m_RenderTargetImages[rasterRenderTargetImageIndex].sampler,
+                    .imageView = m_RenderTargetImages[rasterRenderTargetImageIndex].view,
+                    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+                };
+
+                vk::WriteDescriptorSet imageWrite
+                {
+                    .dstSet = raytraceDescriptorSet[0],
+                    .dstBinding = 2,
+                    .descriptorCount = 1,
+                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                    .pImageInfo = &imageInfo
+                };
+                descriptorWrites.emplace_back(imageWrite);
+            }
+
+            if (rayTraceRenderTargetImageIndex != UINT32_MAX)
+            {
+                vk::DescriptorImageInfo imageInfo2
+                {
+                    .sampler = m_RenderTargetImages[rayTraceRenderTargetImageIndex].sampler,
+                    .imageView = m_RenderTargetImages[rayTraceRenderTargetImageIndex].view,
+                    .imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal
+                };
+
+                vk::WriteDescriptorSet imageWrite2
+                {
+                    .dstSet = raytraceDescriptorSet[0],
+                    .dstBinding = 3,
+                    .descriptorCount = 1,
+                    .descriptorType = vk::DescriptorType::eCombinedImageSampler,
+                    .pImageInfo = &imageInfo2
+                };
+
+                descriptorWrites.emplace_back(imageWrite2);
+            }
+        }
         device.updateDescriptorSets(descriptorWrites, {});
 
         //might have to change this i tryed putting updatedescriptor set here but idk do i need this in bindless ?
@@ -2994,10 +3083,12 @@ namespace VanK
             {
                 vk::DescriptorPoolSize(vk::DescriptorType::eAccelerationStructureKHR, MAX_FRAMES_IN_FLIGHT),
                 vk::DescriptorPoolSize(vk::DescriptorType::eStorageImage, MAX_FRAMES_IN_FLIGHT),
+                vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, MAX_FRAMES_IN_FLIGHT),
+                vk::DescriptorPoolSize(vk::DescriptorType::eCombinedImageSampler, MAX_FRAMES_IN_FLIGHT),
             };
 
             vk::DescriptorPoolCreateInfo poolInfo{
-                .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet,
+                .flags = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet | vk::DescriptorPoolCreateFlagBits::eUpdateAfterBind,
                 .maxSets = MAX_FRAMES_IN_FLIGHT, // Only one TLAS set is enough
                 .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
                 .pPoolSizes = poolSizes.data()
@@ -3095,11 +3186,31 @@ namespace VanK
                                                vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
                                                nullptr),
                 vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
+                                               nullptr),
+                vk::DescriptorSetLayoutBinding(2, vk::DescriptorType::eCombinedImageSampler, 1,
+                                               vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
+                                               nullptr),
+                vk::DescriptorSetLayoutBinding(3, vk::DescriptorType::eCombinedImageSampler, 1,
+                                               vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
                                                nullptr)
+            };
+
+            std::array<vk::DescriptorBindingFlags, 4> flags = {
+                static_cast<vk::DescriptorBindingFlags>(0), // binding 0
+                static_cast<vk::DescriptorBindingFlags>(0), // binding 1
+                vk::DescriptorBindingFlagBits::eUpdateAfterBind, // binding 2
+                vk::DescriptorBindingFlagBits::eUpdateAfterBind // binding 3
+            };
+
+            vk::DescriptorSetLayoutBindingFlagsCreateInfo bindingFlagsCI{
+                .bindingCount = uint32_t(flags.size()),
+                .pBindingFlags = flags.data()
             };
 
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
             {
+                .pNext = &bindingFlagsCI,
+                .flags = vk::DescriptorSetLayoutCreateFlagBits::eUpdateAfterBindPool,
                 .bindingCount = uint32_t(layoutBindings.size()),
                 .pBindings = layoutBindings.data(),
             };

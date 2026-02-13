@@ -28,10 +28,10 @@ void taskMain(
 
 static const float4 positions[4] = 
 {
-    float4(-0.5, -0.5, 0.0, 1.0),  // bottom-left
-    float4( 0.5, -0.5, 0.0, 1.0),  // bottom-right
-    float4( 0.5,  0.5, 0.0, 1.0),  // top-right
-    float4(-0.5,  0.5, 0.0, 1.0)   // top-left
+    float4(-1, -1, 0.0, 1.0),  // bottom-left
+    float4( 1, -1, 0.0, 1.0),  // bottom-right
+    float4( 1,  1, 0.0, 1.0),  // top-right
+    float4(-1,  1, 0.0, 1.0)   // top-left
 };
 
 static const float2 uv[4] = 
@@ -68,10 +68,26 @@ struct PixelOutput
     float4 color : SV_TARGET0;
 };
 
+[[vk::binding(2, 2)]]
+Sampler2D sceneImage;
+
+[[vk::binding(3, 2)]]
+Sampler2D rayTraceImage;
+
 [shader("pixel")]
 PixelOutput fragmentMain(VertexOutput vertexInput)
 {
-    PixelOutput output;
+     PixelOutput output;
 
+    // Flip Y for Vulkan if needed
+    float2 uv = float2(vertexInput.texcoords.x, 1.0 - vertexInput.texcoords.y);
+
+    float4 rayColor   = rayTraceImage.Sample(uv); // 3D PBR scene = background
+    float4 sceneColor = sceneImage.Sample(uv);   // 2D overlay = on top
+
+    // Alpha-over: scene on top of raytrace
+    float3 blendedRGB = rayColor.rgb * (1.0 - sceneColor.a) + sceneColor.rgb * sceneColor.a;
+
+    output.color = float4(blendedRGB, 1.0); // fully opaque final
     return output;
 }

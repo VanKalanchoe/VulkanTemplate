@@ -279,7 +279,8 @@ namespace VanK
         VanK_FORMAT_INVALID = 0,
         VanK_Format_B8G8R8A8Srgb,
         VanK_FORMAT_R32_SINT,
-        VanK_FORMAT_DEPTH_STENCIL
+        VanK_FORMAT_DEPTH_STENCIL,
+        VanK_FORMAT_SWAPCHAIN
     };
 
     struct VanKPipelineRenderingCreateInfo
@@ -354,7 +355,6 @@ namespace VanK
     {
         Graphics,
         Compute,
-        Mesh,
         Raytracing
     };
 
@@ -431,7 +431,8 @@ namespace VanK
         ShaderRead,
         IndirectRead,
         TransferSrc,
-        TransferDst
+        TransferDst,
+        PresentSrc
     };
 
     enum class ResourceType : uint8_t
@@ -525,7 +526,8 @@ namespace VanK
             DepthAttachment,
             ShaderReadOnly,
             TransferSrc,
-            TransferDst
+            TransferDst,
+            PresentSrc
         } layout = Layout::Undefined;
 
         static ResourceState Undefined()
@@ -608,7 +610,7 @@ namespace VanK
         virtual void BindUniformBuffer(VanKCommandBuffer cmd, VanKPipelineBindPoint bindPoint, UniformBuffer* buffer, uint32_t set, uint32_t binding, uint32_t arrayElement) = 0;
         virtual void BeginRendering(VanKCommandBuffer cmd, const VanKColorTargetInfo* color_target_info, uint32_t num_color_targets, VanKDepthStencilTargetInfo depth_stencil_target_info) = 0;
         virtual void BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing) = 0;
-        virtual void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex) = 0;
+        virtual void BindRayTracing(VanKCommandBuffer cmd, bool useRayQuery, uint32_t renderTargetImageIndex, bool isfinalRenderPass, uint32_t rasterRenderTargetImageIndex, uint32_t rayTraceRenderTargetImageIndex) = 0;
         virtual void SetViewport(VanKCommandBuffer cmd, uint32_t viewportCount, const VanKViewport viewport) = 0;
         virtual void SetScissor(VanKCommandBuffer cmd, uint32_t scissorCount, VankRect scissor) = 0;
         virtual void SetLineWidth(VanKCommandBuffer cmd, float lineWidth) = 0;
@@ -628,6 +630,7 @@ namespace VanK
                                                 uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;
+        virtual void RenderImGui(VanKCommandBuffer cmd) = 0;
         virtual void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage) = 0;
         virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {},
                                                   std::span<Ref<IndirectBuffer>> countBuffers = {}) = 0;

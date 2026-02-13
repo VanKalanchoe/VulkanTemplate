@@ -112,7 +112,8 @@ namespace VanK
         inline static Ref<RenderTargetImage> entityImage; // resolve 
         inline static Ref<RenderTargetImage> entityColorImage; // msaa
         inline static Ref<RenderTargetImage> rayTracingImage; // rayTracing Storage Image
-
+        inline static Ref<RenderTargetImage> finalImage; // combines raytracing and sceneImage
+        
         inline static VanKSamplerInfo skyboxSampler;
         
         // Graphics Pipelines

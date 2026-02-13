@@ -41,7 +41,8 @@ namespace VanK
         case ResourceUsage::TransferDst: return {ResourceState::Stage::Transfer,  ResourceState::Layout::TransferDst};
         case ResourceUsage::IndirectRead: return {ResourceState::Stage::DrawIndirect, ResourceState::Layout::General};
         case ResourceUsage::StorageRead: return {ResourceState::Stage::None,  ResourceState::Layout::General };
-        case ResourceUsage::StorageWrite: return {ResourceState::Stage::None, ResourceState::Layout::General }; 
+        case ResourceUsage::StorageWrite: return {ResourceState::Stage::None, ResourceState::Layout::General };
+        case ResourceUsage::PresentSrc: return {ResourceState::Stage::None, ResourceState::Layout::PresentSrc };
         }
         return {};
     }
@@ -159,7 +160,24 @@ namespace VanK
             // ---- Begin rendering once per pass ----
             if (!colorAttachments.empty() || depthAttachment.has_value())
             {
-                RenderCommand::BeginRendering(cmd, colorAttachments.data(), colorAttachments.size(), *depthAttachment);
+                if (depthAttachment.has_value())
+                {
+                    RenderCommand::BeginRendering(
+                        cmd,
+                        colorAttachments.data(),
+                        colorAttachments.size(),
+                        *depthAttachment
+                    );
+                }
+                else
+                {
+                    RenderCommand::BeginRendering(
+                        cmd,
+                        colorAttachments.data(),
+                        colorAttachments.size(),
+                        {}   // pass empty depth
+                    );
+                }
                 
                 Extent2D viewPortRenderer = Renderer::GetViewportSize();
                 
