@@ -19,7 +19,12 @@ namespace VanK
         RGBA8,
         SRGBA8,
         R16G16,
-        R32SINT
+        R32SINT,
+        R32G32B32A32_SFLOAT,
+        
+        //tinyddsloader format
+        BC7_UNorm,
+        BC7_UNorm_SRGB
     };
     
     enum class VanKFilter

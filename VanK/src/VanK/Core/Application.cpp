@@ -239,6 +239,14 @@ namespace VanK
                         return SDL_APP_CONTINUE;
                     }
                     
+                    if (sdlEvent->key.scancode == SDL_SCANCODE_H)
+                    {
+                        Renderer::isRaster = !Renderer::isRaster;
+                        if (!Renderer::isRaster)
+                            Renderer::isRaster = false;
+                        return SDL_APP_CONTINUE;
+                    }
+                    
                     if (!applicationState->app->m_BlockEvents)
                     {
                         SDL_Scancode scan = sdlEvent->key.scancode; // maybe keycode better ?
@@ -257,8 +265,17 @@ namespace VanK
 
         void SDL_AppQuit(void* appstate, SDL_AppResult result)
         {
+            if (!appstate)
+                return; // nothing to do
+            
             auto applicationState = static_cast<AppState*>(appstate);
-            delete applicationState->app;
+            
+            if (applicationState->app) 
+            {
+                delete applicationState->app;
+                applicationState->app = nullptr; // prevent double delete
+            }
+            
             delete applicationState;
         }
     }

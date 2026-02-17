@@ -147,6 +147,7 @@ namespace VanK
         inline static VanKRaytracingPipelineSpecification m_RaytracingPipelineSpecification = {};
     
     public:
+        inline static bool isRaster = false;
         inline static bool frozen = false;
         inline static bool frozenDone = false;
         inline static bool FrustumCullEnabled = true;

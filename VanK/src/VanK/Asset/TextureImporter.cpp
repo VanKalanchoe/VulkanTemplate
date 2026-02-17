@@ -3,12 +3,27 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
+#define TINYDDSLOADER_IMPLEMENTATION
+#include "VanK/Renderer/tinyddsloader.h"
+
+using namespace tinyddsloader;
+
 #include "VanK/Core/logger.h"
 #include "VanK/Debug/Instrumentor.h"
 #include "VanK/Project/Project.h"
 
 namespace VanK
 {
+    ImageFormat convertDDSFormatToImageFormat(DDSFile::DXGIFormat format)
+    {
+        switch (format)
+        {
+        case DDSFile::DXGIFormat::BC7_UNorm: return ImageFormat::BC7_UNorm;
+        case DDSFile::DXGIFormat::BC7_UNorm_SRGB: return ImageFormat::BC7_UNorm_SRGB;
+        default: throw std::runtime_error("unknown DDS file format");
+        }
+    }
+    
     void flipKtxTexture2(ktxTexture2* tex)
     {
         const uint32_t mipCount = tex->numLevels;
@@ -48,12 +63,54 @@ namespace VanK
     {
         std::vector paths{ path };
         
+        if (!std::filesystem::exists(path)) {
+            VK_CORE_WARN("Texture file not found: {}", path.string());
+            // Return a default white texture
+            TextureSpecification fallbackSpec = spec;
+            fallbackSpec.Width = 1;
+            fallbackSpec.Height = 1;
+            Buffer data(4);
+            data.Data[0] = 255; data.Data[1] = 255; data.Data[2] = 255; data.Data[3] = 255;
+            return Texture2D::Create(fallbackSpec, data);
+        }
+        
         if (path.extension() == ".png" || path.extension() == ".jpg" || path.extension() == ".jpeg")
             return LoadImageTexture(path, spec);
+        
+        if (path.extension() == ".dds")
+            return LoadDDSTexture(path, spec);
         
         return LoadTexture2D(paths, spec);
     }
     
+    Ref<Texture2D> TextureImporter::LoadDDSTexture(const std::filesystem::path& path, TextureSpecification spec)
+    {
+        DDSFile dds;
+        
+        auto ret = dds.Load(path.string().c_str());
+        if (tinyddsloader::Result::Success != ret) {
+            throw std::runtime_error("failed to load DDS!: " + path.string() + "Result: " + std::to_string(ret));
+        }
+        
+        // Get main image (first mip, first array layer, first face)
+        auto img = dds.GetImageData(0, 0);
+        if (!img || !img->m_mem)
+            throw std::runtime_error("DDS image data missing!");
+        
+        spec.Width  = img->m_width;
+        spec.Height = img->m_height;
+        
+        Buffer data((uint64_t)img->m_memSlicePitch);
+        memcpy(data.Data, img->m_mem, data.Size);
+        
+        spec.Format = convertDDSFormatToImageFormat(dds.GetFormat());
+        
+        Ref<Texture2D> tex = Texture2D::Create(spec, data);
+        
+        data.Release();
+        return tex;
+    }
+
     Ref<Texture2D> TextureImporter::LoadImageTexture(const std::filesystem::path& path, TextureSpecification spec)
     {
         if (spec.FlipTexture)
@@ -63,7 +120,7 @@ namespace VanK
         stbi_uc *pixels = stbi_load(path.string().c_str(), &w, &h, &c, STBI_rgb_alpha);
         
         if (!pixels)
-            throw std::runtime_error("failed to load texture image!");
+            throw std::runtime_error("failed to load texture image!: " + path.string());
 
         spec.Width  = w;
         spec.Height = h;
@@ -107,8 +164,8 @@ namespace VanK
             
             if (ktxTexture2_NeedsTranscoding(ktx_texture))
             {
-                // target format currently uncompressed check here what actual fmt format to use with that function https://docs.vulkan.org/samples/latest/samples/performance/texture_compression_basisu/README.html
-                result = ktxTexture2_TranscodeBasis(ktx_texture, KTX_TTF_RGBA32, 0);
+                result = ktxTexture2_TranscodeBasis(ktx_texture, KTX_TTF_BC7_RGBA, 0);
+                std::cout << "transcoding: -----------------------------------------------" << '\n';
                 if (result != KTX_SUCCESS)
                 {
                     throw std::runtime_error("Could not transcode the input texture to the selected target format.");

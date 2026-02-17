@@ -17,6 +17,7 @@ namespace VanK
 
         // Reads file directory from filesystem (i.e path has to be relative/absolute to working direcory)
         static Ref<Texture2D> LoadTexture2D(const std::filesystem::path& path, const TextureSpecification& spec = {});
+        static Ref<Texture2D> LoadDDSTexture(const std::filesystem::path& path, TextureSpecification spec);
         static Ref<Texture2D> LoadImageTexture(const std::filesystem::path& path, TextureSpecification spec);
 
         // Reads file directory from filesystem (i.e path has to be relative/absolute to working direcory)

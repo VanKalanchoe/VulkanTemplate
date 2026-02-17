@@ -44,10 +44,16 @@ struct Material
     vec4 specularFactor;
     vec3 emissiveFactor;
     float emissiveStrength;
+    float thicknessFactor;
+    float attenuationDistance;
+    vec3 attenuationColor;
+    float ior;
     float ambientOcclusionFactor;
 
     bool transparent;
 
+    uint32_t alphaMode;    // 0: OPAQUE, 1: MASK, 2: BLEND
+    float    alphaCutoff;  // The 0.5 value from your JSON
     float transmissionFactor; // 0 = opaque, 1 = full transparent
 };
 

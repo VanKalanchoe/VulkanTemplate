@@ -42,9 +42,11 @@ namespace VanK
             else if (entryPoint == "compMain") stage = vk::ShaderStageFlagBits::eCompute;
             else if (entryPoint == "taskMain") stage = vk::ShaderStageFlagBits::eTaskEXT;
             else if (entryPoint == "meshMain") stage = vk::ShaderStageFlagBits::eMeshEXT;
+            
             else if (entryPoint == "raygenerationMain") stage = vk::ShaderStageFlagBits::eRaygenKHR;
             else if (entryPoint == "missMain") stage = vk::ShaderStageFlagBits::eMissKHR;
             else if (entryPoint == "closesthitMain") stage = vk::ShaderStageFlagBits::eClosestHitKHR;
+            else if (entryPoint == "anyhitMain") stage = vk::ShaderStageFlagBits::eAnyHitKHR;
             else continue;
                 
             std::string fileName = m_Name + "." + entryPoint + ".spv";
@@ -72,9 +74,11 @@ namespace VanK
         if (entry == "compMain")         return vk::ShaderStageFlagBits::eCompute;
         if (entry == "taskMain")         return vk::ShaderStageFlagBits::eTaskEXT;
         if (entry == "meshMain")         return vk::ShaderStageFlagBits::eMeshEXT;
+        
         if (entry == "raygenerationMain")         return vk::ShaderStageFlagBits::eRaygenKHR;
         if (entry == "missMain")         return vk::ShaderStageFlagBits::eMissKHR;
         if (entry == "closesthitMain")         return vk::ShaderStageFlagBits::eClosestHitKHR;
+        if (entry == "anyhitMain")         return vk::ShaderStageFlagBits::eAnyHitKHR;
         throw std::runtime_error("Unknown entry point: " + entry);
     }
     
@@ -92,6 +96,7 @@ namespace VanK
             "raygenerationMain",
             "missMain",
             "closesthitMain",
+            "anyhitMain"
         };
 
         std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> spirvPerStage;

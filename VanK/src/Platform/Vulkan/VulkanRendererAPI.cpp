@@ -999,6 +999,7 @@ namespace VanK
             eRaygen,
             eMiss,
             eClosestHit,
+            eAnyHit,
             eShaderGroupCount
         };
 
@@ -1036,6 +1037,7 @@ namespace VanK
         addStage(vk::ShaderStageFlagBits::eRaygenKHR, eRaygen);
         addStage(vk::ShaderStageFlagBits::eMissKHR, eMiss);
         addStage(vk::ShaderStageFlagBits::eClosestHitKHR, eClosestHit);
+        addStage(vk::ShaderStageFlagBits::eAnyHitKHR, eAnyHit);
 
         // Shader groups
         vk::RayTracingShaderGroupCreateInfoKHR group{};
@@ -1055,11 +1057,15 @@ namespace VanK
         group.generalShader = stageToShaderIndex[eMiss];
         shader_groups.push_back(group);
 
-        // closest hit shader
+        // Closest Hit Shader
         group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
         group.generalShader = VK_SHADER_UNUSED_KHR;
         group.closestHitShader = stageToShaderIndex[eClosestHit];
+        group.anyHitShader = stageToShaderIndex[eAnyHit];
         shader_groups.push_back(group);
+        
+        // Any Hit
+        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
 
         std::array<vk::DescriptorSetLayout, 3> setLayouts =
         {
@@ -1311,7 +1317,7 @@ namespace VanK
         }
 
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
-        downloadQueryStatisticsBuffer();
+        /*downloadQueryStatisticsBuffer();*/
         if (isTimeStapEnabled)
             downloadQueryTimeStampBuffer();
     }
@@ -1718,7 +1724,7 @@ namespace VanK
         }
         else if (bindPoint == VanKPipelineBindPoint::Raytracing)
         {
-            stage_flags = vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR;
+            stage_flags = vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR;
         }
 
         // Push layout information with updated data
@@ -1921,7 +1927,7 @@ namespace VanK
         {
             layout = m_currentComputePipelineLayout;
         }
-        else if (flag & (vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR))
+        else if (flag & (vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR))
         {
             layout = m_currentRaytracingPipelineLayout;
         }
@@ -2307,7 +2313,7 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
         {
-            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics,
+            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics,
             .layout = (isRayTracing) ? m_currentRaytracingPipelineLayout : m_currentGraphicPipelineLayout,
             .firstSet = 0,
             .descriptorSetCount = 1,
@@ -2674,11 +2680,11 @@ namespace VanK
             vk::AccelerationStructureGeometryKHR blasGeometry{
                 .geometryType = vk::GeometryTypeKHR::eTriangles,
                 .geometry = geometryData,
-                .flags = vk::GeometryFlagBitsKHR::eOpaque
+                /*.flags = vk::GeometryFlagBitsKHR::eOpaque*/
             };
 #	if LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
             // TASK07
-            blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagsKHR(0) : vk::GeometryFlagBitsKHR::eOpaque;
+            blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation : vk::GeometryFlagBitsKHR::eOpaque;
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
 
             vk::AccelerationStructureBuildGeometryInfoKHR blasBuildGeometryInfo{
@@ -2873,40 +2879,6 @@ namespace VanK
 
         utils::endSingleTimeCommands(*cmd, queue);
 #endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
-
-        /*vk::WriteDescriptorSetAccelerationStructureKHR asInfo{
-            .accelerationStructureCount = 1,
-            .pAccelerationStructures = {&*tlas}
-        };
-
-        vk::WriteDescriptorSet asWrite{
-            .pNext = &asInfo,
-            .dstSet = raytraceDescriptorSet[0],
-            .dstBinding = 0,
-            .dstArrayElement = 0,
-            .descriptorCount = 1,
-            .descriptorType = vk::DescriptorType::eAccelerationStructureKHR
-        };
-
-        vk::DescriptorImageInfo imageInfo
-        {
-            .sampler = VK_NULL_HANDLE,
-            .imageView = m_RenderTargetImages[renderTargetImageIndex].view,
-            .imageLayout = vk::ImageLayout::eGeneral
-        };
-
-        vk::WriteDescriptorSet imageWrite
-        {
-            .dstSet = raytraceDescriptorSet[0],
-            .dstBinding = 1,
-            .descriptorCount = 1,
-            .descriptorType = vk::DescriptorType::eStorageImage,
-            .pImageInfo = &imageInfo
-        };
-
-        std::array descriptorWrites{asWrite, imageWrite};
-
-        device.updateDescriptorSets(descriptorWrites, {});*/
     }
 
     void VulkanRendererAPI::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
@@ -3111,7 +3083,7 @@ namespace VanK
                         .binding = 0,
                         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                         .descriptorCount = numTextures,
-                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR
+                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR
                     },
 
                     // This is if we would add another binding for the scene info, but instead we make another set, see below
@@ -3164,7 +3136,7 @@ namespace VanK
             {
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1,
                                                vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR
-                                               | vk::ShaderStageFlagBits::eMissKHR, nullptr),
+                                               | vk::ShaderStageFlagBits::eAnyHitKHR| vk::ShaderStageFlagBits::eMissKHR, nullptr),
             };
 
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
@@ -3183,7 +3155,7 @@ namespace VanK
             {
                 //fragmnet for rayQuerys
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1,
-                                               vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
+                                               vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR,
                                                nullptr),
                 vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
                                                nullptr),

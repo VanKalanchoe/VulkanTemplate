@@ -269,21 +269,50 @@ namespace VanK
     static std::vector<uint32_t> primitiveIndices{};
     static std::unordered_map<std::string, Ref<Texture2D>> textureCache;
 
-    static Ref<Texture2D> LoadTextureFromImage
-    (
-        int imageIndex,
-        const std::string& basePath,
-        const tinygltf::Model& model,
-        bool generateMips = false,
-        ImageFormat format = ImageFormat::RGBA8,
-        bool flipTexture = false
-    )
+    static int ResolveImageFromTexture(const tinygltf::Model& model, int textureIndex)
     {
-        if (imageIndex < 0)
+        if (textureIndex < 0 || textureIndex >= model.textures.size())
+        {
+            std::cout << "Invalid texture index: " << textureIndex << std::endl;
+            return -1;
+        }
+
+        const tinygltf::Texture& tex = model.textures[textureIndex];
+
+        // Prefer DDS
+        auto dds = tex.extensions.find("MSFT_texture_dds");
+        if (dds != tex.extensions.end())
+        {
+            const tinygltf::Value& ext = dds->second;
+            if (ext.Has("source"))
+                return ext.Get("source").Get<int>();
+        }
+
+        // fallback PNG/JPG
+        return tex.source;
+    }
+    
+    static Ref<Texture2D> LoadTextureFromTexture(
+    int textureIndex,
+    const std::string& basePath,
+    const tinygltf::Model& model,
+    bool generateMips,
+    ImageFormat format,
+    bool flipTexture
+)
+    {
+        if (textureIndex < 0 || textureIndex >= model.textures.size())
+            return nullptr;
+
+        int imageIndex = ResolveImageFromTexture(model, textureIndex);
+        if (imageIndex < 0 || imageIndex >= model.images.size())
             return nullptr;
 
         const tinygltf::Image& img = model.images[imageIndex];
-        std::string key = img.uri.empty() ? "embedded_" + std::to_string(imageIndex) : img.uri;
+
+        std::string key = img.uri.empty()
+            ? "embedded_" + std::to_string(imageIndex)
+            : img.uri;
 
         auto it = textureCache.find(key);
         if (it != textureCache.end())
@@ -291,42 +320,22 @@ namespace VanK
 
         if (!img.uri.empty())
         {
-            Ref<Texture2D> tex = TextureImporter::LoadTexture2D(basePath + img.uri, {.Format = format, .GenerateMips = generateMips, .FlipTexture = flipTexture});
+            std::filesystem::path fullpath = std::filesystem::path(basePath) / img.uri;
+
+            if (!std::filesystem::exists(fullpath))
+            {
+                std::cout << "Texture file not found: " << fullpath << std::endl;
+                return nullptr;
+            }
+
+            Ref<Texture2D> tex = TextureImporter::LoadTexture2D(
+                fullpath.string(),
+                {.Format = format, .GenerateMips = generateMips, .FlipTexture = flipTexture}
+            );
+
             textureCache[key] = tex;
             return tex;
         }
-
-        /*if (img.bufferView >= 0)
-        {
-            const tinygltf::BufferView& bv = model.bufferViews[img.bufferView];
-            const tinygltf::Buffer& buf = model.buffers[bv.buffer];
-
-            int w = 0, h = 0, c = 0;
-
-            unsigned char* pixels = stbi_load_from_memory
-            (
-                buf.data.data() + bv.byteOffset,
-                static_cast<int>(bv.byteLength),
-                &w, &h, &c, 4
-            );
-
-            if (!pixels) return nullptr;
-
-            TextureSpecification spec{};
-            spec.Width = w;
-            spec.Height = h;
-            spec.Format = format;
-            spec.GenerateMips = generateMips;
-
-            Ref<Texture2D> tex = Texture2D::Create(
-                spec,
-                Buffer(pixels, w * h * 4)
-            );
-
-            stbi_image_free(pixels);
-            textureCache[key] = tex;
-            return tex;
-        }*/
 
         return nullptr;
     }
@@ -354,6 +363,11 @@ namespace VanK
         mat.specularFactor = glm::vec4(1.0f);
         mat.emissiveFactor = glm::vec3(0.0f);
         mat.emissiveStrength = 1.0f;
+        mat.thicknessFactor = 0.0f;
+        mat.attenuationDistance = 1.0f;
+        mat.attenuationColor = glm::vec3(1.0f, 1.0f, 1.0f);
+
+        mat.ior = 1.5f;
         mat.ambientOcclusionFactor = 1.0f;
 
         mat.transparent = false;
@@ -364,7 +378,6 @@ namespace VanK
         // BASE COLOR / DIFFUSE
         // -----------------------------
         mat.diffuseFactor = glm::vec4(1.0f); // default white
-        int albedoImage = -1;
 
         if (gltfMat.pbrMetallicRoughness.baseColorFactor.size() == 4)
         {
@@ -375,9 +388,7 @@ namespace VanK
         if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0) // New PBR (Metallic-Roughness)
         {
             int texIndex = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
-            albedoImage = model.textures[texIndex].source;
-
-            if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, false, ImageFormat::SRGBA8, true))
+            if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::SRGBA8, true))
                 mat.albedoTexture = t->GetTextureIndex();
         }
         else if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness")) // Old PBR
@@ -389,8 +400,7 @@ namespace VanK
             if (ext.Has("diffuseTexture"))
             {
                 int texIndex = ext.Get("diffuseTexture").Get("index").Get<int>();
-                albedoImage = model.textures[texIndex].source;
-                if (Ref<Texture2D> t = LoadTextureFromImage(albedoImage, basePath, model, false, ImageFormat::RGBA8))
+                if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::RGBA8, false))
                     mat.albedoTexture = t->GetTextureIndex();
             }
 
@@ -437,8 +447,7 @@ namespace VanK
             if (ext.Has("specularGlossinessTexture"))
             {
                 int texIndex = ext.Get("specularGlossinessTexture").Get("index").Get<int>();
-                int imgIndex = model.textures[texIndex].source;
-                if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
+                if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::RGBA8, false))
                     mat.specularTexture = t->GetTextureIndex();
             }
         }
@@ -449,8 +458,7 @@ namespace VanK
         if (gltfMat.normalTexture.index >= 0)
         {
             int texIndex = gltfMat.normalTexture.index;
-            int imgIndex = model.textures[texIndex].source;
-            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
+            if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::RGBA8, false))
                 mat.normalTexture = t->GetTextureIndex();
         }
 
@@ -463,9 +471,7 @@ namespace VanK
         if (gltfMat.pbrMetallicRoughness.metallicRoughnessTexture.index >= 0)
         {
             int texIndex = gltfMat.pbrMetallicRoughness.metallicRoughnessTexture.index;
-            int imgIndex = model.textures[texIndex].source;
-
-            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
+            if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::RGBA8, false))
                 mat.metallicRoughnessTexture = t->GetTextureIndex();
         }
 
@@ -484,8 +490,7 @@ namespace VanK
         if (gltfMat.emissiveTexture.index >= 0)
         {
             int texIndex = gltfMat.emissiveTexture.index;
-            int imgIndex = model.textures[texIndex].source;
-            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::SRGBA8))
+            if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::SRGBA8, false))
                 mat.emissiveTexture = t->GetTextureIndex();
         }
         
@@ -506,9 +511,7 @@ namespace VanK
         if (gltfMat.occlusionTexture.index >= 0)
         {
             int texIndex = gltfMat.occlusionTexture.index;
-            int imgIndex = model.textures[texIndex].source;
-
-            if (Ref<Texture2D> t = LoadTextureFromImage(imgIndex, basePath, model, false, ImageFormat::RGBA8))
+            if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::RGBA8, false))
                 mat.ambientOcclusionTexture = t->GetTextureIndex();
 
             mat.ambientOcclusionFactor = static_cast<float>(gltfMat.occlusionTexture.strength);
@@ -524,11 +527,75 @@ namespace VanK
             if (ext.Has("transmissionFactor"))
                 mat.transmissionFactor = static_cast<float>(ext.Get("transmissionFactor").Get<double>());
         }
+        
+        // -----------------------------
+        // VOLUME
+        // -----------------------------
+        
+        if (gltfMat.extensions.contains("KHR_materials_volume"))
+        {
+            const auto& volExt = gltfMat.extensions.at("KHR_materials_volume");
+
+            // thicknessFactor scales the path through the object
+            if (volExt.Has("thicknessFactor"))
+                mat.thicknessFactor = static_cast<float>(volExt.Get("thicknessFactor").Get<double>());
+
+            // attenuationDistance: distance at which light is reduced to 1/e
+            if (volExt.Has("attenuationDistance"))
+                mat.attenuationDistance = static_cast<float>(volExt.Get("attenuationDistance").Get<double>());
+            else
+                mat.attenuationDistance = std::numeric_limits<float>::infinity(); // default if not specified
+
+            // attenuationColor: color of light that survives through the medium
+            if (volExt.Has("attenuationColor"))
+            {
+                const auto& colorArray = volExt.Get("attenuationColor").Get<std::vector<tinygltf::Value>>();
+                if (colorArray.size() >= 3)
+                {
+                    mat.attenuationColor = glm::vec3(
+                        static_cast<float>(colorArray[0].Get<double>()),
+                        static_cast<float>(colorArray[1].Get<double>()),
+                        static_cast<float>(colorArray[2].Get<double>())
+                    );
+                }
+            }
+        }
+        
+        // -----------------------------
+        // IOR
+        // -----------------------------
+        if (gltfMat.extensions.contains("KHR_materials_ior"))
+        {
+            const auto& iorExt = gltfMat.extensions.at("KHR_materials_ior");
+            if (iorExt.Has("ior"))
+                mat.ior = static_cast<float>(iorExt.Get("ior").Get<double>());
+        }
 
         // -----------------------------
         // TRANSPARENCY
         // -----------------------------
         mat.transparent = (gltfMat.alphaMode == "BLEND") || (mat.transmissionFactor > 0.0f);
+        
+        mat.alphaMode = 0; 
+        if (gltfMat.alphaMode == "MASK") mat.alphaMode = 1;
+        else if (gltfMat.alphaMode == "BLEND") mat.alphaMode = 2;
+
+        mat.alphaCutoff = static_cast<float>(gltfMat.alphaCutoff); // Default is 0.5
+        
+        if (gltfMat.extensions.contains("KHR_materials_specular") && gltfMat.extensions.contains("KHR_materials_specular"))
+        {
+            const auto& specExt = gltfMat.extensions.at("KHR_materials_specular");
+            if (specExt.Has("specularColorFactor"))
+            {
+                const auto& scf = specExt.Get("specularColorFactor").Get<std::vector<tinygltf::Value>>();
+                mat.specularFactor = glm::vec4(
+                    static_cast<float>(scf[0].Get<double>()),
+                    static_cast<float>(scf[1].Get<double>()),
+                    static_cast<float>(scf[2].Get<double>()),
+                    1.0f
+                );
+            }
+        }
 
         materials.push_back(mat);
         return static_cast<uint32_t>(materials.size() - 1);
@@ -859,8 +926,7 @@ namespace VanK
             TraverseNode(basePath, model, child, worldTransform, verticesOut, indicesOut, materialIndex);
         }
     }
-
-
+    
     static ModelHandle LoadMeshModel(std::string path, uint32_t materialIndex = 0, std::vector<shaderio::Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
     {
         uint64_t firstPrimitive = geometry.primitives.size();
@@ -928,7 +994,7 @@ namespace VanK
         uint64_t primitiveCount = geometry.primitives.size() - firstPrimitive;
         return {firstPrimitive, primitiveCount};
     }
-
+   
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
         scenesData.view = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * glm::inverse(transform);
@@ -965,7 +1031,8 @@ namespace VanK
             scenesData.frozenFrustum = scenesData.frustum;
         }
     }
-
+    uint32_t m_frameCounter = 0;
+    uint32_t m_maxFrames = 200; 
 
     void Renderer::BeginScene(const EditorCamera& camera)
     {
@@ -978,6 +1045,22 @@ namespace VanK
         scenesData.viewProjInverse = glm::inverse(scenesData.viewProj);
         
         scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};
+        
+        // Compare to previous frame
+        static glm::mat4 lastView = scenesData.view;
+        static glm::mat4 lastProj = scenesData.proj;
+
+        bool cameraMoved = (lastView != scenesData.view) || (lastProj != scenesData.proj);
+
+        if (cameraMoved)
+            m_frameCounter = 0;  // reset progressive accumulation
+        else
+            m_frameCounter = std::min(m_frameCounter + 1, m_maxFrames);  // increment
+
+        // Store current matrices for next frame
+        lastView = scenesData.view;
+        lastProj = scenesData.proj;
+
         scenesData.frustum = Frustum(scenesData.viewProj);
         scenesData.FrustumCullEnabled = FrustumCullEnabled;
 
@@ -1343,6 +1426,7 @@ namespace VanK
         uint64_t instanceLutBuffer;
         uint64_t lightsBuffer;
         uint32_t skyBoxIndex;
+        uint32_t frame;
     };
 
     struct ModelPrimitive
@@ -1504,7 +1588,7 @@ namespace VanK
         
         depthImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .depthImage = true});
         
-        rayTracingImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::RGBA8, .isStorageImage = true});
+        rayTracingImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32G32B32A32_SFLOAT, .isStorageImage = true});
         
         finalImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
     }
@@ -1530,7 +1614,8 @@ namespace VanK
         auto MeshLine = GetShaderLibrary().Load("MeshLine", "MeshLine.slang");
         auto SkyBox = GetShaderLibrary().Load("SkyBox", "SkyBox.slang");
         auto raytracingbasic = GetShaderLibrary().Load("raytracingbasic", "raytracingbasic.slang");
-
+        auto PathTracer = GetShaderLibrary().Load("PathTracer", "PathTracer.slang");
+        
         // Pipeline Creation
         uint32_t useTexture = true;
         std::vector<VanKSpecializationMapEntries> mapEntries
@@ -1773,14 +1858,18 @@ namespace VanK
         /*vikingRoom = TextureImporter::LoadTexture2D("assets/textures/viking_room.ktx2", {.FlipTexture = true});
         ChernoLogo = TextureImporter::LoadTexture2D("assets/textures/ChernoLogo.ktx2");*/
         BRDF2DLUT = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/lol.ktx2", {.FlipTexture = true, .SamplerInfo = skyboxSampler});
+        
+        /*
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/irradiance.ktx2", {.SamplerInfo = skyboxSampler});
         prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/prefilter.ktx2", {.SamplerInfo = skyboxSampler});
-        /*cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSky.ktx2", {.SamplerInfo = skyboxSampler});
+        */
+       
+        cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSky.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyIrradiance.ktx2",
                                                        {.SamplerInfo = skyboxSampler});
         prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyPrefilter.ktx2",
-                                                      {.SamplerInfo = skyboxSampler});*/
+                                                      {.SamplerInfo = skyboxSampler});
 
         /*
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/nightSky/nightSkyCube.ktx2", {.SamplerInfo = skyboxSampler});
@@ -1817,8 +1906,9 @@ namespace VanK
             0, 1, 2, // first triangle
             0, 2, 3 // second triangle
         };
-
-        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
+       
+        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.bc7.gltf", pinkTexture->GetTextureIndex());*/
+        /*ModelHandle bistro = LoadMeshModel(" E:/dev/VulkanAdventure/nvidia/RTXPT/Assets/Models/Bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
         //ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
         /*ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
@@ -1828,13 +1918,16 @@ namespace VanK
         /*ModelHandle bhudda = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/happy_bhudda/scene.gltf");*/
         /*ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/cornell_box/scene.gltf");*/
-        ModelHandle cornellBox2 = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Original.gltf");
+        /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Original.gltf");*/
+        ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Sphere.gltf");
         /*ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");*/
         /*ModelHandle plantOnTable = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/plantOnTable/Untitled.gltf");*/
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
         /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
         /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
-        runtimePlant = BuildRuntimeModel(cornellBox2);
+        /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/TransmissionOrderTest/TransmissionOrderTest.gltf");*/
+        /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/meet_mat.glb");*/
+        runtimePlant = BuildRuntimeModel(cornellBox);
         //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
@@ -2008,6 +2101,7 @@ namespace VanK
             //todo its not the actual rendererd stats its just total so need to substract somehow
             ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data.totalCulled, geometry.meshlets.size());
             ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
+            ImGui::Text("Mode: %s", isRaster ? "Raster" : "Raytrace");
             ImGui::End();
         }
      
@@ -2031,12 +2125,6 @@ namespace VanK
         };
         finalRender.execute = []
         {
-            /*RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_FinalRenderPipeline);
-            /*
-            RenderCommand::BindRayTracing(cmd, true, sceneImage->GetRenderImageIndex(), true);
-            #1#
-            RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);*/
-            
             if (isEditor)
                 RenderCommand::RenderImGui(cmd);
         };
@@ -2082,7 +2170,7 @@ namespace VanK
     }
 
     static bool done = false;
-
+ 
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
@@ -2142,10 +2230,8 @@ namespace VanK
         SubmitModel(runtimePlant, transform);
         // has to be done after createAccelerationStructures is called once maybe add a check or so
         RenderCommand::updateTopLevelAS(transform);
-        //multiple meshes---
 
         m_TransferBuffer->Upload(cmd, *meshDrawBuffer, meshDraws, 0);
-        /*meshDraws.clear();*/
 
         m_TransferBuffer->Upload(cmd, *localMeshTaskSubmitBuffer, meshTasks, 0);
 
@@ -2159,200 +2245,204 @@ namespace VanK
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
 
         renderGraph.Reset();
-        // between compute and raster is no barrier
-        /*{
-            auto& compute = renderGraph.AddPass("Compute Mesh Tasks");
-            compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
-            compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite}};
-            compute.execute = []
-            {
-                GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
-
-                /*
-                VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, {});
-                #1#
-
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
-
-                meshTasksSubmitPushConstant pushData
-                {
-                    .meshTasksIndirectBufferAddress = meshTaskSubmitBuffer->GetBufferAddress(),
-                    .localMeshTasksIndirectBufferAddress = localMeshTaskSubmitBuffer->GetBufferAddress(),
-                };
-
-                RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
-
-                RenderCommand::DispatchCompute({}, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
-
-                /*
-                RenderCommand::EndComputePass(computePass);#1#
-            };
-        }*/
-
+        if (isRaster)
         {
-            auto& MeshDraw = renderGraph.AddPass("Mesh Draw");
-            MeshDraw.reads =
+            // between compute and raster is no barrier
             {
-                {"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::IndirectRead}
-            };
-            MeshDraw.writes =
+                auto& compute = renderGraph.AddPass("Compute Mesh Tasks");
+                compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
+                compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite}};
+                compute.execute = []
+                {
+                    GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
+
+                    /*
+                    VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, {});
+                    */
+
+                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
+
+                    meshTasksSubmitPushConstant pushData
+                    {
+                        .meshTasksIndirectBufferAddress = meshTaskSubmitBuffer->GetBufferAddress(),
+                        .localMeshTasksIndirectBufferAddress = localMeshTaskSubmitBuffer->GetBufferAddress(),
+                    };
+
+                    RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
+
+                    RenderCommand::DispatchCompute({}, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
+
+                    /*
+                    RenderCommand::EndComputePass(computePass);*/
+                };
+            }
+
             {
-                // can use this system to create the texture here to automate fully dont forget tho somehow needs to be able to rebuild when viewport changes
-                // check beginrendering i think depth aline is not supported currectlny because of viewport fix it
-                {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead},
+                auto& MeshDraw = renderGraph.AddPass("Mesh Draw");
+                MeshDraw.reads =
                 {
-                    "colorImage", ResourceID::Image(colorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
-                    VanK_FColor{.f = {0.0f, 0.0f, 0.0f, 1.0f}}
-                },
-                {"entityImage", ResourceID::Image(entityImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment},
+                    {"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::IndirectRead}
+                };
+                MeshDraw.writes =
                 {
-                    "entityColorImage", ResourceID::Image(entityColorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
-                    VanK_FColor{.i = {-1}}
-                },
-                {
-                    "depthImage", ResourceID::Image(depthImage->GetRenderImageIndex()), ResourceUsage::DepthAttachment, {}, VanK_FORMAT_DEPTH_STENCIL, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
-                    VanK_FColor{.f = {0.0f}}
-                }
-            };
-            /* MeshDraw.AddSubpass("PBR", []
-            {
-                GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
+                    // can use this system to create the texture here to automate fully dont forget tho somehow needs to be able to rebuild when viewport changes
+                    // check beginrendering i think depth aline is not supported currectlny because of viewport fix it
+                    {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment, ResourceUsage::ShaderRead},
+                    {
+                        "colorImage", ResourceID::Image(colorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_Format_B8G8R8A8Srgb, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
+                        VanK_FColor{.f = {0.0f, 0.0f, 0.0f, 0.0f}}
+                    },
+                    {"entityImage", ResourceID::Image(entityImage->GetRenderImageIndex()), ResourceUsage::ResolveAttachment},
+                    {
+                        "entityColorImage", ResourceID::Image(entityColorImage->GetRenderImageIndex()), ResourceUsage::ColorAttachment, {}, VanK_FORMAT_R32_SINT, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
+                        VanK_FColor{.i = {-1}}
+                    },
+                    {
+                        "depthImage", ResourceID::Image(depthImage->GetRenderImageIndex()), ResourceUsage::DepthAttachment, {}, VanK_FORMAT_DEPTH_STENCIL, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
+                        VanK_FColor{.f = {0.0f}}
+                    }
+                };
+                MeshDraw.AddSubpass("PBR", []
+               {
+                   GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
 
                
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
+                   RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
-                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, false);
+                   RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, false);
                 
-                RenderCommand::BindRayTracing(cmd, true);
+                   RenderCommand::BindRayTracing(cmd, true);
 
-                TaskMeshPipelinePushConstant pushData
+                   TaskMeshPipelinePushConstant pushData
+                   {
+                       .sceneData = sceneBuffer->GetBufferAddress(),
+                       .culledDataBuffer = cullBuffer->GetBufferAddress(),
+                       .vertexBuffer = vertexBuffer->GetBufferAddress(),
+                       .indexBuffer = indexBuffer->GetBufferAddress(),
+                       .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
+                       .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
+                       .meshletBuffer = meshletBuffer->GetBufferAddress(),
+                       .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
+                       .meshDraws = meshDrawBuffer->GetBufferAddress(),
+                       .materialBuffer = materialBuffer->GetBufferAddress(),
+                       .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
+                       .lightsBuffer = lightsBuffer->GetBufferAddress(),
+                   };
+
+                   RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
+
+                   //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
+                   RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+
+                   /*meshTasks.clear();*/
+               });
+
+                MeshDraw.AddSubpass("Sprites", []
                 {
-                    .sceneData = sceneBuffer->GetBufferAddress(),
-                    .culledDataBuffer = cullBuffer->GetBufferAddress(),
-                    .vertexBuffer = vertexBuffer->GetBufferAddress(),
-                    .indexBuffer = indexBuffer->GetBufferAddress(),
-                    .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
-                    .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
-                    .meshletBuffer = meshletBuffer->GetBufferAddress(),
-                    .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
-                    .meshDraws = meshDrawBuffer->GetBufferAddress(),
-                    .materialBuffer = materialBuffer->GetBufferAddress(),
-                    .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
-                    .lightsBuffer = lightsBuffer->GetBufferAddress(),
-                };
-
-                RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
-
-                //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
-                RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
-
-                /*meshTasks.clear();#1#
-            });*/
-
-            MeshDraw.AddSubpass("Sprites", []
-            {
-                // quads/sprites/atlas
-                {
-                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshQuadPipeline);
-
-                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                    PushConstant2D push2D
+                    // quads/sprites/atlas
                     {
-                        .numOfElements = quads.size(),
-                        .bufferAddress = quadBuffer->GetBufferAddress(),
-                        .sceneData = sceneBuffer->GetBufferAddress(),
-                    };
+                        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshQuadPipeline);
 
-                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+                        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
-                    RenderCommand::DrawMeshTasks(cmd, quads.size(), 1, 1);
-                }
-            });
+                        PushConstant2D push2D
+                        {
+                            .numOfElements = quads.size(),
+                            .bufferAddress = quadBuffer->GetBufferAddress(),
+                            .sceneData = sceneBuffer->GetBufferAddress(),
+                        };
 
-            MeshDraw.AddSubpass("Circles", []
-            {
-                //circles
+                        RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                        RenderCommand::DrawMeshTasks(cmd, quads.size(), 1, 1);
+                    }
+                });
+
+                MeshDraw.AddSubpass("Circles", []
                 {
-                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshCirclePipeline);
-
-                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                    PushConstant2D push2D
+                    //circles
                     {
-                        .numOfElements = circles.size(),
-                        .bufferAddress = circleBuffer->GetBufferAddress(),
-                        .sceneData = sceneBuffer->GetBufferAddress(),
-                    };
+                        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshCirclePipeline);
 
-                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+                        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
-                    RenderCommand::DrawMeshTasks(cmd, circles.size(), 1, 1);
-                }
-            });
+                        PushConstant2D push2D
+                        {
+                            .numOfElements = circles.size(),
+                            .bufferAddress = circleBuffer->GetBufferAddress(),
+                            .sceneData = sceneBuffer->GetBufferAddress(),
+                        };
 
-            MeshDraw.AddSubpass("Texts", []
-            {
-                //texts
+                        RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                        RenderCommand::DrawMeshTasks(cmd, circles.size(), 1, 1);
+                    }
+                });
+
+                MeshDraw.AddSubpass("Texts", []
                 {
-                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshTextPipeline);
-
-                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                    PushConstant2D push2D
+                    //texts
                     {
-                        .numOfElements = texts.size(),
-                        .bufferAddress = textBuffer->GetBufferAddress(),
-                        .sceneData = sceneBuffer->GetBufferAddress(),
-                    };
+                        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshTextPipeline);
 
-                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+                        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
-                    RenderCommand::DrawMeshTasks(cmd, texts.size(), 1, 1);
-                }
-            });
+                        PushConstant2D push2D
+                        {
+                            .numOfElements = texts.size(),
+                            .bufferAddress = textBuffer->GetBufferAddress(),
+                            .sceneData = sceneBuffer->GetBufferAddress(),
+                        };
 
-            MeshDraw.AddSubpass("Lines", []
-            {
-                //lines
+                        RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                        RenderCommand::DrawMeshTasks(cmd, texts.size(), 1, 1);
+                    }
+                });
+
+                MeshDraw.AddSubpass("Lines", []
                 {
-                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshLinePipeline);
-
-                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                    PushConstant2D push2D
+                    //lines
                     {
-                        .numOfElements = lines.size(),
-                        .bufferAddress = lineBuffer->GetBufferAddress(),
-                        .sceneData = sceneBuffer->GetBufferAddress(),
-                    };
+                        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshLinePipeline);
 
-                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+                        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
-                    RenderCommand::DrawMeshTasks(cmd, lines.size(), 1, 1);
-                }
-            });
+                        PushConstant2D push2D
+                        {
+                            .numOfElements = lines.size(),
+                            .bufferAddress = lineBuffer->GetBufferAddress(),
+                            .sceneData = sceneBuffer->GetBufferAddress(),
+                        };
 
-            /*MeshDraw.AddSubpass("SkyBox", []
-            {
-                // skybox always last
+                        RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
+
+                        RenderCommand::DrawMeshTasks(cmd, lines.size(), 1, 1);
+                    }
+                });
+
+                MeshDraw.AddSubpass("SkyBox", []
                 {
-                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshSkyBoxPipeline);
-
-                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
-
-                    PushConstantSkyBox pushSkyBox
+                    // skybox always last
                     {
-                        .MaterialIndex = cubemap->GetTextureIndex(),
-                        .sceneData = sceneBuffer->GetBufferAddress(),
-                    };
+                        RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshSkyBoxPipeline);
 
-                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushSkyBox, sizeof(PushConstantSkyBox));
+                        RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL);
 
-                    RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
-                }
-            });*/
+                        PushConstantSkyBox pushSkyBox
+                        {
+                            .MaterialIndex = cubemap->GetTextureIndex(),
+                            .sceneData = sceneBuffer->GetBufferAddress(),
+                        };
+
+                        RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushSkyBox, sizeof(PushConstantSkyBox));
+
+                        RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
+                    }
+                });
+            }renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());
         }
+        else {
         // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
         auto& RayTrace = renderGraph.AddPass("RayTracing");
         RayTrace.reads =
@@ -2384,15 +2474,18 @@ namespace VanK
                 .materialBuffer = materialBuffer->GetBufferAddress(),
                 .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
                 .lightsBuffer = lightsBuffer->GetBufferAddress(),
-                .skyBoxIndex = cubemap->GetTextureIndex()
+                .skyBoxIndex = cubemap->GetTextureIndex(),
+                .frame = m_frameCounter
             };
             
             RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
             
             RenderCommand::TraceRays(cmd, m_ViewportSize.width, m_ViewportSize.height);
         };
-        
+        renderGraph.SetFinalOutput(rayTracingImage->GetRenderImageIndex(), rayTracingImage->getImTextureID());
+        }
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
+        /*
         auto& finalRender = renderGraph.AddPass("Swapchain");
         finalRender.reads = 
         {
@@ -2420,9 +2513,10 @@ namespace VanK
             
             RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
         };
+        */
         
         //change this give image make internal indexing
-        renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());
+        
     }
 
     struct PipelineReloadEntry

@@ -91,6 +91,11 @@ namespace VanK
         case ImageFormat::SRGBA8: return vk::Format::eR8G8B8A8Srgb;
         case ImageFormat::R16G16: return vk::Format::eR16G16Sfloat;
         case ImageFormat::R32SINT: return vk::Format::eR32Sint;
+        case ImageFormat::R32G32B32A32_SFLOAT: return vk::Format::eR32G32B32A32Sfloat;
+            
+            //tinyddsloader format
+        case ImageFormat::BC7_UNorm: return vk::Format::eBc7UnormBlock;
+        case ImageFormat::BC7_UNorm_SRGB: return vk::Format::eBc7UnormBlock;
         default: return vk::Format::eUndefined;
         }
     }
@@ -144,9 +149,6 @@ namespace VanK
 
         if (!ktx_texture)
         {
-            // WHITE / fallback texture or something in a buffer like font rendering
-            VK_CORE_WARN("ktTexture is null, creating default white texture");
-
             // If the user requested RGB8, we must expand it to RGBA8
             if (m_Specification.Format == ImageFormat::RGB8)
             {
@@ -225,11 +227,11 @@ namespace VanK
 
         utils::Buffer stagingBuffer = VulkanRendererAPI::Get().GetAllocator().createStagingBuffer(std::span(data.Data, data.Size));
 
-        // Check if the KTX texture has a format
+        /*// Check if the KTX texture has a format
         if (ktx_texture->classId == ktxTexture2_c)
-        {
+        {*/
             textureFormat = static_cast<vk::Format>(specification.ktTexture->vkFormat);
-            if (textureFormat == vk::Format::eUndefined)
+            /*if (textureFormat == vk::Format::eUndefined)
             {
                 // If the format is undefined, fall back to a reasonable default
                 textureFormat = vk::Format::eR8G8B8A8Srgb; // srgb ?
@@ -237,12 +239,18 @@ namespace VanK
 
             if (textureFormat == vk::Format::eR32G32B32Sfloat)
                 textureFormat = vk::Format::eR32G32B32A32Sfloat;
+            
+            if (textureFormat == vk::Format::eBc7SrgbBlock)
+                textureFormat = vk::Format::eBc7SrgbBlock;
+            
+            if (textureFormat == vk::Format::eBc7UnormBlock)
+                textureFormat = vk::Format::eBc7UnormBlock;
         }
         else
         {
             // For KTX1 files or if we can't determine the format, use a reasonable default
             textureFormat = vk::Format::eR8G8B8A8Srgb;
-        }
+        }*/
 
         textureImageFormat = textureFormat;
 

@@ -6,15 +6,12 @@ struct VertexOutput
     float2 texcoords : TEXCOORD1;
 };
 
-const static int32_t TASK_SHADER_DISPATCH_X = 64;
-const static int32_t MESH_SHADER_DISPATCH_X = 32;
-
 struct QuadPayLoad
 {
 };
 
 [shader("task")]
-[numthreads(TASK_SHADER_DISPATCH_X, 1, 1)]
+[numthreads(1, 1, 1)]
 void taskMain(
     uint3 gid : SV_GroupID, uint3 groupThreadID: SV_GroupThreadID
 )
@@ -77,7 +74,7 @@ Sampler2D rayTraceImage;
 [shader("pixel")]
 PixelOutput fragmentMain(VertexOutput vertexInput)
 {
-     PixelOutput output;
+    PixelOutput output;
 
     // Flip Y for Vulkan if needed
     float2 uv = float2(vertexInput.texcoords.x, 1.0 - vertexInput.texcoords.y);
