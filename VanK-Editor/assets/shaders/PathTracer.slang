@@ -111,60 +111,65 @@ struct HitPayload
 [shader("raygeneration")]
 void raygenerationMain()
 {
-    // Pixel coordinates
-    int2 pixel = int2(DispatchRaysIndex().xy);
-    float2 launchSize = float2(DispatchRaysDimensions().xy);
+    // Get current pixel coordinates from thread ray dispatch ID
+    int2 launchID = int2(DispatchRaysIndex().xy);
+    float2 launchSize = float2(DispatchRaysDimensions().xy); // Query texture dimensions
 
-    // Initialize RNG seed per pixel & frame
-    uint seed = xxhash32(uint3(pixel.xy, pushConstant.frameIndex));
-
-    // Subpixel jitter
-    float2 subpixelJitter = pushConstant.frameIndex == 0 ? float2(0.5, 0.5) : float2(rand(seed), rand(seed));
-
-    // Compute NDC with jitter
-    float2 ndc;
-    ndc.x = (pixel.x + subpixelJitter.x) / launchSize.x * 2.0 - 1.0;
-    ndc.y = 1.0 - ((pixel.y + subpixelJitter.y) / launchSize.y * 2.0);
-
-    // Camera setup
     SceneData scene = pushConstant.sceneData[0];
-    float4 viewPos = mul(scene.projInverse, float4(ndc, 1.0, 1.0));
-    float3 rayDir = normalize(viewPos.xyz / viewPos.w);
-    float3 rayOrigin = mul(scene.viewInverse, float4(0,0,0,1)).xyz;
-    rayDir = mul(scene.viewInverse, float4(rayDir,0)).xyz;
+    uint32_t frame = pushConstant.frameIndex;
 
-    // Prepare primary ray
+    // Initialize high-quality random number generator
+    // Uses xxhash32 with pixel coordinates and frame number for good distribution
+    uint seed = xxhash32(uint3(uint2(launchID.xy), frame));
+
+    // ANTI-ALIASING: Subpixel jittering for temporal supersampling
+    // First frame uses pixel center, subsequent frames use random subpixel positions
+    const float2 subpixelJitter = frame == 0 ? float2(0.5, 0.5) : float2(rand(seed), rand(seed));
+    const float2 pixelCenter = launchID + subpixelJitter; // Jittered pixel position
+    const float2 clipCoords = pixelCenter / launchSize * 2.0 - 1.0;  // Convert to NDC [-1,1]
+    const float4 viewCoords = mul(scene.projInverse, float4(clipCoords.x, 1.0 - clipCoords.y, 1.0, 1.0));  // Transform to view space
+
+    // Generate primary camera ray
     RayDesc ray;
-    ray.Origin = rayOrigin;
-    ray.Direction = rayDir;
-    ray.TMin = 0.001;
-    ray.TMax = INFINITE;
+    ray.Origin = mul(scene.viewInverse, float4(0.0, 0.0, 0.0, 1.0)).xyz; // Camera position in world space
+    ray.Direction = mul(scene.viewInverse, float4(normalize(viewCoords.xyz), 0.0)).xyz; // Ray direction in world space
+    ray.TMin = 0.001; // Minimum distance to avoid numerical issues
+    ray.TMax = INFINITE; // Maximum distance (infinite for primary rays)
 
     // Initialize payload
     HitPayload payload;
-    payload.color = float3(0,0,0);
+    payload.color = float3(0,0,0); // Accumulated radiance (final color)
     payload.depth = 0;
     payload.seed = seed;
-    payload.throughput = float3(1,1,1);
+    payload.throughput = float3(1,1,1); // Path throughput (energy transmission)
 
-    // Trace the ray
+    // Trace the primary ray through the scene
     TraceRay(topLevelAS, 0, 0xff, 0, 0, 0, ray, payload);
 
-     // FIREFLY CLAMPING
-    float lum = dot(payload.color, float3(0.212671, 0.715160, 0.072169)); // standard luminance
+    // FIREFLY CLAMPING - Remove bright noise artifacts
+    // Calculate luminance using standard RGB-to-luminance conversion
+    float lum = dot(payload.color, float3(0.212671, 0.715160, 0.072169));
     const float fireflyClampThreshold = 10.0;
     if(lum > fireflyClampThreshold)
     {
-        payload.color *= fireflyClampThreshold / lum; // scale down extreme values
+        // Clamp overly bright pixels while preserving color ratios
+        payload.color *= fireflyClampThreshold / lum;
     }
 
-    // Progressive accumulation
-    float3 prevColor = outImage[pixel].rgb;
-    float frame = float(pushConstant.frameIndex);
-    float3 accumColor = (prevColor * frame + payload.color) / (frame + 1.0);
-
-    // Write accumulated color
-    outImage[pixel] = float4(accumColor, 1.0);
+    // TEMPORAL ACCUMULATION - Progressive refinement over multiple frames
+    if(frame == 0)
+    {
+        // First frame: Initialize with current sample
+        outImage[launchID] = float4(payload.color, 1.0);
+    }
+    else
+    {
+        // Subsequent frames: Blend with accumulated result
+        // Uses exponential moving average for stable convergence
+        float a = 1.0F / float(frame + 1); // Blend factor
+        float3 prevColor = outImage[launchID].rgb; // Previous accumulated result
+        outImage[launchID] = float4(lerp(prevColor, payload.color, a), 1.0); // Blend and store
+    }
 }
 
 // Closest hit shader - called when ray hits geometry
@@ -339,9 +344,14 @@ void missMain(inout HitPayload payload)
     {
         envColor = cubes[pushConstant.skyBoxIndex].SampleLevel(rayDir, 0.0).rgb;
     }
+    else 
+    {
+        // Use simple solid background color
+        envColor = float3(1, 0, 1); // sceneInfo.backgroundColor
+    }
 
-    // Return the environment color multiplied by the throughput
-    payload.color = payload.throughput * envColor;
+    // Add environment contribution weighted by path throughput and terminate
+    payload.color += payload.throughput * envColor;
 
     // Set depth to miss
     payload.depth = MISS_DEPTH;

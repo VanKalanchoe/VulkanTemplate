@@ -927,7 +927,7 @@ namespace VanK
         }
     }
     
-    static ModelHandle LoadMeshModel(std::string path, uint32_t materialIndex = 0, std::vector<shaderio::Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
+    static ModelHandle LoadMeshModel(std::filesystem::path path, uint32_t materialIndex = 0, std::vector<shaderio::Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
     {
         uint64_t firstPrimitive = geometry.primitives.size();
 
@@ -960,8 +960,12 @@ namespace VanK
                 return true;
             }, nullptr);
 
-            bool ret = loader.LoadASCIIFromFile(&model, &err, &warn, path);
-
+            bool ret;
+            if (path.extension() == ".gltf")
+                ret = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
+            else if (path.extension() == ".glb")
+                ret = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
+            
             if (!warn.empty())
             {
                 std::cout << "glTF warning: " << warn << std::endl;
@@ -1588,6 +1592,7 @@ namespace VanK
         
         depthImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .depthImage = true});
         
+        m_frameCounter = 0;
         rayTracingImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32G32B32A32_SFLOAT, .isStorageImage = true});
         
         finalImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
@@ -1817,7 +1822,7 @@ namespace VanK
         // Raytracing Pipeline creation
         VanKPipelineShaderStageCreateInfo rtShaderStageCreateInfo
         {
-            .VanKShader = raytracingbasic
+            .VanKShader = PathTracer
         };
 
         VanKPipelineLayoutCreateInfo rtPipelineLayoutCreateInfo
@@ -1833,7 +1838,7 @@ namespace VanK
 
         m_RaytracingPipelineSpecification = raytracingPipelineSpecification;
         m_RaytracingPipeline = RenderCommand::createRayTracingPipeline(m_RaytracingPipelineSpecification);
-        RegisterPipelineForShaderWatcher("raytracingbasic", "raytracingbasic.slang", nullptr, nullptr, &m_RaytracingPipelineSpecification, &m_RaytracingPipeline, VanKRaytracing);
+        RegisterPipelineForShaderWatcher("PathTracer", "PathTracer.slang", nullptr, nullptr, &m_RaytracingPipelineSpecification, &m_RaytracingPipeline, VanKRaytracing);
 
         WatchShaderFiles(); // has to be last after pipeline creation
 
@@ -1919,15 +1924,15 @@ namespace VanK
         /*ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/cornell_box/scene.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Original.gltf");*/
-        ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Sphere.gltf");
-        /*ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");*/
+        /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Sphere.gltf");*/
+        ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");
         /*ModelHandle plantOnTable = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/plantOnTable/Untitled.gltf");*/
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
         /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
         /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
         /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/TransmissionOrderTest/TransmissionOrderTest.gltf");*/
         /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/meet_mat.glb");*/
-        runtimePlant = BuildRuntimeModel(cornellBox);
+        runtimePlant = BuildRuntimeModel(spheres);
         //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
