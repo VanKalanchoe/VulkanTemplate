@@ -1006,7 +1006,7 @@ namespace VanK
     }
     
     static uint32_t m_frameCounter = 0;
-    static uint32_t maxFrames = 15000;
+    static uint32_t maxFrames = 200;
     
     // Reset the frame counter to restart progressive rendering
     void Renderer::resetFrame() { m_frameCounter = -1; }

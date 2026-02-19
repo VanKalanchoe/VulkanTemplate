@@ -110,6 +110,11 @@ Lights processLight(/* GltfSceneInfo* sceneInfo, */ float3 worldPos)
     light.type      = LightType::eDirectional;            // Sun is always directional
   } */
 
+    if(light.type == LightType::eDirectional)
+    {
+        light.direction = -light.direction;
+    }
+
   // Point light: Calculate direction from light to surface and apply distance attenuation
   if(light.type == LightType::ePoint)
   {
@@ -247,7 +252,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     float3 localN = normalize(bary.x * v0.normals + bary.y * v1.normals + bary.z * v2.normals);
     float3 worldPos = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(localPos,1.0)).xyz;
     float3 worldNormal = normalize(mul((float3x3)pushConst.meshDrawBuffer->meshDraw[instanceID].normalMatrix, localN));
-    if(dot(worldNormal, WorldRayDirection())>0) worldNormal = -worldNormal;
+    if(dot(worldNormal, WorldRayDirection()) > 0) worldNormal = -worldNormal;
 
     Material mat = pushConst.materialBuffer[NonUniformResourceIndex(lut.materialID)];
 
@@ -286,7 +291,6 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     float3 V   = -WorldRayDirection();              // View direction (towards camera)
     float3 L   = normalize(light.direction);  // Light direction
 
-
     float3 p0 = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(v0.position,1)).xyz;
     float3 p1 = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(v1.position,1)).xyz;
     float3 p2 = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(v2.position,1)).xyz;
@@ -315,7 +319,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
             // Evaluate BSDF for direct lighting
             BsdfEvaluateData evalData;
             evalData.k1 = -WorldRayDirection();                                    // Incoming direction (from camera)
-            evalData.k2 = normalize(/* sceneInfo.skySimpleParam.sunDirection */light.direction);  // Outgoing direction (to light)
+            evalData.k2 = normalize(/* sceneInfo.skySimpleParam.sunDirection */L);  // Outgoing direction (to light)
             evalData.xi = float3(rand(payload.seed), rand(payload.seed), rand(payload.seed));        // Random numbers for sampling
 
             // Evaluate PBR BSDF (both diffuse and specular components)
@@ -332,7 +336,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
             //
             // For AREA LIGHTS or ENVIRONMENT MAPS, proper MIS would combine both light and BSDF sampling.
             // The evalData.pdf output (currently unused) would be needed for this calculation.
-            const float3 w = 1.0f;  // MIS weight (correct for delta lights, simplified for area lights)
+            const float3 w = powerHeuristic(1.0f, evalData.pdf);  // MIS weight (correct for delta lights, simplified for area lights)
             contrib += w * evalData.bsdf_diffuse;  // Diffuse reflection
             contrib += w * evalData.bsdf_glossy;   // Specular reflection
             contrib *= payload.throughput;                 // Weight by path throughput
@@ -343,7 +347,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
         {
             // Create shadow ray from surface point towards light
             RayDesc shadowRay;
-             shadowRay.Origin    = offsetRay(worldPos, worldNormal);  // Start from offset surface point
+            shadowRay.Origin    = offsetRay(worldPos, worldNormal);  // Start from offset surface point
             shadowRay.Direction = L;                                          // Direction towards light
             shadowRay.TMin      = 0.01;                                       // Avoid self-intersection
             shadowRay.TMax = light.type == LightType::eDirectional ? INFINITE : length(light.direction);  // Trace to infinity (or light distance)
