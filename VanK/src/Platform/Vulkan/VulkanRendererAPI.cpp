@@ -2313,7 +2313,7 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
         {
-            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics,
+            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
             .layout = (isRayTracing) ? m_currentRaytracingPipelineLayout : m_currentGraphicPipelineLayout,
             .firstSet = 0,
             .descriptorSetCount = 1,
@@ -2441,7 +2441,7 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInforay =
         {
-            .stageFlags = (useRayQuery) ? vk::ShaderStageFlagBits::eAllGraphics : vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
+            .stageFlags = (useRayQuery) ? vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT : vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
             .layout = (useRayQuery) ? m_currentGraphicPipelineLayout : m_currentRaytracingPipelineLayout,
             .firstSet = 2,
             .descriptorSetCount = 1,

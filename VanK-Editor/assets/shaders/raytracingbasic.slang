@@ -329,11 +329,11 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     float3 Lo = float3(0.0);
     for(int i = 0; i < 0; ++i) // Set to 1 or higher if you have lights in buffer
     {
-        float3 L = normalize(pushConstant.lightingBuffer->lights[i].lightPosition - worldPos);
+        float3 L = normalize(pushConstant.lightingBuffer->lights[i].position - worldPos);
         float3 H = normalize(V + L);
-        float distance = length(pushConstant.lightingBuffer->lights[i].lightPosition - worldPos);
+        float distance = length(pushConstant.lightingBuffer->lights[i].position - worldPos);
         float attenuation = 1.0 / (distance * distance);
-        float3 radiance = pushConstant.lightingBuffer->lights[i].lightColor * attenuation;
+        float3 radiance = pushConstant.lightingBuffer->lights[i].color * attenuation;
 
         float NDF = DistributionGGX(N, H, roughness);   
         float G   = GeometrySmith(N, V, L, roughness);      

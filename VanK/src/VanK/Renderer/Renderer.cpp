@@ -159,6 +159,12 @@ namespace VanK
         uint32_t brdflutTexture;
         uint32_t irradianceTexture;
         uint32_t prefilteredTexture;
+        
+        //path tracer
+        uint32_t skyBoxIndex;
+        bool useSky;
+        glm::vec3 backgroundColor;
+        uint32_t frameIndex;
     };
 
     static std::vector<SceneDatas> scene;
@@ -998,6 +1004,12 @@ namespace VanK
         uint64_t primitiveCount = geometry.primitives.size() - firstPrimitive;
         return {firstPrimitive, primitiveCount};
     }
+    
+    static uint32_t m_frameCounter = 0;
+    static uint32_t maxFrames = 15000;
+    
+    // Reset the frame counter to restart progressive rendering
+    void Renderer::resetFrame() { m_frameCounter = -1; }
    
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
@@ -1035,9 +1047,7 @@ namespace VanK
             scenesData.frozenFrustum = scenesData.frustum;
         }
     }
-    uint32_t m_frameCounter = 0;
-    uint32_t m_maxFrames = 200; 
-
+    
     void Renderer::BeginScene(const EditorCamera& camera)
     {
         scenesData.view = camera.GetViewMatrix();
@@ -1057,9 +1067,9 @@ namespace VanK
         bool cameraMoved = (lastView != scenesData.view) || (lastProj != scenesData.proj);
 
         if (cameraMoved)
-            m_frameCounter = 0;  // reset progressive accumulation
+            resetFrame();  // reset progressive accumulation
         else
-            m_frameCounter = std::min(m_frameCounter + 1, m_maxFrames);  // increment
+            m_frameCounter = std::min(++m_frameCounter, maxFrames);
 
         // Store current matrices for next frame
         lastView = scenesData.view;
@@ -1429,8 +1439,6 @@ namespace VanK
         uint64_t materialBuffer;
         uint64_t instanceLutBuffer;
         uint64_t lightsBuffer;
-        uint32_t skyBoxIndex;
-        uint32_t frame;
     };
 
     struct ModelPrimitive
@@ -1553,11 +1561,23 @@ namespace VanK
             });
         }
     }
+    
+     enum LightType
+    {
+        ePoint       = 0,  // Point light type
+        eSpot        = 1,  // Spot light type
+        eDirectional = 2   // Directional light type
+      };
+
 
     struct Lights
     {
-        glm::vec3 lightPosition;
-        glm::vec3 lightColor;
+        glm::vec3 position; // Position of the punctual light in world space
+        float intensity; // Intensity of the light
+        glm::vec3 direction;  // Direction of the light (for spot and directional lights)
+        int type; // Type of the light (0 = point, 1 = spot, 2 = directional)
+        glm::vec3 color; // Color of the light (RGB)
+        float coneAngle; // Cone angle for spot lights (in radians, 0 for point and directional lights)
     };
 
     std::vector<Lights> lights;
@@ -1577,6 +1597,7 @@ namespace VanK
         entityColorImage.reset();
         depthImage.reset();
         rayTracingImage.reset();
+        finalImage.reset();
         // since those all are renderiamges i could put viewportsize inside vulkantexture class or call it once that inits it so i dont have to
         // provide myself here every time but this might be not needed if integrated into rendergraph
         // Create new render targets with current viewport size
@@ -1592,7 +1613,6 @@ namespace VanK
         
         depthImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .depthImage = true});
         
-        m_frameCounter = 0;
         rayTracingImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32G32B32A32_SFLOAT, .isStorageImage = true});
         
         finalImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
@@ -1912,7 +1932,7 @@ namespace VanK
             0, 2, 3 // second triangle
         };
        
-        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.bc7.gltf", pinkTexture->GetTextureIndex());*/
+        ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.bc7.gltf", pinkTexture->GetTextureIndex());
         /*ModelHandle bistro = LoadMeshModel(" E:/dev/VulkanAdventure/nvidia/RTXPT/Assets/Models/Bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
         //ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
@@ -1925,14 +1945,14 @@ namespace VanK
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/cornell_box/scene.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Original.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Sphere.gltf");*/
-        ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");
+        /*ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");*/
         /*ModelHandle plantOnTable = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/plantOnTable/Untitled.gltf");*/
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
         /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
         /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
         /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/TransmissionOrderTest/TransmissionOrderTest.gltf");*/
         /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/meet_mat.glb");*/
-        runtimePlant = BuildRuntimeModel(spheres);
+        runtimePlant = BuildRuntimeModel(bistro);
         //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
@@ -2163,6 +2183,7 @@ namespace VanK
             if (s_ShaderWatcher.empty())
                 WatchShaderFiles();
 
+            resetFrame();
             EndSubmit();
             ReloadPipelines();
             BeginSubmit();
@@ -2184,23 +2205,31 @@ namespace VanK
         scenesData.brdflutTexture = BRDF2DLUT->GetTextureIndex();
         scenesData.irradianceTexture = irradianceMap->GetTextureIndex();
         scenesData.prefilteredTexture = prefilterMap->GetTextureIndex();
-
+        
+        //path tracer
+        scenesData.skyBoxIndex = cubemap->GetTextureIndex();
+        scenesData.useSky = true;
+        scenesData.backgroundColor = glm::vec3(1.0f, 0.0f, 1.0f);
+        scenesData.frameIndex = m_frameCounter;
+        
         scene.emplace_back(scenesData);
         m_TransferBuffer->Upload(cmd, *sceneBuffer, scene, 0);
         scene.clear();
-
+       
         if (!done)
         {
             //lights
-            lights.emplace_back(Lights{
-                .lightPosition = glm::rotate(glm::vec3(-10.0f, 10.0f, 10.0f), glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor = glm::vec3(300.0f, 300.0f, 300.0f)
-            });
-            lights.emplace_back(Lights{.lightPosition = glm::rotate(glm::vec3(10.0f, 10.0f, 10.0f), glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor = glm::vec3(300.0f, 300.0f, 300.0f)});
             lights.emplace_back(
-                Lights{.lightPosition = glm::rotate(glm::vec3(-10.0f, -10.0f, 10.0f), glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor = glm::vec3(300.0f, 300.0f, 300.0f)});
-            lights.emplace_back(Lights{
-                .lightPosition = glm::rotate(glm::vec3(10.0f, -10.0f, 10.0f), glm::radians(0.0f), glm::vec3(0.0f, 1.0f, 0.0f)), .lightColor = glm::vec3(300.0f, 300.0f, 300.0f)
-            });
+    Lights{
+        .position   = glm::vec3(0.0f),                     // unused for directional
+        .intensity  = 5.0f,                                // scaled from GLTF 6830
+        .direction  = glm::normalize(glm::quat(0.7903f, -0.5507f, -0.2371f, -0.1258f) * glm::vec3(0.0f, 0.0f, -1.0f)),
+        .type       = LightType::eDirectional,
+        .color      = glm::vec3(1.0f, 0.95f, 0.85f),      // slightly warm sunlight
+        .coneAngle  = 0.0f                                 // unused
+    }
+);
+       
             m_TransferBuffer->Upload(cmd, *lightsBuffer, lights, 0);
             lights.clear();
 
@@ -2250,7 +2279,7 @@ namespace VanK
         m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
 
         renderGraph.Reset();
-        if (isRaster)
+        /*if (isRaster)*/
         {
             // between compute and raster is no barrier
             {
@@ -2307,7 +2336,8 @@ namespace VanK
                         VanK_FColor{.f = {0.0f}}
                     }
                 };
-                MeshDraw.AddSubpass("PBR", []
+                
+                /*MeshDraw.AddSubpass("PBR", []
                {
                    GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
 
@@ -2339,8 +2369,8 @@ namespace VanK
                    //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
                    RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
 
-                   /*meshTasks.clear();*/
-               });
+                   /*meshTasks.clear();#1#
+               });*/
 
                 MeshDraw.AddSubpass("Sprites", []
                 {
@@ -2426,7 +2456,7 @@ namespace VanK
                     }
                 });
 
-                MeshDraw.AddSubpass("SkyBox", []
+                /*MeshDraw.AddSubpass("SkyBox", []
                 {
                     // skybox always last
                     {
@@ -2444,10 +2474,10 @@ namespace VanK
 
                         RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
                     }
-                });
-            }renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());
+                });*/
+            }/*renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());*/
         }
-        else {
+        /*else*/ {
         // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
         auto& RayTrace = renderGraph.AddPass("RayTracing");
         RayTrace.reads =
@@ -2460,6 +2490,9 @@ namespace VanK
         };
         RayTrace.execute = []
         {
+            if(m_frameCounter >= maxFrames)
+                return;
+
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingPipeline);
             
             RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, true);
@@ -2479,18 +2512,15 @@ namespace VanK
                 .materialBuffer = materialBuffer->GetBufferAddress(),
                 .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
                 .lightsBuffer = lightsBuffer->GetBufferAddress(),
-                .skyBoxIndex = cubemap->GetTextureIndex(),
-                .frame = m_frameCounter
             };
             
             RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
             
-            RenderCommand::TraceRays(cmd, m_ViewportSize.width, m_ViewportSize.height);
+            RenderCommand::TraceRays(cmd, rayTracingImage->GetWidth(), rayTracingImage->GetHeight());
         };
-        renderGraph.SetFinalOutput(rayTracingImage->GetRenderImageIndex(), rayTracingImage->getImTextureID());
+        
         }
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
-        /*
         auto& finalRender = renderGraph.AddPass("Swapchain");
         finalRender.reads = 
         {
@@ -2518,10 +2548,9 @@ namespace VanK
             
             RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
         };
-        */
         
         //change this give image make internal indexing
-        
+        renderGraph.SetFinalOutput(finalImage->GetRenderImageIndex(), finalImage->getImTextureID());
     }
 
     struct PipelineReloadEntry

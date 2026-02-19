@@ -571,11 +571,11 @@ float4 fragmentMain(VertexOutput vertexInput, uniform PushConstant pushConstant)
     for(int i = 0; i < 0; ++i)
     {
         // calculate per-light radiance
-        float3 L = normalize(pushConstant.lightingBuffer->lights[i].lightPosition - vertexInput.worldPos.xyz);
+        float3 L = normalize(pushConstant.lightingBuffer->lights[i].position - vertexInput.worldPos.xyz);
         float3 H = normalize(V + L);
-        float distance = length(pushConstant.lightingBuffer->lights[i].lightPosition - vertexInput.worldPos.xyz);
+        float distance = length(pushConstant.lightingBuffer->lights[i].position - vertexInput.worldPos.xyz);
         float attenuation = 1.0 / (distance * distance);
-        float3 radiance = pushConstant.lightingBuffer->lights[i].lightColor * attenuation;
+        float3 radiance = pushConstant.lightingBuffer->lights[i].color * attenuation;
 
         // Cook-Torrance BRDF
         float NDF = DistributionGGX(N, H, roughness);   

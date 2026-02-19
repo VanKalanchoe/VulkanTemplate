@@ -205,13 +205,31 @@ public struct SceneData
     public uint32_t brdflutTexture;
     public uint32_t irradianceTexture;
     public uint32_t prefilteredTexture;
+    public uint32_t skyBoxIndex;
+    public bool useSky;
+    public float3 backgroundColor;
+
+    //path tracer
+    public uint32_t frameIndex;
 };
 
+public enum LightType
+{
+  ePoint       = 0,  // Point light type
+  eSpot        = 1,  // Spot light type
+  eDirectional = 2   // Directional light type
+};
 
 public struct Lights
 {
-    public float3 lightPosition;
-    public float3 lightColor;
+    /* public float3 lightPosition;
+    public float3 lightColor; */
+    public float3 position;   // Position of the punctual light in world space
+    public float  intensity;  // Intensity of the light
+    public float3 direction;  // Direction of the light (for spot and directional lights)
+    public int    type;       // Type of the light (0 = point, 1 = spot, 2 = directional)
+    public float3 color;      // Color of the light (RGB)
+    public float  coneAngle;  // Cone angle for spot lights (in radians, 0 for point and directional lights)
 };
 
 public struct LightData

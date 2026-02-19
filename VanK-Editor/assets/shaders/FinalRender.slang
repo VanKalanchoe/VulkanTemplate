@@ -1,26 +1,25 @@
 import common;
 
+#include "nvshaders/tonemap_functions.h.slang"
+
 struct VertexOutput
 {
     float4 position : SV_Position;
     float2 texcoords : TEXCOORD1;
 };
 
-struct QuadPayLoad
+struct DummyPayLoad
 {
+    uint dummyData;
 };
+
+groupshared DummyPayLoad dummyPayLoad;
 
 [shader("task")]
 [numthreads(1, 1, 1)]
-void taskMain(
-    uint3 gid : SV_GroupID, uint3 groupThreadID: SV_GroupThreadID
-)
+void taskMain()
 {
-    // create payload for this quad
-    QuadPayLoad payload;
-
-    // dispatch exactly 1 mesh per quad
-    DispatchMesh(1, 1, 1, payload);
+    DispatchMesh(1, 1, 1, dummyPayLoad);
 }
 
 static const float4 positions[4] = 
@@ -42,11 +41,7 @@ static const float2 uv[4] =
 [shader("mesh")]
 [outputtopology("triangle")]
 [numthreads(1, 1, 1)]
-void meshMain
-(
-    in payload QuadPayLoad sharedPayload,
-    out indices uint3 triangles[2], out vertices VertexOutput vertices[4]
-)
+void meshMain(out indices uint3 triangles[2], out vertices VertexOutput vertices[4])
 {
 	SetMeshOutputCounts(4, 2); // 4 vertices, 2 triangles
 
@@ -76,6 +71,8 @@ PixelOutput fragmentMain(VertexOutput vertexInput)
 {
     PixelOutput output;
 
+    float4 color;
+
     // Flip Y for Vulkan if needed
     float2 uv = float2(vertexInput.texcoords.x, 1.0 - vertexInput.texcoords.y);
 
@@ -85,6 +82,10 @@ PixelOutput fragmentMain(VertexOutput vertexInput)
     // Alpha-over: scene on top of raytrace
     float3 blendedRGB = rayColor.rgb * (1.0 - sceneColor.a) + sceneColor.rgb * sceneColor.a;
 
-    output.color = float4(blendedRGB, 1.0); // fully opaque final
+  /*   color = rayColor; // fully opaque final */
+
+    color = float4(tonemapACES(blendedRGB.rgb), 1.0);
+
+    output.color = color;
     return output;
 }

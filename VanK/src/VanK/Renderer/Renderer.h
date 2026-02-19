@@ -70,7 +70,7 @@ namespace VanK
         static bool GetVSync() { return vSync; };
         static void QueVSyncChange(bool vSyncTemp) { vSync = vSyncTemp; s_VSyncChangeRequested = true; };
         static bool GetIsEditor() { return isEditor; }
-        static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); CreateRenderTargets();}
+        static void SetViewportSize(Extent2D viewportSize) { m_ViewportSize = viewportSize; RenderCommand::setViewportSize(viewportSize); CreateRenderTargets(); resetFrame();}
         static Extent2D GetViewportSize() { return m_ViewportSize; }
         static void SetWindowMinimized(bool minimized) { windowMinimized = minimized; }
         static bool isWindowMinimized() { return windowMinimized; }
@@ -85,6 +85,7 @@ namespace VanK
         inline static VanKTimestampPass computeCommandTask;
         inline static VanKTimestampPass renderPassMesh;
         static void CreateRenderTargets();
+        static void resetFrame();
         static RenderGraph GetRenderGraph() { return renderGraph; };
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
