@@ -967,13 +967,14 @@ namespace VanK
         m_raygenRegion.size = raygenSize;
 
         // Miss shader (group 1)
-        memcpy(pData + missOffset, m_shaderHandles.data() + 1 * handleSize, handleSize);
+        memcpy(pData + missOffset + 0 * missSize, m_shaderHandles.data() + 1 * handleSize, handleSize);
+        memcpy(pData + missOffset + 1 * missSize, m_shaderHandles.data() + 2 * handleSize, handleSize); // Shadow miss
         m_missRegion.deviceAddress = m_sbtBuffer.address + missOffset;
         m_missRegion.stride = missSize;
-        m_missRegion.size = missSize;
+        m_missRegion.size = missSize * 2;
 
         // Hit shader (group 2)
-        memcpy(pData + hitOffset, m_shaderHandles.data() + 2 * handleSize, handleSize);
+        memcpy(pData + hitOffset, m_shaderHandles.data() + 3 * handleSize, handleSize);
         m_hitRegion.deviceAddress = m_sbtBuffer.address + hitOffset;
         m_hitRegion.stride = hitSize;
         m_hitRegion.size = hitSize;
@@ -998,6 +999,7 @@ namespace VanK
         {
             eRaygen,
             eMiss,
+            eMissShadow,
             eClosestHit,
             eAnyHit,
             eShaderGroupCount
@@ -1008,19 +1010,19 @@ namespace VanK
 
         std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
         std::vector<std::string> entryNames; // only need to keep names alive
-        entryNames.reserve(4); // needs to be reserved or string changes to random bs
+        entryNames.reserve(5); // needs to be reserved or string changes to random bs
 
         std::array<uint32_t, eShaderGroupCount> stageToShaderIndex;
         stageToShaderIndex.fill(VK_SHADER_UNUSED_KHR);
 
-        auto addStage = [&](vk::ShaderStageFlagBits stage, StageIndices eShaderGroupCount)
+        auto addStage = [&](vk::ShaderStageFlagBits stage, StageIndices eShaderGroupCount, size_t index = 0)
         {
-            if (!vkShader->HasStage(stage))
+            if (!vkShader->HasStage(stage, index))
                 return;
 
-            entryNames.push_back(vkShader->GetShaderEntryName(stage));
+            entryNames.push_back(vkShader->GetShaderEntryName(stage, index));
 
-            auto& module = vkShader->GetShaderModule(stage);
+            auto& module = vkShader->GetShaderModule(stage, index);
 
             uint32_t shaderIndex = static_cast<uint32_t>(shaderStages.size());
 
@@ -1035,7 +1037,8 @@ namespace VanK
         };
 
         addStage(vk::ShaderStageFlagBits::eRaygenKHR, eRaygen);
-        addStage(vk::ShaderStageFlagBits::eMissKHR, eMiss);
+        addStage(vk::ShaderStageFlagBits::eMissKHR, eMiss, 0);
+        addStage(vk::ShaderStageFlagBits::eMissKHR, eMissShadow, 1);
         addStage(vk::ShaderStageFlagBits::eClosestHitKHR, eClosestHit);
         addStage(vk::ShaderStageFlagBits::eAnyHitKHR, eAnyHit);
 
@@ -1055,6 +1058,10 @@ namespace VanK
         // Miss
         group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
         group.generalShader = stageToShaderIndex[eMiss];
+        shader_groups.push_back(group);
+        
+        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+        group.generalShader = stageToShaderIndex[eMissShadow];
         shader_groups.push_back(group);
 
         // Closest Hit Shader

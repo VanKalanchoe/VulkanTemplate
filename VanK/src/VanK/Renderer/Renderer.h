@@ -85,8 +85,14 @@ namespace VanK
         inline static VanKTimestampPass computeCommandTask;
         inline static VanKTimestampPass renderPassMesh;
         static void CreateRenderTargets();
-        static void resetFrame();
         static RenderGraph GetRenderGraph() { return renderGraph; };
+        
+        // path trace // idk namings whats good
+        static void setMaxFrames(uint32_t temp) { s_maxAccumulationFrames = temp; };
+        static uint32_t getMaxFrames() { return s_maxAccumulationFrames; };
+        static uint32_t getCurrentFrame() { return s_frameIndex; };
+        // Reset the frame counter to restart progressive rendering
+        static void resetFrame() { s_frameIndex = -1; }
     private:
         static ShaderLibrary& GetShaderLibrary() { return m_ShaderLibrary; }
         static void RegisterPipelineForShaderWatcher(const std::string& shaderKey, const std::string& fileName, VanKGraphicsPipelineSpecification* graphicsSpec, VanKComputePipelineSpecification* computeSpec,
@@ -106,7 +112,7 @@ namespace VanK
         inline static VanKCullModeFlags cullMode = VanK_CULL_MODE_BACK_BIT;
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
-    public:
+    
         inline static Ref<RenderTargetImage> sceneImage; // resolve 
         inline static Ref<RenderTargetImage> colorImage; // msaa
         inline static Ref<RenderTargetImage> depthImage; // depth
@@ -165,7 +171,7 @@ namespace VanK
         inline static Ref<StorageBuffer> meshletPrimitiveBuffer ;
         inline static Ref<StorageBuffer> meshDrawBuffer ;
         inline static Ref<StorageBuffer> materialBuffer;
-         inline static Ref<StorageBuffer> instanceLutsBuffer;
+        inline static Ref<StorageBuffer> instanceLutsBuffer;
         
         inline static Ref<StorageBuffer> lightsBuffer;
         
@@ -180,5 +186,9 @@ namespace VanK
         inline static Ref<IndirectBuffer> meshTaskSubmitBuffer;
         
         inline static Ref<Texture2D> whiteTexture, pinkTexture, vikingRoom, ChernoLogo, cubemap, BRDF2DLUT, irradianceMap, prefilterMap, rustedIron, rustedIronMetalRough, rustedIronNormal;
+    
+        // path trace
+        inline static uint32_t s_frameIndex = 0;
+        inline static uint32_t s_maxAccumulationFrames = 200;
     };
 }

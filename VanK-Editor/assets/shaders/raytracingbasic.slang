@@ -315,15 +315,15 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     
     // Only override F0 if specular extension exists
     // But only if material is mostly non-metallic
-    if(any(mat.specularFactor.rgb != float3(1.0, 1.0, 1.0)) && metallic < 0.5)
+    if(any(mat.specularColorFactor != float3(1.0, 1.0, 1.0)) && metallic < 0.5)
     {
-        F0 = mat.specularFactor.rgb; // use the specular color
+        F0 = mat.specularColorFactor; // use the specular color
     }
 
     // Roughness from glossiness (if SpecGloss)
-    float roughnessFinal = roughness;
-    if(mat.specularFactor.a > 0.0 && metallic < 0.5)
-        roughnessFinal = 1.0 - mat.specularFactor.a;
+    /* float roughnessFinal = roughness;
+    if(mat.specularColorFactor.a > 0.0 && metallic < 0.5)
+        roughnessFinal = 1.0 - mat.specularColorFactor.a; */
 
     // --- LIGHTING LOOP (Lo) ---
     float3 Lo = float3(0.0);

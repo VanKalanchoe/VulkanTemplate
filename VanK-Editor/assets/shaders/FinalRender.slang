@@ -73,16 +73,12 @@ PixelOutput fragmentMain(VertexOutput vertexInput)
 
     float4 color;
 
-    // Flip Y for Vulkan if needed
     float2 uv = float2(vertexInput.texcoords.x, 1.0 - vertexInput.texcoords.y);
 
-    float4 rayColor   = rayTraceImage.Sample(uv); // 3D PBR scene = background
-    float4 sceneColor = sceneImage.Sample(uv);   // 2D overlay = on top
+    float4 rayColor   = rayTraceImage.Sample(uv);
+    float4 sceneColor = sceneImage.Sample(uv);
 
-    // Alpha-over: scene on top of raytrace
     float3 blendedRGB = rayColor.rgb * (1.0 - sceneColor.a) + sceneColor.rgb * sceneColor.a;
-
-  /*   color = rayColor; // fully opaque final */
 
     color = float4(tonemapACES(blendedRGB.rgb), 1.0);
 

@@ -27,10 +27,10 @@ namespace VanK
         }
     }
 
-    std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> VulkanShader::loadCachedSpv
+    std::unordered_map<vk::ShaderStageFlagBits, std::vector<ShaderStageInfo>> VulkanShader::loadCachedSpv
     (
         std::vector<std::string> EntryPoints, std::string cachePath,
-        std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> spirvPerStage
+        std::unordered_map<vk::ShaderStageFlagBits, std::vector<ShaderStageInfo>> spirvPerStage
     )
     {
         for (std::string entryPoint : EntryPoints)
@@ -45,6 +45,7 @@ namespace VanK
             
             else if (entryPoint == "raygenerationMain") stage = vk::ShaderStageFlagBits::eRaygenKHR;
             else if (entryPoint == "missMain") stage = vk::ShaderStageFlagBits::eMissKHR;
+            else if (entryPoint == "missShadowMain") stage = vk::ShaderStageFlagBits::eMissKHR;
             else if (entryPoint == "closesthitMain") stage = vk::ShaderStageFlagBits::eClosestHitKHR;
             else if (entryPoint == "anyhitMain") stage = vk::ShaderStageFlagBits::eAnyHitKHR;
             else continue;
@@ -62,7 +63,7 @@ namespace VanK
             auto data = Utility::LoadSpvFromPath(fullPath.string());
             if (data.empty()) continue;
             
-            spirvPerStage[stage] = ShaderStageInfo{entryPoint, std::move(data)};
+            spirvPerStage[stage].push_back({entryPoint, std::move(data)});
         }
         return spirvPerStage;
     }
@@ -77,12 +78,13 @@ namespace VanK
         
         if (entry == "raygenerationMain")         return vk::ShaderStageFlagBits::eRaygenKHR;
         if (entry == "missMain")         return vk::ShaderStageFlagBits::eMissKHR;
+        if (entry == "missShadowMain")         return vk::ShaderStageFlagBits::eMissKHR;
         if (entry == "closesthitMain")         return vk::ShaderStageFlagBits::eClosestHitKHR;
         if (entry == "anyhitMain")         return vk::ShaderStageFlagBits::eAnyHitKHR;
         throw std::runtime_error("Unknown entry point: " + entry);
     }
     
-    std::expected<std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo>, std::string> VulkanShader::compileSlang()
+    std::expected<std::unordered_map<vk::ShaderStageFlagBits, std::vector<ShaderStageInfo>>, std::string> VulkanShader::compileSlang()
     {
         bool forceCompile = false;
         // All EntryPoints possible
@@ -95,11 +97,12 @@ namespace VanK
             "meshMain",
             "raygenerationMain",
             "missMain",
+            "missShadowMain",
             "closesthitMain",
             "anyhitMain"
         };
 
-        std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo> spirvPerStage;
+        std::unordered_map<vk::ShaderStageFlagBits, std::vector<ShaderStageInfo>> spirvPerStage;
         
         std::string cachePath = Utility::GetCachePath();
         
@@ -242,7 +245,7 @@ namespace VanK
             
             Utility::saveHashToFile(hashFilePath.string(), currentHash);
 
-            spirvPerStage[mapEntryToStage(entry)] = ShaderStageInfo{entry, spirvCodeToUint32};
+            spirvPerStage[mapEntryToStage(entry)].push_back({entry, spirvCodeToUint32});
         }
         
         return spirvPerStage;
@@ -253,17 +256,22 @@ namespace VanK
         std::string entryPointName;
     };
     
-    void VulkanShader::Compile(const std::unordered_map<vk::ShaderStageFlagBits, ShaderStageInfo>& shaderSources)
+    void VulkanShader::Compile(const std::unordered_map<vk::ShaderStageFlagBits, std::vector<ShaderStageInfo>>& shaderSources)
     {
         std::cout << "Compile called with " << shaderSources.size() << " shader stages\n";
         auto& instance = VulkanRendererAPI::Get();
         vk::raii::Device& device = instance.GetDevice();
-        for (const auto& [stage, spirv] : shaderSources)
+        for (const auto& [stage, shaderInfos] : shaderSources)
         {
-            std::cout << "entrypouint " << spirv.entryPointName << " module " << spirv.spirvCode.data() << std::endl;
-            vk::raii::ShaderModule shaderModule = utils::createShaderModule(device, std::span<const uint32_t>(spirv.spirvCode.data(), spirv.spirvCode.size()));
-            DBG_VK_NAME(*shaderModule);
-            m_ShaderModules.emplace(stage, ShaderModuleInfo{ std::move(shaderModule), spirv.entryPointName });
+            for (const auto& spirv : shaderInfos)
+            {
+                vk::raii::ShaderModule shaderModule = utils::createShaderModule(
+                    device,
+                    std::span<const uint32_t>(spirv.spirvCode.data(), spirv.spirvCode.size())
+                );
+                DBG_VK_NAME(*shaderModule);
+                m_ShaderModules[stage].push_back({ std::move(shaderModule), spirv.entryPointName });
+            }
         }
         //maybe in the future store it in here and then only that specific shader has the correct stuff it overwrites grapgics because compute is last fixed inside sershadermodule
     }
@@ -300,27 +308,28 @@ namespace VanK
         m_ShaderModules.clear();
     }
 
-    vk::raii::ShaderModule& VulkanShader::GetShaderModule(vk::ShaderStageFlagBits stage)
+    vk::raii::ShaderModule& VulkanShader::GetShaderModule(vk::ShaderStageFlagBits stage, size_t index)
     {
         auto it = m_ShaderModules.find(stage);
-        if (it != m_ShaderModules.end())
-            return it->second.module;
+        if (it != m_ShaderModules.end() && index < it->second.size())
+            return it->second[index].module;
 
         throw std::runtime_error("Shader module not found");
     }
 
-    std::string VulkanShader::GetShaderEntryName(vk::ShaderStageFlagBits stage) const
+    std::string VulkanShader::GetShaderEntryName(vk::ShaderStageFlagBits stage, size_t index) const
     {
         auto it = m_ShaderModules.find(stage);
-        if (it != m_ShaderModules.end())
-            return it->second.entryPointName;
+        if (it != m_ShaderModules.end() && index < it->second.size())
+            return it->second[index].entryPointName;
 
         return "";
     }
     
-    bool VulkanShader::HasStage(vk::ShaderStageFlagBits stage) const
+    bool VulkanShader::HasStage(vk::ShaderStageFlagBits stage, size_t index) const
     {
-        return m_ShaderModules.find(stage) != m_ShaderModules.end();
+        auto it = m_ShaderModules.find(stage);
+        return it != m_ShaderModules.end() && index < it->second.size();
     }
 
     void VulkanShader::Bind() const

@@ -29,19 +29,24 @@ struct InstanceLUT
 
 struct Material
 {
-    uint32_t albedoTexture;
+    uint32_t albedoTexture; // pbr metallic roughness workflow
+    uint32_t diffuseTexture; // pbr spec gloss workflow
     uint32_t normalTexture;
-    uint32_t metallicRoughnessTexture;
+    uint32_t metallicRoughnessTexture; // pbr metallic roughness workflow
     
-    uint32_t specularTexture;
+    uint32_t specularTexture; // pbr spec gloss workflow
     uint32_t emissiveTexture;
     uint32_t ambientOcclusionTexture;
 
-    vec4 diffuseFactor;
-    float metallicFactor;
-    float roughnessFactor;
+    vec4 baseColorFactor; // pbr metallic roughness workflow
+    vec4 diffuseFactor; // pbr spec gloss workflow
+    float metallicFactor; // pbr metallic roughness workflow
+    float roughnessFactor; // pbr metallic roughness workflow roughness = 1 - glossines
     
-    vec4 specularFactor;
+    vec4 specularGlossFactor; // pbr spec gloss workflow
+    bool isSpecularGlossWorkflow; // pbr spec gloss workflow needed to convert to metallic roughness workflow function in shader
+    float specularFactor; // khr extension does not work with spec gloss workflow
+    vec3 specularColorFactor; // khr extension does not work with spec gloss workflow
     vec3 emissiveFactor;
     float emissiveStrength;
     float thicknessFactor;

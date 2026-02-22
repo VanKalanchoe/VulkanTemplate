@@ -39,6 +39,37 @@ struct PushConstant
 [[vk::push_constant]]
 ConstantBuffer<PushConstant> pushConst;
 
+float GetPerceivedBrightness(float3 color)
+{
+    return sqrt(0.299 * color.r * color.r + 0.587 * color.g * color.g + 0.114 * color.b * color.b);
+}
+
+static const float c_DielectricSpecular = 0.04;
+
+float SolveMetalness(float diffuse, float specular, float oneMinusSpecularStrength)
+{
+    if (specular < c_DielectricSpecular)
+        return 0;
+
+    float a = c_DielectricSpecular;
+    float b = diffuse * oneMinusSpecularStrength / (1 - c_DielectricSpecular) + specular - 2 * c_DielectricSpecular;
+    float c = c_DielectricSpecular - specular;
+    float D = max(b * b - 4 * a * c, 0);
+    return clamp((-b + sqrt(D)) / (2 * a), 0, 1);
+}
+
+void ConvertSpecularGlossToMetalRough(float3 diffuseColor, float3 specularColor, out float3 baseColor, out float metalness)
+{
+    const float epsilon = 1e-6;
+
+    float oneMinusSpecularStrength = 1.0 - max(specularColor.r, max(specularColor.g, specularColor.b));
+    metalness = SolveMetalness(GetPerceivedBrightness(diffuseColor), GetPerceivedBrightness(specularColor), oneMinusSpecularStrength);
+
+    float3 baseColorFromDiffuse = diffuseColor * (oneMinusSpecularStrength / (1 - c_DielectricSpecular) / max(1 - metalness, epsilon));
+    float3 baseColorFromSpecular = specularColor - c_DielectricSpecular * (1 - metalness) / max(metalness, epsilon);
+    baseColor = saturate(lerp(baseColorFromDiffuse, baseColorFromSpecular, metalness * metalness));
+}
+
 // Build tangent and bitangent for a given normal
 void CreateOrthonormalBasis(float3 n, out float3 t, out float3 b)
 {
@@ -79,12 +110,12 @@ bool traceShadow(RayDesc ray)
     shadowRay.TMin      = ray.TMin;
     shadowRay.TMax      = ray.TMax; // can use maxDistance here for efficiency
 
-    HitPayload shadowPayload;
+    ShadowPayload shadowPayload;
     shadowPayload.depth = 0;
 
     TraceRay(topLevelAS,
              RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-             0xff, 0, 0, 0,
+             0xff, 0, 0, 1,
              shadowRay, shadowPayload);
 
     // True = light blocked, False = light visible
@@ -145,6 +176,11 @@ Lights processLight(/* GltfSceneInfo* sceneInfo, */ float3 worldPos)
   return light;
 }
 
+// Minimal payload for shadow rays - only what we need for shadow testing
+struct ShadowPayload
+{
+  int depth;  // Only need to know if we hit something or not
+};
 
 // ------------------------------------------------------------
 // Ray payload structure
@@ -152,7 +188,6 @@ Lights processLight(/* GltfSceneInfo* sceneInfo, */ float3 worldPos)
 struct HitPayload
 {
     float3 color;   // Accumulated color along the ray path
-    float  weight;  // Weight/importance of this ray (for importance sampling)
     int    depth;   // Current recursion depth (for limiting bounces)
     uint seed; 
     float3 throughput;
@@ -248,6 +283,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 
     float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     float2 uv = bary.x * v0.texcoords + bary.y * v1.texcoords + bary.z * v2.texcoords;
+    /* uv.y = 1.0 - uv.y; */
     float3 localPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
     float3 localN = normalize(bary.x * v0.normals + bary.y * v1.normals + bary.z * v2.normals);
     float3 worldPos = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(localPos,1.0)).xyz;
@@ -256,28 +292,46 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 
     Material mat = pushConst.materialBuffer[NonUniformResourceIndex(lut.materialID)];
 
-    // -------------------------------
-    // Sample textures
-    // -------------------------------
-    float4 albedo = mat.diffuseFactor;
-    if(mat.albedoTexture != 0) 
+    float4 albedo;
+    float metallic = mat.metallicFactor;
+    float roughness = max(0.0001f, mat.roughnessFactor); // maybe jsut do nee if roughness > true and remove from here
+    if(mat.isSpecularGlossWorkflow)
     {
-        albedo *= texture[mat.albedoTexture].SampleLevel(uv,0.0); // Base color (albedo)
-    }
+        float4 diffuse = mat.diffuseFactor;
+        if(mat.diffuseTexture != 0) 
+        {
+            diffuse *= texture[NonUniformResourceIndex(mat.diffuseTexture)].SampleLevel(uv, 0.0); // Base color (albedo)
+        }
 
+        float4 specGloss = mat.specularGlossFactor;
+        if(mat.specularTexture != 0) 
+        {
+            specGloss *= texture[NonUniformResourceIndex(mat.specularTexture)].SampleLevel(uv, 0.0); // Base color (albedo)
+        }
+
+        ConvertSpecularGlossToMetalRough(diffuse.rgb, specGloss.rgb, albedo.rgb, metallic);
+        roughness = 1.0 - specGloss.a;
+    }
+    else 
+    {
+        albedo = mat.baseColorFactor;
+        if(mat.albedoTexture != 0) 
+        {
+            albedo *= texture[NonUniformResourceIndex(mat.albedoTexture)].SampleLevel(uv, 0.0); // Base color (albedo)
+        }
+        
+        if(mat.metallicRoughnessTexture != 0) 
+        {
+            float4 mrT = texture[NonUniformResourceIndex(mat.metallicRoughnessTexture)].SampleLevel(uv, 0.0);
+            metallic *= mrT.b; // Metallic factor (0=dielectric, 1=metal)
+            roughness *= max(0.0001f, mrT.g); // Surface roughness (clamped to avoid divisions by zero)
+        }
+    }
+    
     float3 emissive = mat.emissiveFactor * mat.emissiveStrength;
     if(mat.emissiveTexture != 0)
     {
-        emissive *= texture[mat.emissiveTexture].SampleLevel(uv,0.0).rgb;
-    }
-
-    float metallic = mat.metallicFactor;
-    float roughness = mat.roughnessFactor;
-    if(mat.metallicRoughnessTexture != 0) 
-    {
-       float4 mrT = texture[mat.metallicRoughnessTexture].SampleLevel(uv, 0.0);
-       metallic *= mrT.b; // Metallic factor (0=dielectric, 1=metal)
-       roughness *= max(0.0001f, mrT.g); // Surface roughness (clamped to avoid divisions by zero)
+        emissive *= texture[NonUniformResourceIndex(mat.emissiveTexture)].SampleLevel(uv,0.0).rgb;
     }
 
     // Add emissive contribution scaled by throughput ?????? idk
@@ -301,13 +355,23 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     if(dot(geonrm, WorldRayDirection()) > 0) geonrm = -geonrm;
     
     // Initialize PBR material structure for BSDF evaluation
-    PbrBaseMaterial pbrMat = initPbrBaseMaterial(albedo.rgb, metallic, roughness, worldNormal, geonrm);
+    //PbrBaseMaterial pbrMat = initPbrBaseMaterial(albedo.rgb, metallic, roughness, worldNormal, geonrm);
+    PbrMaterial pbrMat = defaultPbrMaterial(albedo.rgb, metallic, roughness, worldNormal, geonrm);
+    pbrMat.emissive = emissive;
+    pbrMat.ior1 = 1.0;
+    pbrMat.ior2 = mat.ior;
+    pbrMat.specular = mat.specularFactor;
+    pbrMat.specularColor = mat.specularColorFactor;
+    pbrMat.transmission = mat.transmissionFactor;
+    pbrMat.attenuationColor = mat.attenuationColor;
+    pbrMat.attenuationDistance = mat.attenuationDistance;
+
     float3          contrib = float3(0, 0, 0);  // Direct lighting contribution
 
     // -------------------------------
     // Recursive Monte Carlo bounce with NEE jitter
     // -------------------------------
-    if(payload.depth < 5) // max depth
+    if(payload.depth < 12) // max depth
     {
         payload.depth += 1;
 
@@ -319,11 +383,11 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
             // Evaluate BSDF for direct lighting
             BsdfEvaluateData evalData;
             evalData.k1 = -WorldRayDirection();                                    // Incoming direction (from camera)
-            evalData.k2 = normalize(/* sceneInfo.skySimpleParam.sunDirection */L);  // Outgoing direction (to light)
+            evalData.k2 = normalize(/* sceneInfo.skySimpleParam.sunDirection */light.direction);  // Outgoing direction (to light)
             evalData.xi = float3(rand(payload.seed), rand(payload.seed), rand(payload.seed));        // Random numbers for sampling
 
             // Evaluate PBR BSDF (both diffuse and specular components)
-            bsdfEvaluateSimple(evalData, pbrMat);
+            bsdfEvaluate(evalData, pbrMat);
 
             // Accumulate direct lighting contribution
             // NOTE: Light sampling strategy and MIS
@@ -336,7 +400,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
             //
             // For AREA LIGHTS or ENVIRONMENT MAPS, proper MIS would combine both light and BSDF sampling.
             // The evalData.pdf output (currently unused) would be needed for this calculation.
-            const float3 w = powerHeuristic(1.0f, evalData.pdf);  // MIS weight (correct for delta lights, simplified for area lights)
+            const float3 w = 1.0f;  // MIS weight (correct for delta lights, simplified for area lights)
             contrib += w * evalData.bsdf_diffuse;  // Diffuse reflection
             contrib += w * evalData.bsdf_glossy;   // Specular reflection
             contrib *= payload.throughput;                 // Weight by path throughput
@@ -376,7 +440,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
             sampleData.xi = float3(rand(payload.seed), rand(payload.seed), rand(payload.seed));  // Random numbers for sampling
 
             // Sample BSDF to get next ray direction and evaluate BSDF/PDF ratio
-            bsdfSampleSimple(sampleData, pbrMat);
+            bsdfSample(sampleData, pbrMat);
 
             // Check if ray was absorbed (path termination)
             if(sampleData.event_type == BSDF_EVENT_ABSORB)
@@ -389,7 +453,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 
             // Set up next ray with slight offset to avoid self-intersection
             RayDesc newRay;
-            newRay.Origin    = offsetRay(worldPos, worldNormal);
+            newRay.Origin = offsetRay(worldPos, worldNormal);
             newRay.Direction = sampleData.k2;
             newRay.TMin      = 0.001;
             newRay.TMax      = INFINITE;
@@ -410,12 +474,13 @@ void missMain(inout HitPayload payload)
     // Get ray direction in world space
     float3 rayDir = WorldRayDirection();
     rayDir = normalize(rayDir);
+    rayDir.z = -rayDir.z;
 
     // Sample skybox
     float3 envColor = float3(0,0,0);
     if(scene->useSky && scene->skyBoxIndex != 0)
     {
-        envColor = cubes[scene->skyBoxIndex].SampleLevel(rayDir, 0.0).rgb;
+        envColor = cubes[NonUniformResourceIndex(scene->skyBoxIndex)].SampleLevel(rayDir, 0.0).rgb;
     }
     else 
     {
@@ -427,6 +492,17 @@ void missMain(inout HitPayload payload)
     payload.color +=  envColor * payload.throughput;
 
     // Set depth to miss
+    payload.depth = MISS_DEPTH; // Stop
+}
+
+[shader("miss")]
+void missShadowMain(inout ShadowPayload payload)
+{
+    // For shadow rays, we only need to know if we hit something or not
+    // This miss shader is much simpler and faster than the main miss shader
+    // because it doesn't need to calculate sky colors or complex lighting
+
+    // Set depth to MISS_DEPTH to indicate no hit (light is not occluded)
     payload.depth = MISS_DEPTH;
 }
 
@@ -434,7 +510,98 @@ void missMain(inout HitPayload payload)
 // Any-Hit Shader (optional for transparency, etc.)
 // ------------------------------------------------------------
 [shader("anyhit")]
-void anyhitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+void anyhitMain(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    // Empty for now
+    /* if(payload.depth > 1) return; */
+
+    // Find where the ray hit
+    float3 pos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
+
+    // Get material properties to apply color tinting
+    uint                  instanceID = InstanceIndex();
+    uint triID      = PrimitiveIndex();
+    InstanceLUT lut = pushConst.instanceLutBuffer[NonUniformResourceIndex(instanceID)];
+
+   // 2. Get meshlet primitive info for this instance
+    uint indexOffset = lut.indexBufferOffset;
+    uint vertexOffset = lut.firstVertex;
+
+    // 3. Map triangle index to global vertex indices
+    uint i0 = pushConst.indexBuffer[indexOffset + (triID * 3 + 0)] + vertexOffset;
+    uint i1 = pushConst.indexBuffer[indexOffset + (triID * 3 + 1)] + vertexOffset;
+    uint i2 = pushConst.indexBuffer[indexOffset + (triID * 3 + 2)] + vertexOffset;
+
+    // 4. Fetch vertices
+    Vertex v0 = pushConst.vertexBuffer[i0];
+    Vertex v1 = pushConst.vertexBuffer[i1];
+    Vertex v2 = pushConst.vertexBuffer[i2];
+
+    // 5. Interpolate attributes using barycentrics
+    float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    float2 uv       = bary.x * v0.texcoords + bary.y * v1.texcoords + bary.z * v2.texcoords;
+   /*  uv.y = 1.0 - uv.y; */
+    float3 localPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
+    float3 localN   = normalize(bary.x * v0.normals + bary.y * v1.normals + bary.z * v2.normals);
+    uint materialID = lut.materialID;
+    Material mat = pushConst.materialBuffer[NonUniformResourceIndex(materialID)];
+
+    // ---------------------------------------------------------
+    // 0. OPAQUE
+    // ---------------------------------------------------------
+    if (mat.alphaMode == 0) 
+    {
+        // Do nothing. Accepting the hit is the default behavior.
+        // The hardware will stop the ray and trigger Closest-Hit.
+        payload.depth = 1;
+       /*  IgnoreHit(); */
+        return; 
+    }
+
+    // ---------------------------------------------------------
+    // 1. MASK (Cutout)
+    // ---------------------------------------------------------
+    if (mat.alphaMode == 1) 
+    {
+        float alpha = mat.baseColorFactor.a;
+        if (mat.albedoTexture != 0) 
+            alpha *= texture[NonUniformResourceIndex(mat.albedoTexture)].SampleLevel(uv, 0.0).a;
+
+        if (alpha < mat.alphaCutoff) 
+        {
+            payload.depth = 1;
+            IgnoreHit(); // Ray continues as if geometry isn't there
+            return;
+        }
+        return;
+    }
+
+    // ---------------------------------------------------------
+    // 2. BLEND (Stochastic Transparency)
+    // ---------------------------------------------------------
+    if (mat.alphaMode == 2)
+    {
+        /* In a Path Tracer, we don't 'blend' in Any-Hit. 
+           We let the ray HIT the surface here so that it triggers 
+           the Closest-Hit shader. 
+           
+           Inside Closest-Hit, you will use a random roll:
+           if (rand(seed) > alpha) { TraceRay(continue_forward); } 
+        */
+        float alpha = mat.baseColorFactor.a;
+        if (mat.albedoTexture != 0) 
+            alpha *= texture[NonUniformResourceIndex(mat.albedoTexture)].SampleLevel(uv, 0.0).a;
+
+        // Simple hash-based random for shadow transparency
+        uint seed = xxhash32(uint3(asuint(WorldRayOrigin().xy), pushConst.sceneData->frameIndex));
+        if (rand(seed) > alpha)
+        {
+            payload.depth = 1;
+            IgnoreHit();
+          
+        }
+        
+        return; 
+    }
+
+
 }

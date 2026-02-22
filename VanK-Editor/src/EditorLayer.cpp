@@ -381,6 +381,33 @@ namespace VanK
         ImGui::Image(s_Font->GetAtlasTexture()->getImTextureID(), {512, 512}, ImVec2(0, 1), ImVec2(1, 0));
         
         ImGui::End(); // End Settings
+        
+        ImGui::Begin("Path Tracing");
+
+        /*// Enable / Disable accumulation
+        if (ImGui::Checkbox("Progressive Accumulation", &s_enableAccumulation))
+        {
+            resetFrame();
+        }*/
+
+        // Max accumulation frames
+        uint32_t maxFrames = Renderer::getMaxFrames();
+        if (ImGui::SliderInt("Max Samples", reinterpret_cast<int*>(&maxFrames), 1, 4096))
+        {
+            Renderer::setMaxFrames(maxFrames);
+            Renderer::resetFrame();
+        }
+
+        // Show current frame
+        ImGui::Text("Current Sample: %u", Renderer::getCurrentFrame());
+
+        // Reset button
+        if (ImGui::Button("Reset Accumulation"))
+        {
+            Renderer::resetFrame();
+        }
+
+        ImGui::End(); // End Path Tracing
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2{0, 0});
         ImGui::Begin("Viewport");
