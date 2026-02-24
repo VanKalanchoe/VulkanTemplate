@@ -48,6 +48,7 @@ namespace VanK
             else if (entryPoint == "missShadowMain") stage = vk::ShaderStageFlagBits::eMissKHR;
             else if (entryPoint == "closesthitMain") stage = vk::ShaderStageFlagBits::eClosestHitKHR;
             else if (entryPoint == "anyhitMain") stage = vk::ShaderStageFlagBits::eAnyHitKHR;
+            else if (entryPoint == "anyShadowHitMain") stage = vk::ShaderStageFlagBits::eAnyHitKHR;
             else continue;
                 
             std::string fileName = m_Name + "." + entryPoint + ".spv";
@@ -81,6 +82,7 @@ namespace VanK
         if (entry == "missShadowMain")         return vk::ShaderStageFlagBits::eMissKHR;
         if (entry == "closesthitMain")         return vk::ShaderStageFlagBits::eClosestHitKHR;
         if (entry == "anyhitMain")         return vk::ShaderStageFlagBits::eAnyHitKHR;
+        if (entry == "anyShadowHitMain")         return vk::ShaderStageFlagBits::eAnyHitKHR;
         throw std::runtime_error("Unknown entry point: " + entry);
     }
     
@@ -99,7 +101,8 @@ namespace VanK
             "missMain",
             "missShadowMain",
             "closesthitMain",
-            "anyhitMain"
+            "anyhitMain",
+            "anyShadowHitMain"
         };
 
         std::unordered_map<vk::ShaderStageFlagBits, std::vector<ShaderStageInfo>> spirvPerStage;
@@ -269,7 +272,7 @@ namespace VanK
                     device,
                     std::span<const uint32_t>(spirv.spirvCode.data(), spirv.spirvCode.size())
                 );
-                DBG_VK_NAME(*shaderModule);
+                DBG_VK_NAME(shaderModule);
                 m_ShaderModules[stage].push_back({ std::move(shaderModule), spirv.entryPointName });
             }
         }

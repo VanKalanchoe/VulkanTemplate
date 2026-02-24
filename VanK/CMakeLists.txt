@@ -28,6 +28,15 @@ find_package( GameNetworkingSockets )
 
 include(FetchContent)
 
+FetchContent_Declare (
+    tracy
+    GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+    GIT_TAG v0.13.1
+    GIT_SHALLOW TRUE
+    GIT_PROGRESS TRUE
+)
+FetchContent_MakeAvailable ( tracy )
+
 FetchContent_Declare(
     ImGuizmo
     GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
@@ -147,6 +156,9 @@ message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAl
     endif()
 
     target_compile_definitions(${CHAPTER_NAME} PRIVATE
+        TRACY_ENABLE
+        TRACY_NO_BROADCAST
+        TRACY_ON_DEMAND
         $<$<CONFIG:Debug>:VK_DEBUG>
         $<$<CONFIG:Release>:VK_RELEASE>
         $<$<CONFIG:RelWithDebInfo>:VK_RELWITHDEBINFO>
@@ -184,5 +196,5 @@ add_chapter(
     #SHADER shaderIO.h QuadShader.slang DrawIndirectShader.slang
     #MODELS
     #TEXTURES texture.jpg viking_room2.ktx2
-    LIBS Vulkan::cppm SDL3::SDL3 glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf GameNetworkingSockets::static
+    LIBS Vulkan::cppm SDL3::SDL3 glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf GameNetworkingSockets::static Tracy::TracyClient
 )

@@ -35,6 +35,8 @@ namespace VanK
         m_Window->initWindow();
 
         Renderer::Init(*m_Window);
+        
+        VANK_APP_INFO("fick meine und deine kinder hurenoshn");
 
         // ImGui
         PushLayer<ImGuiLayer>();

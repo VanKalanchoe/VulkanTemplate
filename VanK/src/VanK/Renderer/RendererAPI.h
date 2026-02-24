@@ -634,7 +634,7 @@ namespace VanK
         virtual void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage) = 0;
         virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {},
                                                   std::span<Ref<IndirectBuffer>> countBuffers = {}) = 0;
-        virtual void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
+        virtual void DispatchCompute(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
         virtual void EndComputePass(VanKComputePass* computePass) = 0;
         // RenderGraph
         virtual void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) = 0;

@@ -102,7 +102,7 @@ float3 SampleHemisphere(float3 normal, inout uint seed)
 //-----------------------------------------------------------------------
 // SHADOW TESTING (hard shadow version)
 //-----------------------------------------------------------------------
-bool traceShadow(RayDesc ray)
+bool traceShadow(RayDesc ray, uint seed)
 {
     RayDesc shadowRay;
     shadowRay.Origin    = ray.Origin;  // offset to avoid self-intersection
@@ -112,10 +112,11 @@ bool traceShadow(RayDesc ray)
 
     ShadowPayload shadowPayload;
     shadowPayload.depth = 0;
+    shadowPayload.seed = seed;
 
     TraceRay(topLevelAS,
              RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH | RAY_FLAG_SKIP_CLOSEST_HIT_SHADER,
-             0xff, 0, 0, 1,
+             0xff, 1, 0, 1,
              shadowRay, shadowPayload);
 
     // True = light blocked, False = light visible
@@ -144,6 +145,7 @@ Lights processLight(/* GltfSceneInfo* sceneInfo, */ float3 worldPos)
     if(light.type == LightType::eDirectional)
     {
         light.direction = -light.direction;
+        light.type = LightType::eDirectional;
     }
 
   // Point light: Calculate direction from light to surface and apply distance attenuation
@@ -180,6 +182,7 @@ Lights processLight(/* GltfSceneInfo* sceneInfo, */ float3 worldPos)
 struct ShadowPayload
 {
   int depth;  // Only need to know if we hit something or not
+  uint seed;
 };
 
 // ------------------------------------------------------------
@@ -310,7 +313,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
         }
 
         ConvertSpecularGlossToMetalRough(diffuse.rgb, specGloss.rgb, albedo.rgb, metallic);
-        roughness = 1.0 - specGloss.a;
+        roughness *= max(0.0001f, 1.0 - specGloss.a);
     }
     else 
     {
@@ -371,7 +374,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     // -------------------------------
     // Recursive Monte Carlo bounce with NEE jitter
     // -------------------------------
-    if(payload.depth < 12) // max depth
+    if(payload.depth < 5) // max depth
     {
         payload.depth += 1;
 
@@ -413,11 +416,11 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
             RayDesc shadowRay;
             shadowRay.Origin    = offsetRay(worldPos, worldNormal);  // Start from offset surface point
             shadowRay.Direction = L;                                          // Direction towards light
-            shadowRay.TMin      = 0.01;                                       // Avoid self-intersection
+            shadowRay.TMin      = 0.001;                                       // Avoid self-intersection
             shadowRay.TMax = light.type == LightType::eDirectional ? INFINITE : length(light.direction);  // Trace to infinity (or light distance)
 
            // Test if light is visible from this point
-            bool inShadow = traceShadow(shadowRay);
+            bool inShadow = traceShadow(shadowRay, payload.seed);
             if(!inShadow)
             {
                 // Light is visible - add direct lighting contribution
@@ -441,7 +444,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 
             // Sample BSDF to get next ray direction and evaluate BSDF/PDF ratio
             bsdfSample(sampleData, pbrMat);
-
+            
             // Check if ray was absorbed (path termination)
             if(sampleData.event_type == BSDF_EVENT_ABSORB)
             {
@@ -507,101 +510,122 @@ void missShadowMain(inout ShadowPayload payload)
 }
 
 // ------------------------------------------------------------
-// Any-Hit Shader (optional for transparency, etc.)
+// Any-Hit Shader (Primary Rays)
 // ------------------------------------------------------------
 [shader("anyhit")]
-void anyhitMain(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+void anyhitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-    /* if(payload.depth > 1) return; */
-
-    // Find where the ray hit
-    float3 pos = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
-
-    // Get material properties to apply color tinting
-    uint                  instanceID = InstanceIndex();
+    // 1. Fetch Material and UVs
+    uint instanceID = InstanceIndex();
     uint triID      = PrimitiveIndex();
     InstanceLUT lut = pushConst.instanceLutBuffer[NonUniformResourceIndex(instanceID)];
 
-   // 2. Get meshlet primitive info for this instance
-    uint indexOffset = lut.indexBufferOffset;
-    uint vertexOffset = lut.firstVertex;
+    uint i0 = pushConst.indexBuffer[lut.indexBufferOffset + (triID * 3 + 0)] + lut.firstVertex;
+    uint i1 = pushConst.indexBuffer[lut.indexBufferOffset + (triID * 3 + 1)] + lut.firstVertex;
+    uint i2 = pushConst.indexBuffer[lut.indexBufferOffset + (triID * 3 + 2)] + lut.firstVertex;
 
-    // 3. Map triangle index to global vertex indices
-    uint i0 = pushConst.indexBuffer[indexOffset + (triID * 3 + 0)] + vertexOffset;
-    uint i1 = pushConst.indexBuffer[indexOffset + (triID * 3 + 1)] + vertexOffset;
-    uint i2 = pushConst.indexBuffer[indexOffset + (triID * 3 + 2)] + vertexOffset;
-
-    // 4. Fetch vertices
-    Vertex v0 = pushConst.vertexBuffer[i0];
-    Vertex v1 = pushConst.vertexBuffer[i1];
-    Vertex v2 = pushConst.vertexBuffer[i2];
-
-    // 5. Interpolate attributes using barycentrics
     float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
-    float2 uv       = bary.x * v0.texcoords + bary.y * v1.texcoords + bary.z * v2.texcoords;
-   /*  uv.y = 1.0 - uv.y; */
-    float3 localPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
-    float3 localN   = normalize(bary.x * v0.normals + bary.y * v1.normals + bary.z * v2.normals);
-    uint materialID = lut.materialID;
-    Material mat = pushConst.materialBuffer[NonUniformResourceIndex(materialID)];
+    float2 uv   = bary.x * pushConst.vertexBuffer[i0].texcoords + 
+                  bary.y * pushConst.vertexBuffer[i1].texcoords + 
+                  bary.z * pushConst.vertexBuffer[i2].texcoords;
 
-    // ---------------------------------------------------------
-    // 0. OPAQUE
-    // ---------------------------------------------------------
-    if (mat.alphaMode == 0) 
+    Material mat = pushConst.materialBuffer[NonUniformResourceIndex(lut.materialID)];
+
+    // 2. Determine Alpha Workflow (Spec-Gloss vs Metal-Rough)
+    uint alphaTextureIdx = mat.isSpecularGlossWorkflow ? mat.diffuseTexture : mat.albedoTexture;
+    float alphaFactor    = mat.isSpecularGlossWorkflow ? mat.diffuseFactor.a : mat.baseColorFactor.a;
+    
+    // 3. Sample Alpha Texture
+    float alpha = alphaFactor;
+    if (alphaTextureIdx != 0) 
     {
-        // Do nothing. Accepting the hit is the default behavior.
-        // The hardware will stop the ray and trigger Closest-Hit.
-        payload.depth = 1;
-       /*  IgnoreHit(); */
-        return; 
+        alpha *= texture[NonUniformResourceIndex(alphaTextureIdx)].SampleLevel(uv, 0.0).a;
     }
 
-    // ---------------------------------------------------------
-    // 1. MASK (Cutout)
-    // ---------------------------------------------------------
-    if (mat.alphaMode == 1) 
+    if (mat.alphaMode == 0)
     {
-        float alpha = mat.baseColorFactor.a;
-        if (mat.albedoTexture != 0) 
-            alpha *= texture[NonUniformResourceIndex(mat.albedoTexture)].SampleLevel(uv, 0.0).a;
+        return;
+    }
 
+    if (mat.alphaMode == 1)
+    {
         if (alpha < mat.alphaCutoff) 
         {
-            payload.depth = 1;
-            IgnoreHit(); // Ray continues as if geometry isn't there
+            IgnoreHit();
             return;
         }
         return;
     }
 
-    // ---------------------------------------------------------
-    // 2. BLEND (Stochastic Transparency)
-    // ---------------------------------------------------------
-    if (mat.alphaMode == 2)
+    if(mat.alphaMode == 2)
     {
-        /* In a Path Tracer, we don't 'blend' in Any-Hit. 
-           We let the ray HIT the surface here so that it triggers 
-           the Closest-Hit shader. 
-           
-           Inside Closest-Hit, you will use a random roll:
-           if (rand(seed) > alpha) { TraceRay(continue_forward); } 
-        */
-        float alpha = mat.baseColorFactor.a;
-        if (mat.albedoTexture != 0) 
-            alpha *= texture[NonUniformResourceIndex(mat.albedoTexture)].SampleLevel(uv, 0.0).a;
-
-        // Simple hash-based random for shadow transparency
-        uint seed = xxhash32(uint3(asuint(WorldRayOrigin().xy), pushConst.sceneData->frameIndex));
-        if (rand(seed) > alpha)
+        if (rand(payload.seed) > alpha) 
         {
-            payload.depth = 1;
-            IgnoreHit();
-          
+            IgnoreHit(); 
+            return;
         }
-        
-        return; 
+    }
+}
+
+// ------------------------------------------------------------
+// Any-Hit Shader (Shadow Rays)
+// ------------------------------------------------------------
+[shader("anyhit")]
+void anyShadowHitMain(inout ShadowPayload payload, in BuiltInTriangleIntersectionAttributes attr)
+{
+    // 1. Fetch Material and UVs
+    uint instanceID = InstanceIndex();
+    uint triID      = PrimitiveIndex();
+    InstanceLUT lut = pushConst.instanceLutBuffer[NonUniformResourceIndex(instanceID)];
+    
+    uint i0 = pushConst.indexBuffer[lut.indexBufferOffset + (triID * 3 + 0)] + lut.firstVertex;
+    uint i1 = pushConst.indexBuffer[lut.indexBufferOffset + (triID * 3 + 1)] + lut.firstVertex;
+    uint i2 = pushConst.indexBuffer[lut.indexBufferOffset + (triID * 3 + 2)] + lut.firstVertex;
+
+    float3 bary = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
+    float2 uv   = bary.x * pushConst.vertexBuffer[i0].texcoords + 
+                  bary.y * pushConst.vertexBuffer[i1].texcoords + 
+                  bary.z * pushConst.vertexBuffer[i2].texcoords;
+
+    Material mat = pushConst.materialBuffer[NonUniformResourceIndex(lut.materialID)];
+
+    // 2. Determine Alpha Workflow (Spec-Gloss vs Metal-Rough)
+    uint alphaTextureIdx = mat.isSpecularGlossWorkflow ? mat.diffuseTexture : mat.albedoTexture;
+    float alphaFactor    = mat.isSpecularGlossWorkflow ? mat.diffuseFactor.a : mat.baseColorFactor.a;
+
+    // 3. Sample Alpha Texture
+    float alpha = alphaFactor;
+    if (alphaTextureIdx != 0) 
+    {
+        alpha *= texture[NonUniformResourceIndex(alphaTextureIdx)].SampleLevel(uv, 0.0).a;
     }
 
+    if (mat.alphaMode == 0)  // OPAQUE
+    {
+        // DO NOTHING
+        return;
+    }
 
+     // 4. Stochastic Visibility Test
+    if (mat.alphaMode == 1) // MASK mode (Cutout)
+    {
+        if (alpha < mat.alphaCutoff) 
+        {
+            IgnoreHit();
+            return;
+        }
+        return; // Otherwise keep hit
+    }
+
+    if(mat.alphaMode == 2)  // BLEND mode or OPAQUE with Transmission
+    {
+        if (rand(payload.seed) > alpha) 
+        {
+            IgnoreHit(); 
+            return;
+        }
+    }
+
+    // If we reached here, the ray is blocked
+    payload.depth = 1;
 }

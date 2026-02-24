@@ -1,9 +1,6 @@
 #include "Renderer.h"
 
 #include <imgui.h>
-#include <imgui_internal.h>
-#include "backends/imgui_impl_sdl3.h"
-#include "backends/imgui_impl_vulkan.h"
 
 #include <SDL3/SDL_log.h>
 
@@ -381,7 +378,8 @@ namespace VanK
         mat.ior = 1.5f;
         mat.ambientOcclusionFactor = 1.0f;
 
-        mat.transparent = false;
+        mat.transparent = 0;
+        mat.doubleSided = 0;
 
         mat.transmissionFactor = 0; // 0 = opaque, 1 = full transparent
         
@@ -627,12 +625,14 @@ namespace VanK
         // -----------------------------
         // TRANSPARENCY
         // -----------------------------
-        mat.transparent = (gltfMat.alphaMode == "BLEND") || (gltfMat.alphaMode == "MASK") || (mat.transmissionFactor > 0.0f);
+        mat.transparent = (gltfMat.alphaMode == "BLEND") || (gltfMat.alphaMode == "MASK") || (mat.transmissionFactor > 0.0f) ? 1 : 0;
         
         mat.alphaMode = 0; 
         if (gltfMat.alphaMode == "MASK") mat.alphaMode = 1;
         else if (gltfMat.alphaMode == "BLEND") mat.alphaMode = 2;
 
+        mat.doubleSided = gltfMat.doubleSided ? 1 : 0;
+        
         mat.alphaCutoff = static_cast<float>(gltfMat.alphaCutoff); // Default is 0.5
 
         materials.push_back(mat);
@@ -1958,8 +1958,8 @@ namespace VanK
             0, 2, 3 // second triangle
         };
        
-        ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.bc7.gltf", pinkTexture->GetTextureIndex());
-        /*ModelHandle bistro = LoadMeshModel(" E:/dev/VulkanAdventure/nvidia/RTXPT/Assets/Models/Bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
+        /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
+        /*ModelHandle Arcade = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Arcade/Arcade.gltf", pinkTexture->GetTextureIndex());*/
         //ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
         /*LoadMeshModel("", quadVertices, quadIndices, whiteTexture->GetTextureIndex(), true);*/
         /*ModelHandle viking = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/viking_room/viking_room.gltf");
@@ -1976,9 +1976,9 @@ namespace VanK
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
         /*ModelHandle FlightHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/FlightHelmet/FlightHelmet.gltf");*/
         /*ModelHandle gun = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cerberus_by_Andrew_Maximov/Untitled.gltf");*/
-        /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/TransmissionOrderTest/TransmissionOrderTest.gltf");*/
+        ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/TransmissionOrderTest/TransmissionOrderTest.gltf");
         /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/IORTestGrid/IORTestGrid.gltf");*/
-        runtimePlant = BuildRuntimeModel(bistro);
+        runtimePlant = BuildRuntimeModel(TransmissionOrderTest);
         //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
@@ -2330,7 +2330,7 @@ namespace VanK
 
                     RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
 
-                    RenderCommand::DispatchCompute({}, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
+                    RenderCommand::DispatchCompute(cmd, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
                     /*
                     RenderCommand::EndComputePass(computePass);*/
@@ -2547,13 +2547,13 @@ namespace VanK
         
         }
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
-        auto& finalRender = renderGraph.AddPass("Swapchain");
-        finalRender.reads = 
+        auto& Composit = renderGraph.AddPass("Composit");
+        Composit.reads = 
         {
                 {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ShaderRead},
                 {"rayTracingImage", ResourceID::Image(rayTracingImage->GetRenderImageIndex()), ResourceUsage::ShaderRead}
         };
-        finalRender.writes = 
+        Composit.writes = 
         {
             {
                 "finalImage",
@@ -2566,7 +2566,7 @@ namespace VanK
                 VanK_FColor{.f = {0.0f, 1.0f, 0.0f, 1.0f}}
             }
         };
-        finalRender.execute = []
+        Composit.execute = []
         {
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_FinalRenderPipeline);
             

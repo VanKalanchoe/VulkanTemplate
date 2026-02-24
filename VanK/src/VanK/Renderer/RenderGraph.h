@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "VanK/Core/ProfilerAPI.h"
 #include "VanK/Renderer/RenderCommand.h"
 
 namespace VanK

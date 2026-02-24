@@ -34,6 +34,7 @@ namespace VanK
             vma::MemoryUsage::eGpuOnly
         );
         DBG_VK_NAME(m_vertexBuffer.buffer);
+        TracyAllocN(*m_vertexBuffer.buffer, size, "Vulkan VRAM");
     }
 
     VulkanVertexBuffer::~VulkanVertexBuffer()
@@ -42,6 +43,7 @@ namespace VanK
         /*auto& instance = VulkanRendererAPI::Get();
         
         instance.GetAllocator().destroyBuffer(m_vertexBuffer); // not needed raii*/
+        TracyFreeN(*m_vertexBuffer.buffer, "Vulkan VRAM");
     }
 
     void VulkanVertexBuffer::Bind() const
@@ -68,6 +70,7 @@ namespace VanK
             vma::MemoryUsage::eGpuOnly
         );
         DBG_VK_NAME(m_indexBuffer.buffer);
+        TracyAllocN(*m_indexBuffer.buffer, size, "Vulkan VRAM");
     }
 
     VulkanIndexBuffer::~VulkanIndexBuffer()
@@ -76,6 +79,7 @@ namespace VanK
         /*auto& instance = VulkanRendererAPI::Get();
         
         instance.GetAllocator().destroyBuffer(m_indexBuffer); // not needed raii*/
+        TracyFreeN(*m_indexBuffer.buffer, "Vulkan VRAM");
     }
 
     void VulkanIndexBuffer::Bind() const
@@ -113,6 +117,7 @@ namespace VanK
             vma::AllocationCreateFlagBits::eHostAccessSequentialWrite
         );
         DBG_VK_NAME(m_transferBuffer.buffer);
+        TracyAllocN(*m_transferBuffer.buffer, size, "Vulkan VRAM");
     }
 
     VulkanTransferBuffer::~VulkanTransferBuffer()
@@ -122,6 +127,7 @@ namespace VanK
         /*auto& instance = VulkanRendererAPI::Get();
         
         instance.GetAllocator().destroyBuffer(m_transferBuffer); // not needed raii*/
+        TracyFreeN(*m_transferBuffer.buffer, "Vulkan VRAM");
     }
 
     void VulkanTransferBuffer::Bind() const
@@ -376,6 +382,7 @@ namespace VanK
             vma::MemoryUsage::eGpuOnly
         );
         DBG_VK_NAME(m_uniformBuffer.buffer);
+        TracyAllocN(*m_uniformBuffer.buffer, size, "Vulkan VRAM");
     }
 
     VulkanUniformBuffer::~VulkanUniformBuffer()
@@ -384,6 +391,7 @@ namespace VanK
         /*auto& instance = VulkanRendererAPI::Get();
         
         instance.GetAllocator().destroyBuffer(m_uniformBuffer); // not needed raii*/
+        TracyFreeN(*m_uniformBuffer.buffer, "Vulkan VRAM");
     }
 
     void VulkanUniformBuffer::Bind() const
@@ -431,6 +439,7 @@ namespace VanK
             vma::MemoryUsage::eGpuOnly
         );
         DBG_VK_NAME(m_storageBuffer.buffer);
+        TracyAllocN(*m_storageBuffer.buffer, size, "Vulkan VRAM");
     }
 
     VulkanStorageBuffer::~VulkanStorageBuffer()
@@ -440,6 +449,7 @@ namespace VanK
         /*auto& instance = VulkanRendererAPI::Get();
         
         instance.GetAllocator().destroyBuffer(m_storageBuffer); // not needed raii*/
+        TracyFreeN(*m_storageBuffer.buffer, "Vulkan VRAM");
     }
 
     void VulkanStorageBuffer::Bind() const
@@ -472,6 +482,7 @@ namespace VanK
             vma::MemoryUsage::eCpuToGpu
         );
         DBG_VK_NAME(m_indirectBuffer.buffer);
+        TracyAllocN(*m_indirectBuffer.buffer, size, "Vulkan VRAM");
     }
 
     VulkanIndirectBuffer::~VulkanIndirectBuffer()
@@ -480,6 +491,7 @@ namespace VanK
         /*auto& instance = VulkanRendererAPI::Get();
         
         instance.GetAllocator().destroyBuffer(m_indirectBuffer); // not needed raii*/
+        TracyFreeN(*m_indirectBuffer.buffer, "Vulkan VRAM");
     }
 
     void VulkanIndirectBuffer::Bind() const

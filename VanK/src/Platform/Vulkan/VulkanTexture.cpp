@@ -193,7 +193,7 @@ namespace VanK
             };
 
             local.image = instance.GetAllocator().createImage(imageInfo).image;
-            DBG_VK_NAME(*local.image);
+            DBG_VK_NAME(local.image);
 
             auto commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
 
@@ -208,8 +208,8 @@ namespace VanK
             // Create the texture view maybe make info here like createimage ?
             local.view = instance.GetAllocator().createImageView(local.image, textureFormat, vk::ImageAspectFlagBits::eColor, mipLevels);
             if (local.view == VK_NULL_HANDLE)
-                std::cout << "VulkanTexture2D: Failed to create texture view!" << std::endl;
-            DBG_VK_NAME(*local.view);
+                std::cout << "VulkanTexture2D: Failed to create texture view!" << '\n';
+            DBG_VK_NAME(local.view);
 
             local.extent.width = texWidth;
             local.extent.height = texHeight;
@@ -276,7 +276,7 @@ namespace VanK
             };
 
             local.image = instance.GetAllocator().createImage(imageInfo).image;
-            DBG_VK_NAME(*local.image);
+            DBG_VK_NAME(local.image);
 
             // Copy data from staging buffer to texture image
 
@@ -321,7 +321,7 @@ namespace VanK
             };
 
             local.image = instance.GetAllocator().createImage(imageInfo).image;
-            DBG_VK_NAME(*local.image);
+            DBG_VK_NAME(local.image);
 
             std::unique_ptr<vk::raii::CommandBuffer> commandBuffer = utils::beginSingleTimeCommands(instance.GetDevice(), instance.GetCommandPool());
 
@@ -342,7 +342,7 @@ namespace VanK
         if (local.view == VK_NULL_HANDLE)
             std::cout << "VulkanTexture2D: Failed to create texture view!" << '\n';
 
-        DBG_VK_NAME(*local.view);
+        DBG_VK_NAME(local.view);
 
         local.extent.width = texWidth;
         local.extent.height = texHeight;
@@ -494,13 +494,13 @@ namespace VanK
         };
 
         local.image = instance.GetAllocator().createImage(imageInfo).image;
-        DBG_VK_NAME(*local.image);
+        DBG_VK_NAME(local.image);
 
         // Create the texture view maybe make info here like createimage ?
         local.view = instance.GetAllocator().createImageView(local.image, format, (specification.depthImage) ? vk::ImageAspectFlagBits::eDepth : vk::ImageAspectFlagBits::eColor, 1);
         if (local.view == VK_NULL_HANDLE)
             std::cout << "VulkanRenderTargetImage: Failed to create texture view!" << '\n';
-        DBG_VK_NAME(*local.view);
+        DBG_VK_NAME(local.view);
         
         local.extent.width = specification.Width;
         local.extent.height = specification.Height;

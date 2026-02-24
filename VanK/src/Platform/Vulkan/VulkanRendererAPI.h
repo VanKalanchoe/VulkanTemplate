@@ -957,7 +957,7 @@ namespace VanK
         void RenderImGui(VanKCommandBuffer cmd) override;
         void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1) override;
         VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers) override;
-        void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
+        void DispatchCompute(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void EndComputePass(VanKComputePass* computePass) override;
         void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) override;
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
@@ -1132,8 +1132,6 @@ namespace VanK
         void pickPhysicalDevice();
 
         void createLogicalDevice();
-
-        void createDynamicDispatcher();
 
         void createSwapChain();
         

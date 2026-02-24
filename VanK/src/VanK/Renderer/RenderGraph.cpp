@@ -102,6 +102,9 @@ namespace VanK
 
         for (Pass* pass : sorted)
         {
+            VANKCPU_PROFILER_ZONE(pass->name.c_str());
+            VANKGPU_PROFILER_ZONE(cmd, pass->name.c_str());
+            
             // ---- READ barriers ----
             for (auto& r : pass->reads)
             {
@@ -196,7 +199,11 @@ namespace VanK
             if (!pass->subpasses.empty())
             {
                 for (auto& sub : pass->subpasses)
+                {
+                    VANKCPU_PROFILER_ZONE(sub.name.c_str());
+                    VANKGPU_PROFILER_ZONE(cmd, sub.name.c_str());
                     sub.execute();
+                }
             }
             else if (pass->execute)
             {

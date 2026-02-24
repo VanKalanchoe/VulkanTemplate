@@ -80,8 +80,8 @@ PixelOutput fragmentMain(VertexOutput vertexInput)
 
     float3 blendedRGB = rayColor.rgb * (1.0 - sceneColor.a) + sceneColor.rgb * sceneColor.a;
 
-    color = float4(tonemapACES(blendedRGB.rgb), 1.0);
-
+    color = float4(tonemapACES(rayColor.rgb), 1.0);
+    
     output.color = color;
     return output;
 }

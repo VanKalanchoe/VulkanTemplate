@@ -55,7 +55,8 @@ struct Material
     float ior;
     float ambientOcclusionFactor;
 
-    bool transparent;
+    uint32_t transparent;
+    uint32_t doubleSided;
 
     uint32_t alphaMode;    // 0: OPAQUE, 1: MASK, 2: BLEND
     float    alphaCutoff;  // The 0.5 value from your JSON

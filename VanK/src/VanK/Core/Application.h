@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "Log.h"
+#include "ProfilerAPI.h"
 #include "VanK/Core/core.h"
 #include "VanK/Core/Layer.h"
 #include "VanK/Core/Window.h"

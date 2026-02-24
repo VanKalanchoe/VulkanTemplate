@@ -229,9 +229,9 @@ namespace VanK
             return s_RendererAPI ? s_RendererAPI->BeginComputePass(cmd, buffer, indirectBuffers, countBuffers) : nullptr;
         }
 
-        static void DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+        static void DispatchCompute(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
         {
-            if (s_RendererAPI) s_RendererAPI->DispatchCompute(computePass, groupCountX, groupCountY, groupCountZ);
+            if (s_RendererAPI) s_RendererAPI->DispatchCompute(cmd, groupCountX, groupCountY, groupCountZ);
         }
 
         static void EndComputePass(VanKComputePass* computePass)

@@ -23,6 +23,7 @@ printf("\n");                                                                   
 
 #include "shaderIO.h"
 #include "VulkanBuffer.h"
+#include "VulkanProfilerAPI.h"
 #include "VulkanShader.h"
 #include "VanK/Core/core.h"
 #include "VanK/Core/logger.h"
@@ -70,6 +71,9 @@ namespace VanK
         device.waitIdle();
         /*DestroyAllPipelines();// todo idk where to put this will see*/
         cleanup();
+        
+        // profiler
+        VulkanProfilerAPI::shutdownVKProfilerAPI();
     }
 
     void VulkanRendererAPI::initVulkan()
@@ -79,7 +83,6 @@ namespace VanK
         createSurface();
         pickPhysicalDevice();
         createLogicalDevice();
-        createDynamicDispatcher();
         m_allocator.init(instance, physicalDevice, device);
         msaaSamples = getMaxUsableSampleCount();
         createSwapChain();
@@ -95,6 +98,9 @@ namespace VanK
         //statistics not important
         createQueryPool();
         createQueryBuffer();
+        
+        // profiler
+        VulkanProfilerAPI::initVKProfilerAPI(physicalDevice, device, queue, commandBuffers[0]);
     }
 
     void VulkanRendererAPI::initImGui()
@@ -279,7 +285,7 @@ namespace VanK
             throw std::runtime_error("failed to create window surface!");
         }
         surface = vk::raii::SurfaceKHR(instance, _surface);
-        DBG_VK_NAME(*surface);
+        DBG_VK_NAME(surface);
     }
 
     void VulkanRendererAPI::pickPhysicalDevice()
@@ -435,24 +441,15 @@ namespace VanK
         };
 
         device = vk::raii::Device(physicalDevice, deviceCreateInfo);
-        DBG_VK_NAME(*device);
+        DBG_VK_NAME(device);
 
-        debugUtilInitialize(device);
+        if (enableValidationLayers)
+            debugUtilInitialize(device);
 
         queue = vk::raii::Queue(device, queueIndex, 0);
-        DBG_VK_NAME(*queue);
+        DBG_VK_NAME(queue);
     }
-
-    void VulkanRendererAPI::createDynamicDispatcher()
-    {
-        /*//Use your own initial function pointer of type PFN_vkGetInstanceProcAddr: provided by SDL3
-        PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr = reinterpret_cast<PFN_vkGetInstanceProcAddr>(SDL_Vulkan_GetVkGetInstanceProcAddr());
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(vkGetInstanceProcAddr);
-
-        //initialize it with a vk::Instance to get all the other function pointers:
-        VULKAN_HPP_DEFAULT_DISPATCHER.init(instance);*/
-    }
-
+    
     void VulkanRendererAPI::createSwapChain()
     {
         auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
@@ -475,7 +472,7 @@ namespace VanK
             .clipped = true
         };
         swapChain = vk::raii::SwapchainKHR(device, swapChainCreateInfo);
-        DBG_VK_NAME(*swapChain);
+        DBG_VK_NAME(swapChain);
 
         swapChainImages = swapChain.getImages();
     }
@@ -492,9 +489,9 @@ namespace VanK
         for (auto& image : swapChainImages)
         {
             imageViewCreateInfo.image = image;
-            DBG_VK_NAME(image);
+            /*DBG_VK_NAME(image);*/
             vk::raii::ImageView imageView(device, imageViewCreateInfo);
-            DBG_VK_NAME(*imageView);
+            DBG_VK_NAME(imageView);
             swapChainImageViews.emplace_back(std::move(imageView));
         }
     }
@@ -779,7 +776,7 @@ namespace VanK
         };
 
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
-        DBG_VK_NAME(*tempPipelineLayout);
+        DBG_VK_NAME(tempPipelineLayout);
 
         // Dynamic rendering: provide what the pipeline will render to
         std::vector<vk::Format> colorFormats;
@@ -812,7 +809,7 @@ namespace VanK
         };
 
         tempPipeline = vk::raii::Pipeline(device, nullptr, pipelineCreateInfoChain.get<vk::GraphicsPipelineCreateInfo>());
-        DBG_VK_NAME(*tempPipeline);
+        DBG_VK_NAME(tempPipeline);
 
         PipelineResource resource;
         resource.pipeline = std::move(tempPipeline);
@@ -870,7 +867,7 @@ namespace VanK
         };
 
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
-        DBG_VK_NAME(*tempPipelineLayout);
+        DBG_VK_NAME(tempPipelineLayout);
 
         // Creating the pipeline to run the compute shader
         vk::ComputePipelineCreateInfo pipelineInfo
@@ -879,7 +876,7 @@ namespace VanK
             .layout = tempPipelineLayout
         };
         tempPipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
-        DBG_VK_NAME(*tempPipeline);
+        DBG_VK_NAME(tempPipeline);
 
         PipelineResource resource;
         resource.pipeline = std::move(tempPipeline);
@@ -974,10 +971,11 @@ namespace VanK
         m_missRegion.size = missSize * 2;
 
         // Hit shader (group 2)
-        memcpy(pData + hitOffset, m_shaderHandles.data() + 3 * handleSize, handleSize);
+        memcpy(pData + hitOffset + 0 * hitSize, m_shaderHandles.data() + 3 * handleSize, handleSize);
+        memcpy(pData + hitOffset + 1 * missSize, m_shaderHandles.data() + 4 * handleSize, handleSize);
         m_hitRegion.deviceAddress = m_sbtBuffer.address + hitOffset;
         m_hitRegion.stride = hitSize;
-        m_hitRegion.size = hitSize;
+        m_hitRegion.size = hitSize * 2;
 
         // Callable shaders (none in this tutorial)
         m_callableRegion.deviceAddress = 0;
@@ -1002,6 +1000,7 @@ namespace VanK
             eMissShadow,
             eClosestHit,
             eAnyHit,
+            eAnyHitShadow,
             eShaderGroupCount
         };
 
@@ -1010,7 +1009,7 @@ namespace VanK
 
         std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
         std::vector<std::string> entryNames; // only need to keep names alive
-        entryNames.reserve(5); // needs to be reserved or string changes to random bs
+        entryNames.reserve(eShaderGroupCount); // needs to be reserved or string changes to random bs
 
         std::array<uint32_t, eShaderGroupCount> stageToShaderIndex;
         stageToShaderIndex.fill(VK_SHADER_UNUSED_KHR);
@@ -1040,39 +1039,52 @@ namespace VanK
         addStage(vk::ShaderStageFlagBits::eMissKHR, eMiss, 0);
         addStage(vk::ShaderStageFlagBits::eMissKHR, eMissShadow, 1);
         addStage(vk::ShaderStageFlagBits::eClosestHitKHR, eClosestHit);
-        addStage(vk::ShaderStageFlagBits::eAnyHitKHR, eAnyHit);
+        addStage(vk::ShaderStageFlagBits::eAnyHitKHR, eAnyHit, 0);
+        addStage(vk::ShaderStageFlagBits::eAnyHitKHR, eAnyHitShadow, 1);
 
         // Shader groups
-        vk::RayTracingShaderGroupCreateInfoKHR group{};
-        group.anyHitShader = VK_SHADER_UNUSED_KHR;
-        group.closestHitShader = VK_SHADER_UNUSED_KHR;
-        group.generalShader = VK_SHADER_UNUSED_KHR;
-        group.intersectionShader = VK_SHADER_UNUSED_KHR;
-
         std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shader_groups;
         // Raygen
-        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
-        group.generalShader = stageToShaderIndex[eRaygen];
-        shader_groups.push_back(group);
+        {
+            vk::RayTracingShaderGroupCreateInfoKHR group{};
+            group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+            group.generalShader = stageToShaderIndex[eRaygen];
+            shader_groups.push_back(group);
+        }
 
         // Miss
-        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
-        group.generalShader = stageToShaderIndex[eMiss];
-        shader_groups.push_back(group);
-        
-        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
-        group.generalShader = stageToShaderIndex[eMissShadow];
-        shader_groups.push_back(group);
+        {
+            vk::RayTracingShaderGroupCreateInfoKHR group{};
+            group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+            group.generalShader = stageToShaderIndex[eMiss];
+            shader_groups.push_back(group);
+        }
 
-        // Closest Hit Shader
-        group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
-        group.generalShader = VK_SHADER_UNUSED_KHR;
-        group.closestHitShader = stageToShaderIndex[eClosestHit];
-        group.anyHitShader = stageToShaderIndex[eAnyHit];
-        shader_groups.push_back(group);
+        // Miss Shadow
+        {
+            vk::RayTracingShaderGroupCreateInfoKHR group{};
+            group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+            group.generalShader = stageToShaderIndex[eMissShadow];
+            shader_groups.push_back(group);
+        }
+
+        // Hit Group
+        {
+            vk::RayTracingShaderGroupCreateInfoKHR group{};
+            group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
+            group.closestHitShader = stageToShaderIndex[eClosestHit];
+            group.anyHitShader = stageToShaderIndex[eAnyHit];
+            shader_groups.push_back(group);
+        }
         
-        // Any Hit
-        group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
+        // Hit Shadow Group
+        {
+            vk::RayTracingShaderGroupCreateInfoKHR group{};
+            group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
+            group.closestHitShader = VK_SHADER_UNUSED_KHR;
+            group.anyHitShader = stageToShaderIndex[eAnyHitShadow];
+            shader_groups.push_back(group);
+        }
 
         std::array<vk::DescriptorSetLayout, 3> setLayouts =
         {
@@ -1099,7 +1111,7 @@ namespace VanK
         };
 
         tempPipelineLayout = vk::raii::PipelineLayout(device, pipelineLayoutInfo);
-        DBG_VK_NAME(*tempPipelineLayout);
+        DBG_VK_NAME(tempPipelineLayout);
 
         vk::StructureChain
             <
@@ -1129,7 +1141,7 @@ namespace VanK
         rtPipelineInfo.layout = tempPipelineLayout;
 
         tempPipeline = vk::raii::Pipeline(device, nullptr, nullptr, rtPipelineInfo);
-        DBG_VK_NAME(*tempPipeline);
+        DBG_VK_NAME(tempPipeline);
 
         createShaderBindingTable(rtPipelineInfo, tempPipeline);
 
@@ -1188,11 +1200,13 @@ namespace VanK
         commandBuffers[frameIndex].reset();
 
         commandBuffers[frameIndex].begin({});
+        
+        DBG_CMD_BEGIN(commandBuffers[frameIndex], "Main CommandBuffer" + std::to_string(frameIndex));
 
         //statistics
         commandBuffers[frameIndex].resetQueryPool(queryPoolStatistics, 0, 1);
         commandBuffers[frameIndex].beginQuery(queryPoolStatistics, 0);
-
+       
         auto cmd = new VanKCommandBuffer_T{&commandBuffers[frameIndex]};
 
         //timestamp
@@ -1212,6 +1226,10 @@ namespace VanK
         //timestamp
         StopTimeStamp(cmd, timestamp);
 
+        DBG_CMD_END(Unwrap(cmd));
+        
+        VulkanProfilerAPI::ProfilerVkCollect(Unwrap(cmd));
+        
         Unwrap(cmd).end();
     }
 
@@ -1260,6 +1278,8 @@ namespace VanK
         currentResult = result;
 
         imageIndex = acquiredImageIndex;
+        
+        DBG_QUEUE_BEGIN(queue, "Frame Submit");
     }
 
     void VulkanRendererAPI::EndFrame()
@@ -1322,6 +1342,8 @@ namespace VanK
                 throw;
             }
         }
+        
+        DBG_QUEUE_END(queue);
 
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
         /*downloadQueryStatisticsBuffer();*/
@@ -1387,11 +1409,12 @@ namespace VanK
         return result;
     }
 
-    void VulkanRendererAPI::DispatchCompute(VanKComputePass* computePass, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
+    void VulkanRendererAPI::DispatchCompute(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
         // Execute the compute shader
         // The workgroup is set to 256, and we only have 3 vertex to deal with, so one group is enough
-        commandBuffers[frameIndex].dispatch(groupCountX, groupCountY, groupCountZ);
+        DBG_CMD_INSERT(Unwrap(cmd), "Compute Dispatch");
+        Unwrap(cmd).dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
     void VulkanRendererAPI::EndComputePass(VanKComputePass* computePass)
@@ -1756,7 +1779,7 @@ namespace VanK
         VanKDepthStencilTargetInfo depth_stencil_target_info = {}
     )
     {
-        DBG_VK_SCOPE(Unwrap(cmd)); // <-- Helps to debug in NSight
+        /*DBG_VK_SCOPE*/(Unwrap(cmd)); // <-- Helps to debug in NSight
 
         // Depth attachment
         vk::RenderingAttachmentInfo depthAttachment{};
@@ -1959,11 +1982,13 @@ namespace VanK
 
     void VulkanRendererAPI::Draw(VanKCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
+        DBG_CMD_INSERT(Unwrap(cmd), "Draw");
         Unwrap(cmd).draw(vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
     void VulkanRendererAPI::DrawIndexed(VanKCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance)
     {
+        DBG_CMD_INSERT(Unwrap(cmd), "DrawIndexed");
         Unwrap(cmd).drawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
@@ -1989,6 +2014,7 @@ namespace VanK
         const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
         vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
 
+        DBG_CMD_INSERT(Unwrap(cmd), "DrawIndirectCount");
         Unwrap(cmd).drawIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
@@ -2014,11 +2040,13 @@ namespace VanK
         const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
         vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
 
+        DBG_CMD_INSERT(Unwrap(cmd), "DrawIndexedIndirectCount");
         Unwrap(cmd).drawIndexedIndirectCount(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
     void VulkanRendererAPI::DrawMeshTasks(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {
+        DBG_CMD_INSERT(Unwrap(cmd), "DrawMeshTasks");
         Unwrap(cmd).drawMeshTasksEXT(groupCountX, groupCountY, groupCountZ);
     }
 
@@ -2035,6 +2063,7 @@ namespace VanK
         const utils::Buffer& vkBuffer = vulkanIB->GetBuffer();
         vk::Buffer bufferIndirect = vkBuffer.buffer; // The actual VkBuffer
 
+        DBG_CMD_INSERT(Unwrap(cmd), "DrawMeshTasksIndirect");
         Unwrap(cmd).drawMeshTasksIndirectEXT(bufferIndirect, indirectBufferOffset, maxDrawCount, stride);
     }
 
@@ -2060,11 +2089,13 @@ namespace VanK
         const utils::Buffer& vkBufferCount = vulkanCB->GetBuffer();
         vk::Buffer bufferCount = vkBufferCount.buffer; // The actual VkBuffer
 
+        DBG_CMD_INSERT(Unwrap(cmd), "DrawMeshTasksIndirectCount");
         Unwrap(cmd).drawMeshTasksIndirectCountEXT(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
     void VulkanRendererAPI::TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height)
     {
+        DBG_CMD_INSERT(Unwrap(cmd), "traceray");
         Unwrap(cmd).traceRaysKHR(m_raygenRegion, m_missRegion, m_hitRegion, m_callableRegion, width, height, 1);
     }
 
@@ -2469,7 +2500,7 @@ namespace VanK
             .queueFamilyIndex = queueIndex
         };
         commandPool = vk::raii::CommandPool(device, poolInfo);
-        DBG_VK_NAME(*commandPool);
+        DBG_VK_NAME(commandPool);
     }
 
     vk::Format VulkanRendererAPI::findSupportedFormat(const std::vector<vk::Format>& candidates, vk::ImageTiling tiling,
@@ -3036,7 +3067,7 @@ namespace VanK
                 .pPoolSizes = poolSize.data()
             };
             descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
-            DBG_VK_NAME(*descriptorPool);
+            DBG_VK_NAME(descriptorPool);
         }
         // This is the descriptor pool for the ImGui UI, which is used to display the textures and other resources (GBuffers).
         {
@@ -3053,7 +3084,7 @@ namespace VanK
                 .pPoolSizes = &poolSize,
             };
             uiDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
-            DBG_VK_NAME(*uiDescriptorPool);
+            DBG_VK_NAME(uiDescriptorPool);
         }
 
         // Pool for TLAS descriptor set
@@ -3073,7 +3104,7 @@ namespace VanK
                 .pPoolSizes = poolSizes.data()
             };
             raytraceDescriptorPool = vk::raii::DescriptorPool(device, poolInfo);
-            DBG_VK_NAME(*raytraceDescriptorPool);
+            DBG_VK_NAME(raytraceDescriptorPool);
         }
     }
 
@@ -3121,7 +3152,7 @@ namespace VanK
                 .pBindings = layoutBindings.data(),
             };
             descriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
-            DBG_VK_NAME(*descriptorSetLayout);
+            DBG_VK_NAME(descriptorSetLayout);
             std::vector<vk::DescriptorSetLayout> layouts = {*descriptorSetLayout};
             // Allocate the descriptor set, needed only for larger descriptor sets
             vk::DescriptorSetAllocateInfo allocInfo = {
@@ -3130,7 +3161,7 @@ namespace VanK
                 .pSetLayouts = layouts.data(),
             };
             descriptorSets = device.allocateDescriptorSets(allocInfo);
-            DBG_VK_NAME(*descriptorSets.back());
+            DBG_VK_NAME(descriptorSets.back());
             if (!*descriptorSets[0])
             {
                 std::cerr << "Descriptor set allocation failed! Handle is VK_NULL_HANDLE.\n";
@@ -3153,7 +3184,7 @@ namespace VanK
                 .pBindings = layoutBindings.data(),
             };
             commonDescriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
-            DBG_VK_NAME(*commonDescriptorSetLayout);
+            DBG_VK_NAME(commonDescriptorSetLayout);
         }
 
         // acceleration structure
@@ -3194,7 +3225,7 @@ namespace VanK
                 .pBindings = layoutBindings.data(),
             };
             raytraceDescriptorSetLayout = device.createDescriptorSetLayout(descriptorSetLayoutInfo);
-            DBG_VK_NAME(*raytraceDescriptorSetLayout);
+            DBG_VK_NAME(raytraceDescriptorSetLayout);
             std::vector<vk::DescriptorSetLayout> layouts = {*raytraceDescriptorSetLayout};
             // Allocate the descriptor set, needed only for larger descriptor sets
             vk::DescriptorSetAllocateInfo allocInfo = {
@@ -3203,7 +3234,7 @@ namespace VanK
                 .pSetLayouts = layouts.data(),
             };
             raytraceDescriptorSet = device.allocateDescriptorSets(allocInfo);
-            DBG_VK_NAME(*raytraceDescriptorSet.back());
+            DBG_VK_NAME(raytraceDescriptorSet.back());
             if (!*raytraceDescriptorSet[0])
             {
                 std::cerr << "Descriptor set allocation failed! Handle is VK_NULL_HANDLE.\n";
@@ -3296,7 +3327,7 @@ namespace VanK
         commandBuffers = vk::raii::CommandBuffers(device, allocInfo);
         for (auto& commandBuffer : commandBuffers)
         {
-            DBG_VK_NAME(*commandBuffer);
+            DBG_VK_NAME(commandBuffer);
         }
     }
 
@@ -3337,7 +3368,7 @@ namespace VanK
             };
 
             queryPoolStatistics = vk::raii::QueryPool(device, poolInfo);
-            DBG_VK_NAME(*queryPoolStatistics);
+            DBG_VK_NAME(queryPoolStatistics);
         }
 
         // timestamp
@@ -3349,7 +3380,7 @@ namespace VanK
             };
 
             queryPoolTimeStep = vk::raii::QueryPool(device, poolInfo);
-            DBG_VK_NAME(*queryPoolTimeStep);
+            DBG_VK_NAME(queryPoolTimeStep);
         }
     }
 
@@ -3521,13 +3552,15 @@ namespace VanK
         return extensions;
     }
 
+    // Callback function for handling debug messages
     VKAPI_ATTR vk::Bool32 VKAPI_CALL VulkanRendererAPI::debugCallback(vk::DebugUtilsMessageSeverityFlagBitsEXT severity,
                                                                       vk::DebugUtilsMessageTypeFlagsEXT type,
                                                                       const vk::DebugUtilsMessengerCallbackDataEXT* pCallbackData,
                                                                       void*)
     {
-        std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << std::endl;
+        std::cerr << "validation layer: type " << to_string(type) << " msg: " << pCallbackData->pMessage << '\n';
 
+        // Return vk::False to indicate the Vulkan call should not be aborted
         return vk::False;
     }
 

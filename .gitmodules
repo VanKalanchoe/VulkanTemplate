@@ -11,6 +11,3 @@
 [submodule "assets/bistro"]
 	path = assets/bistro
 	url = https://github.com/VanKalanchoe/bistro.git
-[submodule "VanK/vendor/tracy"]
-	path = VanK/vendor/tracy
-	url = https://github.com/wolfpld/tracy.git

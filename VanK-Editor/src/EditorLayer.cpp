@@ -1,5 +1,6 @@
 #include "EditorLayer.h"
 
+#include <algorithm>
 #include <print>
 
 #include <ImGuizmo.h>
@@ -392,8 +393,15 @@ namespace VanK
 
         // Max accumulation frames
         uint32_t maxFrames = Renderer::getMaxFrames();
-        if (ImGui::SliderInt("Max Samples", reinterpret_cast<int*>(&maxFrames), 1, 4096))
+        bool changed = false;
+
+        changed |= ImGui::SliderInt("Max Samples", reinterpret_cast<int*>(&maxFrames), 1, 4096);
+        changed |= ImGui::InputInt("Max Samples Input", reinterpret_cast<int*>(&maxFrames));
+
+        if (changed)
         {
+            maxFrames = std::max<uint32_t>(maxFrames, 1);
+
             Renderer::setMaxFrames(maxFrames);
             Renderer::resetFrame();
         }
