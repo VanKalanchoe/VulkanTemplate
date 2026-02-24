@@ -133,7 +133,7 @@ namespace VanK
         bool isStorageImage = false; // for storage images RayTracing
     };
     
-    class RenderTarget
+    class RenderTarget : public RefCounted
     {
     public:
         virtual ~RenderTarget() = default;

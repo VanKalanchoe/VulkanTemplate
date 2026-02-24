@@ -91,7 +91,7 @@ namespace VanK
     {
         // 1. check if handle is valid
         if (!IsAssetHandleValid(handle))
-            return nullptr;
+            return {};
         
         // 2. check if asset needs load (and if so, load)
         Ref<Asset> asset;

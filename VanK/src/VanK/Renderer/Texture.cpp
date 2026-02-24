@@ -11,9 +11,9 @@ namespace VanK
     {
         switch (RendererAPI::GetAPI())
         {
-            case RenderAPIType::None: return nullptr;
+            case RenderAPIType::None: return {};
             case RenderAPIType::Vulkan: return CreateRef<VulkanTexture2D>(specification, data);
-            default: return nullptr;
+            default: return {};
         }
     }
     
@@ -23,9 +23,9 @@ namespace VanK
     {
         switch (RendererAPI::GetAPI())
         {
-            case RenderAPIType::None: return nullptr;
+            case RenderAPIType::None: return {};
             case RenderAPIType::Vulkan: return CreateRef<VulkanRenderTargetImage>(specification);
-            default: return nullptr;
+            default: return {};
         }
     }
 }

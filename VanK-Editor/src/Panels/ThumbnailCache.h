@@ -11,7 +11,7 @@ namespace VanK {
         Ref<Texture2D> Image;
     };
 
-    class ThumbnailCache
+    class ThumbnailCache : public RefCounted
     {
     public:
         ThumbnailCache(Ref<Project> project);

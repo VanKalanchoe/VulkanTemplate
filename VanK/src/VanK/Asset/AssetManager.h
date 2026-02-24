@@ -9,11 +9,14 @@ namespace VanK
     class AssetManager
     {
     public:
-        template<typename  T>
+        template<typename T>
         static Ref<T> GetAsset(AssetHandle handle)
         {
+            // Get the base asset
             Ref<Asset> asset = Project::GetActive()->GetAssetManager()->GetAsset(handle);
-            return std::static_pointer_cast<T>(asset);
+
+            // Cast it to the derived type using Ref's constructor
+            return Ref<T>(asset); // uses Ref<T>::Ref(const Ref<U>&)
         }
 
         static bool IsAssetHandleValid(AssetHandle handle)

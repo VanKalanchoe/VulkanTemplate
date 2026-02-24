@@ -34,11 +34,11 @@ namespace VanK {
 
         // TODO(Yan): PNGs, JPG/JPEG for now
         if (assetPath.extension() != ".png" && assetPath.extension() != ".jpg" && assetPath.extension() != ".jpeg")
-            return nullptr;
+            return {};
 
         Ref<Texture2D> texture = TextureImporter::LoadTexture2D(absolutePath, { .GenerateMips = false });
         if (!texture)
-            return nullptr;
+            return {};
 
         auto& cachedImage = m_CachedImages[assetPath];
         cachedImage.Timestamp = timestamp;

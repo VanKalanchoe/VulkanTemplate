@@ -112,6 +112,7 @@ namespace VanK
         inline static VanKCullModeFlags cullMode = VanK_CULL_MODE_BACK_BIT;
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
+        inline static std::unique_ptr<BufferManager> m_BufferManager;
     
         inline static Ref<RenderTargetImage> sceneImage; // resolve 
         inline static Ref<RenderTargetImage> colorImage; // msaa
@@ -159,31 +160,31 @@ namespace VanK
         inline static bool frozenDone = false;
         inline static bool FrustumCullEnabled = true;
     private:
-        inline static Ref<TransferBuffer> m_TransferBuffer;
-        inline static Ref<StorageBuffer> sceneBuffer ;
-        inline static Ref<StorageBuffer> cullBuffer ;
-        inline static Ref<TransferBuffer> m_TransferDownlaoadBuffer;
-        inline static Ref<StorageBuffer> vertexBuffer ;
-        inline static Ref<StorageBuffer> indexBuffer ;
-        inline static Ref<StorageBuffer> meshletVerticesBuffer ;
-        inline static Ref<StorageBuffer> meshletTrianglesBuffer ;
-        inline static Ref<StorageBuffer> meshletBuffer ;
-        inline static Ref<StorageBuffer> meshletPrimitiveBuffer ;
-        inline static Ref<StorageBuffer> meshDrawBuffer ;
-        inline static Ref<StorageBuffer> materialBuffer;
-        inline static Ref<StorageBuffer> instanceLutsBuffer;
+        inline static BufferHandle m_TransferBuffer;
+        inline static BufferHandle sceneBuffer ;
+        inline static BufferHandle cullBuffer ;
+        inline static BufferHandle m_TransferDownlaoadBuffer;
+        inline static BufferHandle vertexBuffer ;
+        inline static BufferHandle indexBuffer ;
+        inline static BufferHandle meshletVerticesBuffer ;
+        inline static BufferHandle meshletTrianglesBuffer ;
+        inline static BufferHandle meshletBuffer ;
+        inline static BufferHandle meshletPrimitiveBuffer ;
+        inline static BufferHandle meshDrawBuffer ;
+        inline static BufferHandle materialBuffer;
+        inline static BufferHandle instanceLutsBuffer;
         
-        inline static Ref<StorageBuffer> lightsBuffer;
+        inline static BufferHandle lightsBuffer;
         
         //2d quads, circle, text, line dont need meshlets 1 thread means 1 instance of it
-        inline static Ref<StorageBuffer> quadBuffer ;
-        inline static Ref<StorageBuffer> circleBuffer ;
-        inline static Ref<StorageBuffer> textBuffer ;
-        inline static Ref<StorageBuffer> lineBuffer ;
+        inline static BufferHandle quadBuffer ;
+        inline static BufferHandle circleBuffer ;
+        inline static BufferHandle textBuffer ;
+        inline static BufferHandle lineBuffer ;
         //--
         
-        inline static Ref<StorageBuffer> localMeshTaskSubmitBuffer;
-        inline static Ref<IndirectBuffer> meshTaskSubmitBuffer;
+        inline static BufferHandle localMeshTaskSubmitBuffer;
+        inline static BufferHandle meshTaskSubmitBuffer;
         
         inline static Ref<Texture2D> whiteTexture, pinkTexture, vikingRoom, ChernoLogo, cubemap, BRDF2DLUT, irradianceMap, prefilterMap, rustedIron, rustedIronMetalRough, rustedIronNormal;
     

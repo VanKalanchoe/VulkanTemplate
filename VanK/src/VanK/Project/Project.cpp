@@ -30,7 +30,7 @@ namespace VanK
             return s_ActiveProject;
         }
         
-        return nullptr;
+        return {};
     }
 
     bool Project::SaveActive(const std::filesystem::path& path)

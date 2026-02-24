@@ -446,6 +446,7 @@ namespace VanK
     {
         VK_CORE_INFO("Destroyed StorageBuffer");
         RenderCommand::waitForGraphicsQueueIdle();
+        
         /*auto& instance = VulkanRendererAPI::Get();
         
         instance.GetAllocator().destroyBuffer(m_storageBuffer); // not needed raii*/

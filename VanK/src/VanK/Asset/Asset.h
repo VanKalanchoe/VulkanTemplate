@@ -2,6 +2,7 @@
 
 #include <string_view>
 
+#include "VanK/Core/Ref.h"
 #include "VanK/Core/UUID.h"
 
 namespace VanK
@@ -18,7 +19,7 @@ namespace VanK
     std::string_view AssetTypeToString(AssetType type);
     AssetType AssetTypeFromString(std::string_view assetType);
 
-    class Asset
+    class Asset : public RefCounted
     {
     public:
         AssetHandle Handle; // generate handle

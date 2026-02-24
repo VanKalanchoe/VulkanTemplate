@@ -6,6 +6,8 @@
 #include <glm/glm.hpp>
 #include <vector>
 
+#include "VanK/Core/Ref.h"
+
 namespace VanK
 {
     // Forward declarations
@@ -109,7 +111,7 @@ namespace VanK
         uint32_t m_Stride = 0;
     };
 
-    class VanKBuffer
+    class VanKBuffer : public RefCounted
     {
     public:
         virtual ~VanKBuffer() {}
@@ -258,5 +260,93 @@ namespace VanK
         virtual void Fill(VanKCommandBuffer cmd, uint64_t dstOffset, uint64_t size, uint32_t data) = 0;
 
         static IndirectBuffer* Create(uint64_t size);
+    };
+    
+    struct BufferHandle 
+    {
+        uint32_t id = 0;
+
+        bool operator==(const BufferHandle& other) const { return id == other.id; }
+        bool valid() const { return id != 0; }
+    };
+    
+    class BufferManager
+    {
+    public:
+        template<typename T, typename... Args>
+        BufferHandle Create(Args&&... args)
+        {
+            uint32_t newID = ++lastID;
+
+            if constexpr (std::is_same_v<T, StorageBuffer>)
+            {
+                StorageBuffer* buffer =
+                    StorageBuffer::Create(std::forward<Args>(args)...);
+
+                m_storageBuffers[newID] = Ref<StorageBuffer>(buffer);
+            }
+            else if constexpr (std::is_same_v<T, TransferBuffer>)
+            {
+                TransferBuffer* buffer =
+                    TransferBuffer::Create(std::forward<Args>(args)...);
+
+                m_transferBuffers[newID] = Ref<TransferBuffer>(buffer);
+            }
+            else if constexpr (std::is_same_v<T, IndirectBuffer>)
+            {
+                IndirectBuffer* buffer =
+                    IndirectBuffer::Create(std::forward<Args>(args)...);
+
+                m_indirectBuffers[newID] = Ref<IndirectBuffer>(buffer);
+            }
+            else
+            {
+                static_assert(sizeof(T) == 0, "Unsupported buffer type");
+            }
+
+            return { newID };
+        }
+
+        template<typename T>
+        Ref<T> Get(BufferHandle handle)
+        {
+            if constexpr (std::is_same_v<T, StorageBuffer>)
+            {
+                auto it = m_storageBuffers.find(handle.id);
+                if (it != m_storageBuffers.end())
+                    return it->second;
+            }
+            else if constexpr (std::is_same_v<T, TransferBuffer>)
+            {
+                auto it = m_transferBuffers.find(handle.id);
+                if (it != m_transferBuffers.end())
+                    return it->second;
+            }
+            else if constexpr (std::is_same_v<T, IndirectBuffer>)
+            {
+                auto it = m_indirectBuffers.find(handle.id);
+                if (it != m_indirectBuffers.end())
+                    return it->second;
+            }
+            else
+            {
+                static_assert(sizeof(T) == 0, "Unsupported buffer type");
+            }
+
+            return {};
+        }
+
+        void Shutdown()
+        {
+            m_storageBuffers.clear();
+            m_transferBuffers.clear();
+            m_indirectBuffers.clear();
+        }
+
+    private:
+        std::unordered_map<uint32_t, Ref<StorageBuffer>> m_storageBuffers;
+        std::unordered_map<uint32_t, Ref<TransferBuffer>> m_transferBuffers;
+        std::unordered_map<uint32_t, Ref<IndirectBuffer>> m_indirectBuffers;
+        uint32_t lastID = 0;
     };
 }

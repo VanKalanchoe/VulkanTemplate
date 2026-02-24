@@ -295,21 +295,22 @@ namespace VanK
         return tex.source;
     }
     
-    static Ref<Texture2D> LoadTextureFromTexture(
-    int textureIndex,
-    const std::string& basePath,
-    const tinygltf::Model& model,
-    bool generateMips,
-    ImageFormat format,
-    bool flipTexture
-)
+    static Ref<Texture2D> LoadTextureFromTexture
+    (
+        int textureIndex,
+        const std::string& basePath,
+        const tinygltf::Model& model,
+        bool generateMips,
+        ImageFormat format,
+        bool flipTexture
+    )
     {
         if (textureIndex < 0 || textureIndex >= model.textures.size())
-            return nullptr;
+            return {};
 
         int imageIndex = ResolveImageFromTexture(model, textureIndex);
         if (imageIndex < 0 || imageIndex >= model.images.size())
-            return nullptr;
+            return {};
 
         const tinygltf::Image& img = model.images[imageIndex];
 
@@ -328,7 +329,7 @@ namespace VanK
             if (!std::filesystem::exists(fullpath))
             {
                 std::cout << "Texture file not found: " << fullpath << std::endl;
-                return nullptr;
+                return {};
             }
 
             Ref<Texture2D> tex = TextureImporter::LoadTexture2D(
@@ -340,7 +341,7 @@ namespace VanK
             return tex;
         }
 
-        return nullptr;
+        return {};
     }
 
     static uint32_t BuildMaterial
@@ -1617,13 +1618,13 @@ namespace VanK
         RenderCommand::waitForGraphicsQueueIdle();
 
         // Destroy old render targets
-        sceneImage.reset();
+        /*sceneImage.reset();
         colorImage.reset();
         entityImage.reset();
         entityColorImage.reset();
         depthImage.reset();
         rayTracingImage.reset();
-        finalImage.reset();
+        finalImage.reset();*/
         // since those all are renderiamges i could put viewportsize inside vulkantexture class or call it once that inits it so i dont have to
         // provide myself here every time but this might be not needed if integrated into rendergraph
         // Create new render targets with current viewport size
@@ -1651,6 +1652,8 @@ namespace VanK
         m_window = window.getWindowHandle();
         RenderCommand::SetConfig(config);
         RenderCommand::Init();
+        
+        m_BufferManager = std::make_unique<BufferManager>();
 
         // Render Target
         CreateRenderTargets();
@@ -1988,66 +1991,67 @@ namespace VanK
         /*SubmitModelDraw(viking, glm::translate(glm::mat4(1.0f), glm::vec3(2.0f, 0.0f, 0.0f)));*/
         //SubmitModelDraw(monkey, glm::translate(glm::mat4(1.0f), glm::vec3(-2.0f, 0.0f, 0.0f)));
         uint64_t sceneBuffersize = sizeof(SceneDatas);
-        sceneBuffer.reset(StorageBuffer::Create(sceneBuffersize));
+        sceneBuffer = m_BufferManager->Create<StorageBuffer>(sceneBuffersize);
 
         uint64_t cullBuffersize = sizeof(CulledData);
-        cullBuffer.reset(StorageBuffer::Create(cullBuffersize));
+        cullBuffer = m_BufferManager->Create<StorageBuffer>(cullBuffersize);
 
         uint64_t m_TransferDownlaoadBuffersize = sizeof(CulledData);
-        m_TransferDownlaoadBuffer.reset(TransferBuffer::Create(m_TransferDownlaoadBuffersize, VanKTransferBufferUsageDownload));
+        m_TransferDownlaoadBuffer = m_BufferManager->Create<TransferBuffer>(m_TransferDownlaoadBuffersize, VanKTransferBufferUsageDownload);
 
         uint64_t vertexBuffersize = sizeof(shaderio::Vertex) * geometry.vertices.size();
-        vertexBuffer.reset(StorageBuffer::Create(vertexBuffersize));
+        /*vertexBuffer = CreateRefs<StorageBuffer>(vertexBuffersize);*/
+        vertexBuffer = m_BufferManager->Create<StorageBuffer>(vertexBuffersize);
 
         uint64_t indexBuffersize = sizeof(uint32_t) * geometry.indices.size();
-        indexBuffer.reset(StorageBuffer::Create(indexBuffersize));
+        indexBuffer = m_BufferManager->Create<StorageBuffer>(indexBuffersize);
 
         uint64_t meshletVerticesBuffersize = sizeof(uint32_t) * geometry.meshletVertices.size();
-        meshletVerticesBuffer.reset(StorageBuffer::Create(meshletVerticesBuffersize));
+        meshletVerticesBuffer = m_BufferManager->Create<StorageBuffer>(meshletVerticesBuffersize);
 
         uint64_t meshletTrianglesBuffersize = sizeof(uint8_t) * geometry.meshletTriangles.size();
-        meshletTrianglesBuffer.reset(StorageBuffer::Create(meshletTrianglesBuffersize));
+        meshletTrianglesBuffer = m_BufferManager->Create<StorageBuffer>(meshletTrianglesBuffersize);
 
         uint64_t meshletBuffersize = sizeof(Meshlet) * geometry.meshlets.size();
-        meshletBuffer.reset(StorageBuffer::Create(meshletBuffersize));
+        meshletBuffer = m_BufferManager->Create<StorageBuffer>(meshletBuffersize);
 
         uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10000;
-        localMeshTaskSubmitBuffer.reset(StorageBuffer::Create(localMeshTaskSubmitBuffersize));
+        localMeshTaskSubmitBuffer = m_BufferManager->Create<StorageBuffer>(localMeshTaskSubmitBuffersize);
 
         uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10000;
-        meshTaskSubmitBuffer.reset(IndirectBuffer::Create(meshTaskSubmitBuffersize));
+        meshTaskSubmitBuffer = m_BufferManager->Create<IndirectBuffer>(meshTaskSubmitBuffersize);
 
         uint64_t meshletPrimitiveBuffersize = sizeof(shaderio::MeshletPrimitive) * 10000;
-        meshletPrimitiveBuffer.reset(StorageBuffer::Create(meshletPrimitiveBuffersize));
+        meshletPrimitiveBuffer = m_BufferManager->Create<StorageBuffer>(meshletPrimitiveBuffersize);
 
         uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10000;
-        meshDrawBuffer.reset(StorageBuffer::Create(meshDrawBuffersize));
+        meshDrawBuffer = m_BufferManager->Create<StorageBuffer>(meshDrawBuffersize);
 
         uint64_t materialBuffersize = sizeof(shaderio::Material) * 10000;
-        materialBuffer.reset(StorageBuffer::Create(materialBuffersize));
+        materialBuffer = m_BufferManager->Create<StorageBuffer>(materialBuffersize);
 
         uint64_t instanceLutsBuffersize = sizeof(shaderio::InstanceLUT) * 10000;
-        instanceLutsBuffer.reset(StorageBuffer::Create(instanceLutsBuffersize));
+        instanceLutsBuffer = m_BufferManager->Create<StorageBuffer>(instanceLutsBuffersize);
 
         uint64_t quadBuffersize = sizeof(QuadData) * 10;
-        quadBuffer.reset(StorageBuffer::Create(quadBuffersize));
+        quadBuffer = m_BufferManager->Create<StorageBuffer>(quadBuffersize);
 
         uint64_t circleBuffersize = sizeof(CircleData) * 10;
-        circleBuffer.reset(StorageBuffer::Create(circleBuffersize));
+        circleBuffer = m_BufferManager->Create<StorageBuffer>(circleBuffersize);
 
         uint64_t textBuffersize = sizeof(CircleData) * 10;
-        textBuffer.reset(StorageBuffer::Create(textBuffersize));
+        textBuffer = m_BufferManager->Create<StorageBuffer>(textBuffersize);
 
         uint64_t lineBuffersize = sizeof(LineData) * 10;
-        lineBuffer.reset(StorageBuffer::Create(lineBuffersize));
+        lineBuffer = m_BufferManager->Create<StorageBuffer>(lineBuffersize);
 
         uint64_t lightsBuffersize = sizeof(Lights) * 10;
-        lightsBuffer.reset(StorageBuffer::Create(lightsBuffersize));
+        lightsBuffer = m_BufferManager->Create<StorageBuffer>(lightsBuffersize);
 
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + indexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize +
             localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + materialBuffersize + instanceLutsBuffersize + quadBuffersize + circleBuffersize +
             textBuffersize + lineBuffersize + lightsBuffersize;
-        m_TransferBuffer.reset(TransferBuffer::Create(transferSize, VanKTransferBufferUsageUpload));
+        m_TransferBuffer = m_BufferManager->Create<TransferBuffer>(transferSize, VanKTransferBufferUsageUpload);
     }
 
     // this is needed because of shaderlibrary holding raii modules and they die last because renderer has it
@@ -2059,46 +2063,8 @@ namespace VanK
         RenderCommand::DestroyAllPipelines();
 
         GetShaderLibrary().ShutdownAll();
-
-        m_TransferBuffer.reset();
-
-        sceneBuffer.reset();
-
-        cullBuffer.reset();
-
-        m_TransferDownlaoadBuffer.reset();
-
-        vertexBuffer.reset();
-
-        indexBuffer.reset();
-
-        meshletVerticesBuffer.reset();
-
-        meshletTrianglesBuffer.reset();
-
-        meshletBuffer.reset();
-
-        localMeshTaskSubmitBuffer.reset();
-
-        meshTaskSubmitBuffer.reset();
-
-        meshletPrimitiveBuffer.reset();
-
-        meshDrawBuffer.reset();
-
-        materialBuffer.reset();
-
-        instanceLutsBuffer.reset();
-
-        lightsBuffer.reset();
-
-        quadBuffer.reset();
-
-        circleBuffer.reset();
-
-        textBuffer.reset();
-
-        lineBuffer.reset();
+        
+        m_BufferManager.reset();
     }
 
     void Renderer::CheckPendingVSyncChange()
@@ -2137,11 +2103,11 @@ namespace VanK
         {
             //wrap this in a download function like the upload function to make it nicer
             uint64_t offset = 0;
-            void* mapPtr = m_TransferDownlaoadBuffer->MapTransferBuffer(sizeof(CulledData), 0, offset);
-            m_TransferDownlaoadBuffer->DownloadFromGPUBuffer(cmd, {0}, {cullBuffer.get(), 0, sizeof(CulledData)});
+            void* mapPtr = m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->MapTransferBuffer(sizeof(CulledData), 0, offset);
+            m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->DownloadFromGPUBuffer(cmd, {0}, {m_BufferManager->Get<StorageBuffer>(cullBuffer).get(), 0, sizeof(CulledData)});
             CulledData data;
             std::memcpy(&data, mapPtr, sizeof(CulledData));
-            m_TransferDownlaoadBuffer->UnMapTransferBuffer();
+            m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->UnMapTransferBuffer();
             ImGui::Begin("Mesh");
             ImGui::SeparatorText("Culling Breakdown");
             ImGui::Text("Frustum culled: %u", data.frustumCulled);
@@ -2226,7 +2192,7 @@ namespace VanK
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
-        cullBuffer->Fill(cmd, 0, sizeof(CulledData), 0);
+        m_BufferManager->Get<StorageBuffer>(cullBuffer)->Fill(cmd, 0, sizeof(CulledData), 0);
 
         scenesData.brdflutTexture = BRDF2DLUT->GetTextureIndex();
         scenesData.irradianceTexture = irradianceMap->GetTextureIndex();
@@ -2239,7 +2205,7 @@ namespace VanK
         scenesData.frameIndex = s_frameIndex;
         
         scene.emplace_back(scenesData);
-        m_TransferBuffer->Upload(cmd, *sceneBuffer, scene, 0);
+        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(sceneBuffer), scene, 0);
         scene.clear();
        
         if (!done)
@@ -2256,26 +2222,26 @@ namespace VanK
     }
 );
        
-            m_TransferBuffer->Upload(cmd, *lightsBuffer, lights, 0);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(lightsBuffer), lights, 0);
             lights.clear();
 
-            m_TransferBuffer->Upload(cmd, *vertexBuffer, geometry.vertices, 0, false);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(vertexBuffer), geometry.vertices, 0, false);
 
-            m_TransferBuffer->Upload(cmd, *indexBuffer, geometry.indices, 0, false);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.indices, 0, false);
             // note descriptor update for tlas and storageimage are inside here maybe move out once descriptor heap is implemented ashole
-            RenderCommand::createAccelerationStructures(*vertexBuffer, *indexBuffer, geometry.primitives, materials, instanceLUTs, sceneImage->GetRenderImageIndex());
+            RenderCommand::createAccelerationStructures(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials, instanceLUTs, sceneImage->GetRenderImageIndex());
 
-            m_TransferBuffer->Upload(cmd, *instanceLutsBuffer, instanceLUTs, 0, false);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer), instanceLUTs, 0, false);
 
-            m_TransferBuffer->Upload(cmd, *meshletVerticesBuffer, geometry.meshletVertices, 0);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(meshletVerticesBuffer), geometry.meshletVertices, 0);
 
-            m_TransferBuffer->Upload(cmd, *meshletTrianglesBuffer, geometry.meshletTriangles, 0);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(meshletTrianglesBuffer), geometry.meshletTriangles, 0);
 
-            m_TransferBuffer->Upload(cmd, *meshletBuffer, geometry.meshlets, 0);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(meshletBuffer), geometry.meshlets, 0);
 
-            m_TransferBuffer->Upload(cmd, *meshletPrimitiveBuffer, geometry.primitives, 0);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(meshletPrimitiveBuffer), geometry.primitives, 0);
 
-            m_TransferBuffer->Upload(cmd, *materialBuffer, materials, 0);
+            m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(materialBuffer), materials, 0);
 
             //----------
             done = true;
@@ -2291,18 +2257,18 @@ namespace VanK
         // has to be done after createAccelerationStructures is called once maybe add a check or so
         RenderCommand::updateTopLevelAS(transform);
 
-        m_TransferBuffer->Upload(cmd, *meshDrawBuffer, meshDraws, 0);
+        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(meshDrawBuffer), meshDraws, 0);
 
-        m_TransferBuffer->Upload(cmd, *localMeshTaskSubmitBuffer, meshTasks, 0);
+        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(localMeshTaskSubmitBuffer), meshTasks, 0);
 
         //quads
-        m_TransferBuffer->Upload(cmd, *quadBuffer, quads, 0);
+        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(quadBuffer), quads, 0);
         //circles
-        m_TransferBuffer->Upload(cmd, *circleBuffer, circles, 0);
+        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(circleBuffer), circles, 0);
         //texts
-        m_TransferBuffer->Upload(cmd, *textBuffer, texts, 0);
+        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(textBuffer), texts, 0);
         //lines
-        m_TransferBuffer->Upload(cmd, *lineBuffer, lines, 0);
+        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(lineBuffer), lines, 0);
 
         renderGraph.Reset();
         /*if (isRaster)*/
@@ -2310,8 +2276,8 @@ namespace VanK
             // between compute and raster is no barrier
             {
                 auto& compute = renderGraph.AddPass("Compute Mesh Tasks");
-                compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(localMeshTaskSubmitBuffer.get()), ResourceUsage::ComputeRead}};
-                compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::ComputeWrite}};
+                compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(m_BufferManager->Get<StorageBuffer>(localMeshTaskSubmitBuffer).get()), ResourceUsage::ComputeRead}};
+                compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer).get()), ResourceUsage::ComputeWrite}};
                 compute.execute = []
                 {
                     GPUScopeTimer computetimer("Compute CommandTask: ", cmd, computeCommandTask);
@@ -2324,8 +2290,8 @@ namespace VanK
 
                     meshTasksSubmitPushConstant pushData
                     {
-                        .meshTasksIndirectBufferAddress = meshTaskSubmitBuffer->GetBufferAddress(),
-                        .localMeshTasksIndirectBufferAddress = localMeshTaskSubmitBuffer->GetBufferAddress(),
+                        .meshTasksIndirectBufferAddress = m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer)->GetBufferAddress(),
+                        .localMeshTasksIndirectBufferAddress = m_BufferManager->Get<StorageBuffer>(localMeshTaskSubmitBuffer)->GetBufferAddress(),
                     };
 
                     RenderCommand::PushConstans(cmd, VanKCompute, 0, &pushData, sizeof(meshTasksSubmitPushConstant));
@@ -2341,7 +2307,7 @@ namespace VanK
                 auto& MeshDraw = renderGraph.AddPass("Mesh Draw");
                 MeshDraw.reads =
                 {
-                    {"meshTaskSubmitBuffer", ResourceID::Buffer(meshTaskSubmitBuffer.get()), ResourceUsage::IndirectRead}
+                    {"meshTaskSubmitBuffer", ResourceID::Buffer(m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer).get()), ResourceUsage::IndirectRead}
                 };
                 MeshDraw.writes =
                 {
@@ -2376,24 +2342,24 @@ namespace VanK
 
                    TaskMeshPipelinePushConstant pushData
                    {
-                       .sceneData = sceneBuffer->GetBufferAddress(),
-                       .culledDataBuffer = cullBuffer->GetBufferAddress(),
-                       .vertexBuffer = vertexBuffer->GetBufferAddress(),
-                       .indexBuffer = indexBuffer->GetBufferAddress(),
-                       .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
-                       .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
-                       .meshletBuffer = meshletBuffer->GetBufferAddress(),
-                       .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
-                       .meshDraws = meshDrawBuffer->GetBufferAddress(),
-                       .materialBuffer = materialBuffer->GetBufferAddress(),
-                       .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
-                       .lightsBuffer = lightsBuffer->GetBufferAddress(),
+                       .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
+                       .culledDataBuffer = m_BufferManager->Get<StorageBuffer>(cullBuffer)->GetBufferAddress(),
+                       .vertexBuffer = m_BufferManager->Get<StorageBuffer>(vertexBuffer)->GetBufferAddress(),
+                       .indexBuffer = m_BufferManager->Get<StorageBuffer>(indexBuffer)->GetBufferAddress(),
+                       .meshletVerticesBuffer = m_BufferManager->Get<StorageBuffer>(meshletVerticesBuffer)->GetBufferAddress(),
+                       .meshletTrianglesBuffer = m_BufferManager->Get<StorageBuffer>(meshletTrianglesBuffer)->GetBufferAddress(),
+                       .meshletBuffer = m_BufferManager->Get<StorageBuffer>(meshletBuffer)->GetBufferAddress(),
+                       .meshletPrimitives = m_BufferManager->Get<StorageBuffer>(meshletPrimitiveBuffer)->GetBufferAddress(),
+                       .meshDraws = m_BufferManager->Get<StorageBuffer>(meshDrawBuffer)->GetBufferAddress(),
+                       .materialBuffer = m_BufferManager->Get<StorageBuffer>(materialBuffer)->GetBufferAddress(),
+                       .instanceLutBuffer = m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer)->GetBufferAddress(),
+                       .lightsBuffer = m_BufferManager->Get<StorageBuffer>(lightsBuffer)->GetBufferAddress(),
                    };
 
                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
 
                    //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
-                   RenderCommand::DrawMeshTasksIndirect(cmd, *meshTaskSubmitBuffer, 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+                   RenderCommand::DrawMeshTasksIndirect(cmd, *m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer), 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
 
                    /*meshTasks.clear();#1#
                });*/
@@ -2409,8 +2375,8 @@ namespace VanK
                         PushConstant2D push2D
                         {
                             .numOfElements = quads.size(),
-                            .bufferAddress = quadBuffer->GetBufferAddress(),
-                            .sceneData = sceneBuffer->GetBufferAddress(),
+                            .bufferAddress = m_BufferManager->Get<StorageBuffer>(quadBuffer)->GetBufferAddress(),
+                            .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
                         };
 
                         RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
@@ -2430,8 +2396,8 @@ namespace VanK
                         PushConstant2D push2D
                         {
                             .numOfElements = circles.size(),
-                            .bufferAddress = circleBuffer->GetBufferAddress(),
-                            .sceneData = sceneBuffer->GetBufferAddress(),
+                            .bufferAddress = m_BufferManager->Get<StorageBuffer>(circleBuffer)->GetBufferAddress(),
+                            .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
                         };
 
                         RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
@@ -2451,8 +2417,8 @@ namespace VanK
                         PushConstant2D push2D
                         {
                             .numOfElements = texts.size(),
-                            .bufferAddress = textBuffer->GetBufferAddress(),
-                            .sceneData = sceneBuffer->GetBufferAddress(),
+                            .bufferAddress = m_BufferManager->Get<StorageBuffer>(textBuffer)->GetBufferAddress(),
+                            .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
                         };
 
                         RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
@@ -2472,8 +2438,8 @@ namespace VanK
                         PushConstant2D push2D
                         {
                             .numOfElements = lines.size(),
-                            .bufferAddress = lineBuffer->GetBufferAddress(),
-                            .sceneData = sceneBuffer->GetBufferAddress(),
+                            .bufferAddress = m_BufferManager->Get<StorageBuffer>(lineBuffer)->GetBufferAddress(),
+                            .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
                         };
 
                         RenderCommand::PushConstans(cmd, VanKMesh, 0, &push2D, sizeof(PushConstant2D));
@@ -2493,7 +2459,7 @@ namespace VanK
                         PushConstantSkyBox pushSkyBox
                         {
                             .MaterialIndex = cubemap->GetTextureIndex(),
-                            .sceneData = sceneBuffer->GetBufferAddress(),
+                            .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
                         };
 
                         RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushSkyBox, sizeof(PushConstantSkyBox));
@@ -2527,17 +2493,17 @@ namespace VanK
             
             PushConstantRayTrace pushRayTrace
             {
-                .sceneData = sceneBuffer->GetBufferAddress(),
-                .vertexBuffer = vertexBuffer->GetBufferAddress(),
-                .indexBuffer = indexBuffer->GetBufferAddress(),
-                .meshletVerticesBuffer = meshletVerticesBuffer->GetBufferAddress(),
-                .meshletTrianglesBuffer = meshletTrianglesBuffer->GetBufferAddress(),
-                .meshletBuffer = meshletBuffer->GetBufferAddress(),
-                .meshletPrimitives = meshletPrimitiveBuffer->GetBufferAddress(),
-                .meshDraws = meshDrawBuffer->GetBufferAddress(),
-                .materialBuffer = materialBuffer->GetBufferAddress(),
-                .instanceLutBuffer = instanceLutsBuffer->GetBufferAddress(),
-                .lightsBuffer = lightsBuffer->GetBufferAddress(),
+                .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
+                .vertexBuffer = m_BufferManager->Get<StorageBuffer>(vertexBuffer)->GetBufferAddress(),
+                .indexBuffer = m_BufferManager->Get<StorageBuffer>(indexBuffer)->GetBufferAddress(),
+                .meshletVerticesBuffer = m_BufferManager->Get<StorageBuffer>(meshletVerticesBuffer)->GetBufferAddress(),
+                .meshletTrianglesBuffer = m_BufferManager->Get<StorageBuffer>(meshletTrianglesBuffer)->GetBufferAddress(),
+                .meshletBuffer = m_BufferManager->Get<StorageBuffer>(meshletBuffer)->GetBufferAddress(),
+                .meshletPrimitives = m_BufferManager->Get<StorageBuffer>(meshletPrimitiveBuffer)->GetBufferAddress(),
+                .meshDraws = m_BufferManager->Get<StorageBuffer>(meshDrawBuffer)->GetBufferAddress(),
+                .materialBuffer = m_BufferManager->Get<StorageBuffer>(materialBuffer)->GetBufferAddress(),
+                .instanceLutBuffer = m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer)->GetBufferAddress(),
+                .lightsBuffer = m_BufferManager->Get<StorageBuffer>(lightsBuffer)->GetBufferAddress(),
             };
             
             RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));

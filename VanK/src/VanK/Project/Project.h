@@ -9,7 +9,6 @@
 #include "VanK/Asset/EditorAssetManager.h"
 #include "VanK/Core/Log.h"
 
-
 namespace VanK
 {
     struct ProjectConfig
@@ -23,7 +22,7 @@ namespace VanK
         std::filesystem::path ScriptModulePath;
     };
     
-    class Project
+    class Project : public RefCounted
     {
     public:
         static const std::filesystem::path& GetProjectDirectory()
