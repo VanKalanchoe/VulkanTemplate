@@ -1670,7 +1670,7 @@ namespace VanK
         auto MeshText = GetShaderLibrary().Load("MeshText", "MeshText.slang");
         auto MeshLine = GetShaderLibrary().Load("MeshLine", "MeshLine.slang");
         auto SkyBox = GetShaderLibrary().Load("SkyBox", "SkyBox.slang");
-        /*auto raytracingbasic = GetShaderLibrary().Load("raytracingbasic", "raytracingbasic.slang");*/
+        auto raytracingbasic = GetShaderLibrary().Load("raytracingbasic", "raytracingbasic.slang");
         auto PathTracer = GetShaderLibrary().Load("PathTracer", "PathTracer.slang");
 
         // Pipeline Creation
@@ -1881,17 +1881,71 @@ namespace VanK
         {
             .PushConstants = {PushConstantRange{0, sizeof(PushConstantRayTrace)}}
         };
+        
+        // Define the groups to replicate your manual logic perfectly
+        std::vector<VanKRayTracingGroup> rtGroups =
+        {
+            // Group 0: Raygen (Raygen #0)
+            { .type = VanKRayTracingGroupType::General, .raygenShader = 0 },
+    
+            // Group 1: Primary Miss (Miss #0)
+            { .type = VanKRayTracingGroupType::General, .missShader = 0 },
+    
+            // Group 2: Shadow Miss (Miss #1)
+            { .type = VanKRayTracingGroupType::General, .missShader = 1 },
+    
+            // Group 3: Primary Hit (CHIT #0 + AHIT #0)
+            { 
+                .type = VanKRayTracingGroupType::TrianglesHitGroup, 
+                .closestHitShader = 0, 
+                .anyHitShader = 0 
+            },
+    
+            // Group 4: Shadow Hit (No CHIT + AHIT #1)
+            { 
+                .type = VanKRayTracingGroupType::TrianglesHitGroup, 
+                .closestHitShader = VANK_SHADER_UNUSED, 
+                .anyHitShader = 1 
+            }
+        };
 
         VanKRaytracingPipelineSpecification raytracingPipelineSpecification
         {
             .ShaderStageCreateInfo = rtShaderStageCreateInfo,
-            .PipelineLayoutInfo = rtPipelineLayoutCreateInfo
+            .PipelineLayoutInfo = rtPipelineLayoutCreateInfo,
+            .groups = rtGroups
         };
 
         m_RaytracingPipelineSpecification = raytracingPipelineSpecification;
         m_RaytracingPipeline = RenderCommand::createRayTracingPipeline(m_RaytracingPipelineSpecification);
         RegisterPipelineForShaderWatcher("PathTracer", "PathTracer.slang", nullptr, nullptr, &m_RaytracingPipelineSpecification, &m_RaytracingPipeline, VanKRaytracing);
 
+        m_RaytracingPipelineSpecifications = raytracingPipelineSpecification;
+        m_RaytracingPipelineSpecifications.ShaderStageCreateInfo.VanKShader = raytracingbasic;
+        
+        // Define the groups to replicate your manual logic perfectly
+        std::vector<VanKRayTracingGroup> newGroup =
+        {
+            // Group 0: Raygen (Raygen #0)
+            { .type = VanKRayTracingGroupType::General, .raygenShader = 0 },
+    
+            // Group 1: Primary Miss (Miss #0)
+            { .type = VanKRayTracingGroupType::General, .missShader = 0 },
+    
+            // Group 3: Primary Hit (CHIT #0 + AHIT #0)
+            { 
+                .type = VanKRayTracingGroupType::TrianglesHitGroup, 
+                .closestHitShader = 0, 
+                .anyHitShader = 0 
+            },
+        };
+
+        
+        m_RaytracingPipelineSpecifications.groups = newGroup;
+        m_RaytracingPipelines = RenderCommand::createRayTracingPipeline(m_RaytracingPipelineSpecifications);
+        RegisterPipelineForShaderWatcher("raytracingbasic", "raytracingbasic.slang", nullptr, nullptr, &m_RaytracingPipelineSpecifications, &m_RaytracingPipelines, VanKRaytracing);
+
+        
         WatchShaderFiles(); // has to be last after pipeline creation
 
         //sampler
@@ -2291,7 +2345,7 @@ namespace VanK
         /*if (isRaster)*/
         {
             // between compute and raster is no barrier
-            {
+            /*{
                 auto& compute = renderGraph.AddPass("Compute Mesh Tasks");
                 compute.reads = {{"localMeshTaskSubmitBuffer", ResourceID::Buffer(m_BufferManager->Get<StorageBuffer>(localMeshTaskSubmitBuffer).get()), ResourceUsage::ComputeRead}};
                 compute.writes = {{"meshTaskSubmitBuffer", ResourceID::Buffer(m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer).get()), ResourceUsage::ComputeWrite}};
@@ -2301,7 +2355,7 @@ namespace VanK
 
                     /*
                     VanKComputePass* computePass = RenderCommand::BeginComputePass(cmd, {}, {});
-                    */
+                    #1#
 
                     RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Compute, m_ComputeDrawMeshTaskCommandPipeline);
 
@@ -2316,9 +2370,9 @@ namespace VanK
                     RenderCommand::DispatchCompute(cmd, (meshTasks.size() + 64 - 1) / 64, 1, 1); // matches [numthreads(64,1,1)] in shader
 
                     /*
-                    RenderCommand::EndComputePass(computePass);*/
+                    RenderCommand::EndComputePass(computePass);#1#
                 };
-            }
+            }*/
 
             {
                 auto& MeshDraw = renderGraph.AddPass("Mesh Draw");
@@ -2347,7 +2401,7 @@ namespace VanK
                     {"CullBuffer", ResourceID::Buffer(m_BufferManager->Get<StorageBuffer>(cullBuffer).get()), ResourceUsage::TransferDst}
                 };
 
-                MeshDraw.AddSubpass("PBR", []
+                /*MeshDraw.AddSubpass("PBR", []
                 {
                     GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
 
@@ -2379,8 +2433,8 @@ namespace VanK
                     //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
                     RenderCommand::DrawMeshTasksIndirect(cmd, *m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer), 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
 
-                    /*meshTasks.clear();*/
-                });
+                    /*meshTasks.clear();#1#
+                });*/
 
                 MeshDraw.AddSubpass("Sprites", []
                 {

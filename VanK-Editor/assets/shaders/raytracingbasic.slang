@@ -30,7 +30,6 @@ struct PushConstant
     Material* materialBuffer;
     InstanceLUT* instanceLutBuffer;
     LightData* lightingBuffer;
-    uint32_t skyBoxIndex;
 };
 [[vk::push_constant]]
 ConstantBuffer<PushConstant> pushConstant;
@@ -435,7 +434,7 @@ void missMain(inout HitPayload payload)
 
     float3 dir = ToEnvSpace(normalize(WorldRayDirection()));
   
-    float3 envColor = cubes[pushConstant.skyBoxIndex].SampleLevel(dir, 0.0).rgb;
+    float3 envColor = cubes[pushConstant.sceneData->skyBoxIndex].SampleLevel(dir, 0.0).rgb;
   
     payload.color = envColor/*  * payload.weight */;
 

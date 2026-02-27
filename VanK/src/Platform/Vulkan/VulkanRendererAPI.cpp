@@ -890,6 +890,19 @@ namespace VanK
        
         LOGI("Shader binding table created and populated \n");
     }
+    
+    vk::RayTracingShaderGroupTypeKHR convertGroupTypeToVk(VanKRayTracingGroupType type)
+    {
+        switch (type)
+        {
+        case VanKRayTracingGroupType::General: return vk::RayTracingShaderGroupTypeKHR::eGeneral;
+        case VanKRayTracingGroupType::TrianglesHitGroup: return vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup; 
+        case VanKRayTracingGroupType::ProceduralHitGroup: return vk::RayTracingShaderGroupTypeKHR::eProceduralHitGroup;
+        default:
+            VK_CORE_ASSERT(false, "Invalid RayTracingGroupType");
+            return vk::RayTracingShaderGroupTypeKHR::eGeneral;
+        }
+    }
 
     VanKPipeLine VulkanRendererAPI::createRayTracingPipeline(VanKRaytracingPipelineSpecification raytracingPipelineSpecification)
     {
@@ -898,99 +911,98 @@ namespace VanK
         // maybe a if statement if rayquery not needed those 2
         utils::Buffer tempSbtBuffer;
         SBTGenerator tempGenerator;
-
-        // Creating all shaders
-        enum StageIndices
-        {
-            eRaygen,
-            eMiss,
-            eMissShadow,
-            eClosestHit,
-            eAnyHit,
-            eAnyHitShadow,
-            eShaderGroupCount
-        };
-
-        auto specShader = raytracingPipelineSpecification.ShaderStageCreateInfo.VanKShader;
-        auto vkShader = dynamic_cast<VulkanShader*>(specShader);
-
+        
+        auto vkShader = dynamic_cast<VulkanShader*>(raytracingPipelineSpecification.ShaderStageCreateInfo.VanKShader);
+        
         std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
-        std::vector<std::string> entryNames; // only need to keep names alive
-        entryNames.reserve(eShaderGroupCount); // needs to be reserved or string changes to random bs
-
-        std::array<uint32_t, eShaderGroupCount> stageToShaderIndex;
-        stageToShaderIndex.fill(VK_SHADER_UNUSED_KHR);
-
-        auto addStage = [&](vk::ShaderStageFlagBits stage, StageIndices eShaderGroupCount, size_t index = 0)
-        {
-            if (!vkShader->HasStage(stage, index))
-                return;
-
-            entryNames.push_back(vkShader->GetShaderEntryName(stage, index));
-
-            auto& module = vkShader->GetShaderModule(stage, index);
-
-            uint32_t shaderIndex = static_cast<uint32_t>(shaderStages.size());
-
-            shaderStages.push_back
-            ({
-                .stage = stage,
-                .module = module,
-                .pName = entryNames.back().c_str()
-            });
-
-            stageToShaderIndex[eShaderGroupCount] = shaderIndex;
+        std::vector<std::string> entryNames;
+        
+        // We need to store the metadata temporarily to build the stages in a second pass
+        struct TempStageInfo {
+            vk::ShaderStageFlagBits bit;
+            vk::ShaderModule module;
+            uint32_t localIndex;
         };
-
-        addStage(vk::ShaderStageFlagBits::eRaygenKHR, eRaygen);
-        addStage(vk::ShaderStageFlagBits::eMissKHR, eMiss, 0);
-        addStage(vk::ShaderStageFlagBits::eMissKHR, eMissShadow, 1);
-        addStage(vk::ShaderStageFlagBits::eClosestHitKHR, eClosestHit);
-        addStage(vk::ShaderStageFlagBits::eAnyHitKHR, eAnyHit, 0);
-        addStage(vk::ShaderStageFlagBits::eAnyHitKHR, eAnyHitShadow, 1);
-
-        // Shader groups
-        std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shader_groups;
-        // Raygen
-        {
-            vk::RayTracingShaderGroupCreateInfoKHR group{};
-            group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
-            group.generalShader = stageToShaderIndex[eRaygen];
-            shader_groups.push_back(group);
-        }
-
-        // Miss
-        {
-            vk::RayTracingShaderGroupCreateInfoKHR group{};
-            group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
-            group.generalShader = stageToShaderIndex[eMiss];
-            shader_groups.push_back(group);
-        }
-
-        // Miss Shadow
-        {
-            vk::RayTracingShaderGroupCreateInfoKHR group{};
-            group.type = vk::RayTracingShaderGroupTypeKHR::eGeneral;
-            group.generalShader = stageToShaderIndex[eMissShadow];
-            shader_groups.push_back(group);
-        }
-
-        // Hit Group
-        {
-            vk::RayTracingShaderGroupCreateInfoKHR group{};
-            group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
-            group.closestHitShader = stageToShaderIndex[eClosestHit];
-            group.anyHitShader = stageToShaderIndex[eAnyHit];
-            shader_groups.push_back(group);
+        std::vector<TempStageInfo> collectedStages;
+        
+        // This table maps [ShaderStageBit][LocalIndex] -> Index in shaderStages vector
+        // Example: stageLookup[vk::ShaderStageFlagBits::eMissKHR][1] = 3;
+        std::map<vk::ShaderStageFlagBits, std::vector<uint32_t>> stageLookup;
+        
+        // 1. Automatically collect all stages from the shader object
+        std::vector<vk::ShaderStageFlagBits> stageTypes = {
+            vk::ShaderStageFlagBits::eRaygenKHR,
+            vk::ShaderStageFlagBits::eMissKHR,
+            vk::ShaderStageFlagBits::eClosestHitKHR,
+            vk::ShaderStageFlagBits::eAnyHitKHR,
+            vk::ShaderStageFlagBits::eIntersectionKHR
+        };
+        
+        // --- PASS 1: Collect Names and Modules ---
+        for (auto stageBit : stageTypes) {
+            for (uint32_t i = 0; vkShader->HasStage(stageBit, i); ++i) {
+                entryNames.push_back(vkShader->GetShaderEntryName(stageBit, i));
+                collectedStages.push_back({
+                    stageBit, 
+                    vkShader->GetShaderModule(stageBit, i), 
+                    i
+                });
+            }
         }
         
-        // Hit Shadow Group
-        {
-            vk::RayTracingShaderGroupCreateInfoKHR group{};
-            group.type = vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
-            group.closestHitShader = VK_SHADER_UNUSED_KHR;
-            group.anyHitShader = stageToShaderIndex[eAnyHitShadow];
-            shader_groups.push_back(group);
+        // --- PASS 2: Build the Actual Vulkan Structs ---
+        // Now that entryNames has finished growing, its memory addresses are stable.
+        shaderStages.reserve(collectedStages.size());
+        for (size_t i = 0; i < collectedStages.size(); ++i) {
+            const auto& info = collectedStages[i];
+            uint32_t pipelineIndex = static_cast<uint32_t>(shaderStages.size());
+
+            shaderStages.push_back({
+                .stage = info.bit,
+                .module = info.module,
+                .pName = entryNames[i].c_str() // These pointers are now safe!
+            });
+
+            stageLookup[info.bit].push_back(pipelineIndex);
+        }
+
+        // 2. Automatically create Shader Groups from Specification
+        std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shader_groups;
+        shader_groups.reserve(raytracingPipelineSpecification.groups.size());
+
+        for (const auto& groupSpec : raytracingPipelineSpecification.groups) {
+            vk::RayTracingShaderGroupCreateInfoKHR vkGroup{};
+            vkGroup.type = convertGroupTypeToVk(groupSpec.type);
+    
+            // Initialize all to Unused
+            vkGroup.generalShader      = VK_SHADER_UNUSED_KHR;
+            vkGroup.closestHitShader   = VK_SHADER_UNUSED_KHR;
+            vkGroup.anyHitShader       = VK_SHADER_UNUSED_KHR;
+            vkGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
+
+            if (groupSpec.type == VanKRayTracingGroupType::General) {
+                // Handle Raygen specifically
+                if (groupSpec.raygenShader != VANK_SHADER_UNUSED) {
+                    vkGroup.generalShader = stageLookup[vk::ShaderStageFlagBits::eRaygenKHR][groupSpec.raygenShader];
+                }
+                // Handle Miss specifically
+                else if (groupSpec.missShader != VANK_SHADER_UNUSED) {
+                    vkGroup.generalShader = stageLookup[vk::ShaderStageFlagBits::eMissKHR][groupSpec.missShader];
+                }
+            } 
+            else {
+                // Handle Hit Groups
+                if (groupSpec.closestHitShader != VANK_SHADER_UNUSED)
+                    vkGroup.closestHitShader = stageLookup[vk::ShaderStageFlagBits::eClosestHitKHR][groupSpec.closestHitShader];
+        
+                if (groupSpec.anyHitShader != VANK_SHADER_UNUSED)
+                    vkGroup.anyHitShader = stageLookup[vk::ShaderStageFlagBits::eAnyHitKHR][groupSpec.anyHitShader];
+            
+                if (groupSpec.intersectionShader != VANK_SHADER_UNUSED)
+                    vkGroup.intersectionShader = stageLookup[vk::ShaderStageFlagBits::eIntersectionKHR][groupSpec.intersectionShader];
+            }
+
+            shader_groups.push_back(vkGroup);
         }
 
         std::array<vk::DescriptorSetLayout, 3> setLayouts =

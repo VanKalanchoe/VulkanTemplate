@@ -345,10 +345,33 @@ namespace VanK
         std::span<Ref<IndirectBuffer>> VanKIndirectCountBuffers;
     };
 
+    // A high-value constant for unused shader indices
+    #define VANK_SHADER_UNUSED 0xFFFFFFFF
+    
+    enum class VanKRayTracingGroupType 
+    {
+        General,
+        TrianglesHitGroup,
+        ProceduralHitGroup
+    };
+    
+    struct VanKRayTracingGroup 
+    {
+        VanKRayTracingGroupType type;
+    
+        // Indices referring to the index in the 'stages' vector
+        uint32_t raygenShader       = VANK_SHADER_UNUSED;
+        uint32_t missShader         = VANK_SHADER_UNUSED;
+        uint32_t closestHitShader   = VANK_SHADER_UNUSED;
+        uint32_t anyHitShader       = VANK_SHADER_UNUSED;
+        uint32_t intersectionShader = VANK_SHADER_UNUSED;
+    };
+    
     struct VanKRaytracingPipelineSpecification
     {
         VanKPipelineShaderStageCreateInfo ShaderStageCreateInfo;
         VanKPipelineLayoutCreateInfo PipelineLayoutInfo;
+        std::vector<VanKRayTracingGroup> groups;
     };
 
     enum class VanKPipelineBindPoint
