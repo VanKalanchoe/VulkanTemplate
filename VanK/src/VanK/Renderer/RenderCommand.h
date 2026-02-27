@@ -191,9 +191,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->DrawMeshTasksIndirectCount(cmd, indirectBuffer, indirectBufferOffset, countBuffer, countBufferOffset, maxDrawCount, stride);
         }
         
-        static void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height)
+        static void TraceRays(VanKCommandBuffer cmd, VanKPipeLine rtPipeline, uint32_t width, uint32_t height)
         {
-            if (s_RendererAPI) s_RendererAPI->TraceRays(cmd, width, height);
+            if (s_RendererAPI) s_RendererAPI->TraceRays(cmd, rtPipeline, width, height);
         }
 
         static void EndRendering(VanKCommandBuffer cmd)
@@ -204,11 +204,6 @@ namespace VanK
         static void RenderImGui(VanKCommandBuffer cmd)
         {
             if (s_RendererAPI) s_RendererAPI->RenderImGui(cmd);
-        }
-
-        static void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1)
-        {
-            if (s_RendererAPI) s_RendererAPI->SubmitRendering(cmd, renderTargetImage);
         }
 
         /**
@@ -254,11 +249,6 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->updateTopLevelAS(model);
         }
         
-        static int32_t ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y)
-        {
-            return s_RendererAPI ? s_RendererAPI->ReadEntityIDAtPixel(imageIndex, x, y) : -1;
-        }
-
         static void waitForGraphicsQueueIdle()
         {
             if (s_RendererAPI) s_RendererAPI->waitForGraphicsQueueIdle();

@@ -11,16 +11,19 @@
 #include <thread>
 #include <unordered_map>
 
+#include "SBTGenerator.h"
 #include "VanK/Renderer/RendererAPI.h"
 #include "VanK/Core/Log.h"
-
+//sbtgenerator has this
+/*
 #if defined(__INTELLISENSE__) || !defined(USE_CPP20_MODULES)
-#define VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-#include <vulkan/vulkan_raii.hpp>
-#else
-#define VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
-import vulkan_hpp;
-#endif
+      #define VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+      #include <vulkan/vulkan_raii.hpp>
+      #else
+      #define VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+      import vulkan_hpp;
+      #endif
+      */
 
 #include <vulkan/vulkan_hash.hpp>
 
@@ -555,7 +558,9 @@ namespace VanK
                 vk::DeviceSize size,
                 vk::BufferUsageFlags2KHR usage,
                 vma::MemoryUsage memoryUsage = vma::MemoryUsage::eAuto,
-                vma::AllocationCreateFlags flags = {}) const
+                vma::AllocationCreateFlags flags = {},
+                vk::DeviceSize minAlignment = 0
+            ) const
             {
                 // This can be used only with maintenance5
                 const vk::BufferUsageFlags2CreateInfoKHR bufferUsageFlags2CreateInfo
@@ -581,7 +586,7 @@ namespace VanK
 
                 // Create the buffer
                 vma::AllocationInfo allocInfoOut{}; // for extra info if needed
-                vma::raii::Buffer vmaBuffer = m_allocator->createBuffer(bufferInfo, allocInfo, allocInfoOut);
+                vma::raii::Buffer vmaBuffer = m_allocator->createBufferWithAlignment(bufferInfo, allocInfo, minAlignment, allocInfoOut);
 
                 Buffer resultBuffer;
 
@@ -922,7 +927,8 @@ namespace VanK
     private:
         VanKPipeLine createGraphicsPipeline(VanKGraphicsPipelineSpecification pipelineSpecification) override;
         VanKPipeLine createComputeShaderPipeline(VanKComputePipelineSpecification computePipelineSpecification) override;
-        void createShaderBindingTable(const VkRayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline);
+        void createShaderBindingTable(const vk::RayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline, SBTGenerator& sbtGenerator, utils::Buffer& sbtBuffer, const vk::
+                                      PhysicalDeviceRayTracingPipelinePropertiesKHR& rtProps);
         VanKPipeLine createRayTracingPipeline(VanKRaytracingPipelineSpecification raytracingPipelineSpecification) override;
         void DestroyAllPipelines() override;
         void DestroyPipeline(VanKPipeLine pipeline) override;
@@ -952,10 +958,9 @@ namespace VanK
         void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride) override;
         void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
                                         uint32_t maxDrawCount, uint32_t stride) override;
-        void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height) override;
+        void TraceRays(VanKCommandBuffer cmd, VanKPipeLine rtPipeline, uint32_t width, uint32_t height) override;
         void EndRendering(VanKCommandBuffer cmd) override;
         void RenderImGui(VanKCommandBuffer cmd) override;
-        void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage = -1) override;
         VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer, std::span<Ref<IndirectBuffer>> indirectBuffers, std::span<Ref<IndirectBuffer>> countBuffers) override;
         void DispatchCompute(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void EndComputePass(VanKComputePass* computePass) override;
@@ -975,6 +980,23 @@ namespace VanK
             VanKGraphicsPipelineSpecification spec;
             VanKComputePipelineSpecification computeSpec;
             VanKRaytracingPipelineSpecification raytracingSpec;
+            utils::Buffer sbtBuffer;
+            SBTGenerator sbtGenerator;
+            // Destructor handles the non-RAII parts of the generator
+            ~PipelineResource() 
+            {
+                sbtGenerator.deinit();
+            }
+            
+            // Since we added a destructor and have RAII members, 
+            // we should ensure move operations work correctly
+            PipelineResource() = default;
+            PipelineResource(PipelineResource&&) noexcept = default;
+            PipelineResource& operator=(PipelineResource&&) noexcept = default;
+    
+            // Disable copying because of RAII members
+            PipelineResource(const PipelineResource&) = delete;
+            PipelineResource& operator=(const PipelineResource&) = delete;
         };
 
         std::unordered_map<vk::Pipeline, PipelineResource> m_PipelineResources;
@@ -1009,7 +1031,6 @@ namespace VanK
         void SetImGuiInit(bool init) override { imguiVulkanInitialized = init; }
         bool isImGuiInit() const { return imguiVulkanInitialized; }
         static bool IsInitialized() { return s_instance != nullptr; }
-        int32_t ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y) override;
         uint32_t GetCurrentFrameIndex() override { return frameIndex; }
         void setEnableTimeStamp(bool temp) override { isTimeStapEnabled = temp; }
         bool getEnableTimeStamp() override { return isTimeStapEnabled; }
@@ -1072,14 +1093,9 @@ namespace VanK
 
         bool framebufferResized = false;
         bool vSync = false;
-        bool sceneImageInitialized = false;
-        bool entityImageInitialized = false;
-        bool entityColorImageInitialized = false;
-        utils::Buffer entityReadbackBuffer;
+        
         bool imguiVulkanInitialized = false;
         VanKRenderOption m_renderOption = {};
-
-        bool m_hasActiveRenderPass = false;
 
         //statistic
         vk::raii::QueryPool queryPoolStatistics = nullptr;

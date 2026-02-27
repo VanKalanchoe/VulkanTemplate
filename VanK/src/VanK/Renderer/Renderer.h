@@ -14,30 +14,6 @@ namespace VanK
 {
     class Renderer
     {
-        #define UPLOAD_ARRAY_TO_RING_BUFFER(cmd, ringBuffer, targetBuffer, array, ElementType) \
-            do { \
-                uint64_t offset; \
-                const size_t dataSize = sizeof(array); \
-                ElementType* dataPtr = static_cast<ElementType*>(ringBuffer->MapTransferBuffer(dataSize, alignof(ElementType), offset)); \
-                memcpy(dataPtr, array, dataSize); \
-                ringBuffer->UnMapTransferBuffer(); \
-                ringBuffer->UploadToGPUBuffer(cmd, VanKTransferBufferLocation{.offset = offset}, \
-                VanKBufferRegion{.buffer = targetBuffer.get(), .offset = 0, .size = dataSize}); \
-            } while(0)
-
-        #define UploadBufferToGpuWithTransferRing(cmd, ringBuffer, targetBuffer, vector, ElementType, dstOffset, runtime) \
-            do { \
-                if (!vector.empty()) { \
-                    uint64_t offset; \
-                    const size_t dataSize = vector.size() * sizeof(ElementType); \
-                    ElementType* dataPtr = static_cast<ElementType*>(ringBuffer->MapTransferBuffer(dataSize, alignof(ElementType), offset)); \
-                    memcpy(dataPtr, vector.data(), dataSize); \
-                    ringBuffer->UnMapTransferBuffer(); \
-                    ringBuffer->UploadToGPUBuffer(cmd, VanKTransferBufferLocation{.offset = offset}, \
-                    VanKBufferRegion{.buffer = targetBuffer.get(), .offset = dstOffset, .size = dataSize}, runtime); \
-                } \
-            } while(0)
-        
     public:
         inline static SDL_Window* m_window = nullptr; //remove from here
         static void BeginScene(const EditorCamera& camera);
@@ -87,6 +63,17 @@ namespace VanK
         static void CreateRenderTargets();
         static RenderGraph GetRenderGraph() { return renderGraph; };
         
+        struct MousePickRequest 
+        {
+            int x = -1, y = -1;
+            bool active = false;
+        };
+        
+        static int32_t getLastPickedID() { return m_LastPickedID; }
+        static void setLastPickedID(int32_t id) { m_LastPickedID = id; }
+        static MousePickRequest setPickRequest(int32_t x, int32_t y, bool active) { return m_PendingPick = { x, y, active }; }
+        static int32_t ReadPixel(uint32_t x, uint32_t y) { return m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->ReadPixel(x, y); };
+        
         // path trace // idk namings whats good
         static void setMaxFrames(uint32_t temp) { s_maxAccumulationFrames = temp; };
         static uint32_t getMaxFrames() { return s_maxAccumulationFrames; };
@@ -113,7 +100,9 @@ namespace VanK
         inline static VanKCommandBuffer cmd = nullptr;
         inline static ShaderLibrary m_ShaderLibrary;
         inline static std::unique_ptr<BufferManager> m_BufferManager;
-    
+        inline static MousePickRequest m_PendingPick;
+        inline static int32_t m_LastPickedID = -1;
+        
         inline static Ref<RenderTargetImage> sceneImage; // resolve 
         inline static Ref<RenderTargetImage> colorImage; // msaa
         inline static Ref<RenderTargetImage> depthImage; // depth

@@ -628,10 +628,9 @@ namespace VanK
         virtual void DrawMeshTasksIndirect(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, uint32_t maxDrawCount, uint32_t stride) = 0;
         virtual void DrawMeshTasksIndirectCount(VanKCommandBuffer cmd, IndirectBuffer& indirectBuffer, uint32_t indirectBufferOffset, IndirectBuffer& countBuffer, uint32_t countBufferOffset,
                                                 uint32_t maxDrawCount, uint32_t stride) = 0;
-        virtual void TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height) = 0;
+        virtual void TraceRays(VanKCommandBuffer cmd, VanKPipeLine rtPipeline, uint32_t width, uint32_t height) = 0;
         virtual void EndRendering(VanKCommandBuffer cmd) = 0;
         virtual void RenderImGui(VanKCommandBuffer cmd) = 0;
-        virtual void SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage) = 0;
         virtual VanKComputePass* BeginComputePass(VanKCommandBuffer cmd, VertexBuffer* vertexBuffer = nullptr, std::span<Ref<IndirectBuffer>> indirectBuffers = {},
                                                   std::span<Ref<IndirectBuffer>> countBuffers = {}) = 0;
         virtual void DispatchCompute(VanKCommandBuffer cmd, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
@@ -642,7 +641,6 @@ namespace VanK
         virtual void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives,
                                                   std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs, uint32_t renderTargetImageIndex) = 0;
         virtual void updateTopLevelAS(const glm::mat4& model) = 0;
-        virtual int32_t ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;
         virtual void setEnableTimeStamp(bool temp) = 0;
         virtual bool getEnableTimeStamp() = 0;

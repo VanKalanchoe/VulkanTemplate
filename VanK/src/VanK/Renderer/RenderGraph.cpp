@@ -317,7 +317,7 @@ namespace VanK
             throw std::runtime_error("RenderGraph has a cycle!");
         }
     }
-
+    
     void RenderGraph::DumpGraphviz(const std::string& filename) const
     {
         std::ofstream file(filename);
@@ -342,6 +342,9 @@ namespace VanK
             case ResourceUsage::TransferSrc: return "TransferSrc";
             case ResourceUsage::TransferDst: return "TransferDst";
             case ResourceUsage::IndirectRead: return "IndirectRead";
+            case ResourceUsage::StorageWrite: return "StorageWrite";
+            case ResourceUsage::StorageRead: return "StorageRead";
+            case ResourceUsage::PresentSrc: return "PresentSrc";
             default: return "Unknown";
             }
         };
@@ -356,9 +359,6 @@ namespace VanK
             }
             return "res_unknown";
         };
-
-        std::unordered_set<std::string> resourceNodes;
-        std::unordered_map<ResourceID, ResourceUsage> lastUsage;
 
         // -----------------------------
         // Pass clusters
@@ -376,27 +376,31 @@ namespace VanK
 
             // --- Input cluster ---
             file << "    subgraph cluster_inputs" << i << " {\n";
-            file << "      label=\"Inputs\";\n";
-            file << "      style=dashed;\n";
-            file << "      color=\"#666666\";\n";
+            file << "      label=\"Inputs\"; style=dashed; color=\"#666666\";\n";
 
             for (auto& r : pass.reads)
             {
-                std::string resNode = getResourceNodeId(r.id);
-                if (resourceNodes.insert(resNode).second)
-                {
-                    std::string label = !r.name.empty()
-                                            ? r.name
-                                            : (r.id.type == ResourceType::Image ? "Image" : "Buffer");
-
-                    // Show last barrier if exists, otherwise use current read usage
-                    ResourceUsage usageToShow = lastUsage.contains(r.id) ? lastUsage[r.id] : r.usage;
-                    label += "\\n" + usageToString(usageToShow);
-
-                    file << "      " << resNode
-                        << " [label=\"" << label
-                        << "\", shape=ellipse, fillcolor=\"#607D8B\"];\n";
+                std::string resNode = getResourceNodeId(r.id) + "_pass" + std::to_string(i);
+                
+                // Logic to clean the name for the label
+                std::string displayName = r.name;
+                size_t colon = r.name.find(':');
+                
+                if (colon != std::string::npos) {
+                    std::string subName = r.name.substr(0, colon);
+                    displayName = r.name.substr(colon + 1); // Extract everything after ':'
+                    
+                    for (size_t s = 0; s < pass.subpasses.size(); ++s) {
+                        if (pass.subpasses[s].name == subName) {
+                            file << "    " << resNode << " -> pass" << i << "_sub" << s << " [color=\"#4FC3F7\", style=dotted, constraint=false];\n";
+                        }
+                    }
                 }
+
+                std::string label = !displayName.empty() ? displayName : (r.id.type == ResourceType::Image ? "Image" : "Buffer");
+                label += "\\n" + usageToString(r.usage);
+
+                file << "      " << resNode << " [label=\"" << label << "\", shape=ellipse, fillcolor=\"#607D8B\"];\n";
             }
             file << "    }\n";
 
@@ -404,52 +408,45 @@ namespace VanK
             for (size_t s = 0; s < pass.subpasses.size(); ++s)
             {
                 std::string nodeId = "pass" + std::to_string(i) + "_sub" + std::to_string(s);
-                file << "    " << nodeId
-                    << " [label=\"" << pass.subpasses[s].name
-                    << "\", fillcolor=\"#2d2d2d\"];\n";
+                file << "    " << nodeId << " [label=\"" << pass.subpasses[s].name << "\", fillcolor=\"#2d2d2d\"];\n";
             }
             for (size_t s = 0; s + 1 < pass.subpasses.size(); ++s)
             {
-                file << "    pass" << i << "_sub" << s
-                    << " -> pass" << i << "_sub" << s + 1
-                    << " [color=\"#888888\"];\n";
+                file << "    pass" << i << "_sub" << s << " -> pass" << i << "_sub" << s + 1 << " [color=\"#888888\"];\n";
             }
 
-            // Invisible center for outputs
-            file << "    " << passCenter
-                << " [label=\"" << pass.name << "\", width=0, height=0, style=invis];\n";
+            file << "    " << passCenter << " [label=\"" << pass.name << "\", width=0, height=0, style=invis];\n";
 
             // --- Output cluster ---
             file << "    subgraph cluster_outputs" << i << " {\n";
-            file << "      label=\"Outputs\";\n";
-            file << "      style=dashed;\n";
-            file << "      color=\"#666666\";\n";
+            file << "      label=\"Outputs\"; style=dashed; color=\"#666666\";\n";
             for (auto& w : pass.writes)
             {
-                std::string resNode = getResourceNodeId(w.id);
-                if (resourceNodes.insert(resNode).second)
-                {
-                    std::string label = !w.name.empty() ? w.name : (w.id.type == ResourceType::Image ? "Image" : "Buffer");
-
-                    std::string before = usageToString(w.usage);
-                    std::string after = w.finalUsage.has_value() ? usageToString(*w.finalUsage) : before;
-
-                    if (before != after)
-                        label += "\\n" + before + " → " + after;
-                    else
-                        label += "\\n" + before;
-
-                    file << "      " << resNode
-                        << " [label=\"" << label
-                        << "\", shape=ellipse, fillcolor=\"#607D8B\"];\n";
+                std::string resNode = getResourceNodeId(w.id) + "_pass" + std::to_string(i);
+                
+                // Logic to clean the name for the label
+                std::string displayName = w.name;
+                size_t colon = w.name.find(':');
+                
+                if (colon != std::string::npos) {
+                    std::string subName = w.name.substr(0, colon);
+                    displayName = w.name.substr(colon + 1); // Extract everything after ':'
+                    
+                    for (size_t s = 0; s < pass.subpasses.size(); ++s) {
+                        if (pass.subpasses[s].name == subName) {
+                            file << "    pass" << i << "_sub" << s << " -> " << resNode << " [color=\"#FF5252\", style=dotted, constraint=false];\n";
+                        }
+                    }
                 }
 
-                // Update lastUsage for next pass
-                lastUsage[w.id] = w.finalUsage.has_value() ? *w.finalUsage : w.usage;
+                std::string label = !displayName.empty() ? displayName : (w.id.type == ResourceType::Image ? "Image" : "Buffer");
+                label += "\\n" + usageToString(w.usage);
+
+                file << "      " << resNode << " [label=\"" << label << "\", shape=ellipse, fillcolor=\"#607D8B\"];\n";
             }
             file << "    }\n";
-
-            file << "  }\n\n"; // Close pass cluster
+            
+            file << "  }\n\n";
         }
 
         // -----------------------------
@@ -459,32 +456,17 @@ namespace VanK
         {
             for (auto& e : edges[from])
             {
-                std::string resNode = getResourceNodeId(e.resource);
-                if (e.isRead)
-                {
-                    const Pass& targetPass = passes[e.to];
-                    std::string toNode = targetPass.subpasses.empty()
-                                             ? "pass" + std::to_string(e.to) + "_center"
-                                             : "pass" + std::to_string(e.to) + "_sub0";
+                std::string srcResNode = getResourceNodeId(e.resource) + "_pass" + std::to_string(from);
+                std::string dstResNode = getResourceNodeId(e.resource) + "_pass" + std::to_string(e.to);
 
-                    file << "  " << resNode << " -> " << toNode
-                        << " [label=\"" << usageToString(e.usage)
-                        << "\", color=\"#4FC3F7\", style=dashed];\n";
-                }
-                else
-                {
-                    const Pass& srcPass = passes[from];
-                    std::string fromNode = srcPass.subpasses.empty()
-                                               ? "pass" + std::to_string(from) + "_center"
-                                               : "pass" + std::to_string(from) + "_sub" + std::to_string(srcPass.subpasses.size() - 1);
-
-                    file << "  " << fromNode << " -> " << resNode
-                        << " [label=\"" << usageToString(e.usage)
-                        << "\", color=\"#FF5252\", style=bold];\n";
+                if (e.isRead) {
+                    file << "  " << srcResNode << " -> " << dstResNode << " [label=\"" << usageToString(e.usage) << "\", color=\"#4FC3F7\", style=dashed];\n";
+                } else {
+                    file << "  " << srcResNode << " -> " << dstResNode << " [label=\"WAW: " << usageToString(e.usage) << "\", color=\"#FF5252\", style=bold];\n";
                 }
             }
         }
 
-        file << "}\n"; // Close digraph
+        file << "}\n";
     }
 }

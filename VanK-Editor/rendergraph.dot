@@ -10,17 +10,13 @@ digraph RenderGraph {
     color="#444444";
 
     subgraph cluster_inputs0 {
-      label="Inputs";
-      style=dashed;
-      color="#666666";
-      res_buf1438247292304 [label="localMeshTaskSubmitBuffer\nComputeRead", shape=ellipse, fillcolor="#607D8B"];
+      label="Inputs"; style=dashed; color="#666666";
+      res_buf2101480050816_pass0 [label="localMeshTaskSubmitBuffer\nComputeRead", shape=ellipse, fillcolor="#607D8B"];
     }
     pass0_center [label="Compute Mesh Tasks", width=0, height=0, style=invis];
     subgraph cluster_outputs0 {
-      label="Outputs";
-      style=dashed;
-      color="#666666";
-      res_buf1438247295984 [label="meshTaskSubmitBuffer\nComputeWrite", shape=ellipse, fillcolor="#607D8B"];
+      label="Outputs"; style=dashed; color="#666666";
+      res_buf2101480054816_pass0 [label="meshTaskSubmitBuffer\nComputeWrite", shape=ellipse, fillcolor="#607D8B"];
     }
   }
 
@@ -30,33 +26,96 @@ digraph RenderGraph {
     color="#444444";
 
     subgraph cluster_inputs1 {
-      label="Inputs";
-      style=dashed;
-      color="#666666";
+      label="Inputs"; style=dashed; color="#666666";
+      res_buf2101480054816_pass1 [label="meshTaskSubmitBuffer\nIndirectRead", shape=ellipse, fillcolor="#607D8B"];
     }
     pass1_sub0 [label="PBR", fillcolor="#2d2d2d"];
     pass1_sub1 [label="Sprites", fillcolor="#2d2d2d"];
     pass1_sub2 [label="Circles", fillcolor="#2d2d2d"];
     pass1_sub3 [label="Texts", fillcolor="#2d2d2d"];
     pass1_sub4 [label="Lines", fillcolor="#2d2d2d"];
-    pass1_sub5 [label="SkyBox", fillcolor="#2d2d2d"];
     pass1_sub0 -> pass1_sub1 [color="#888888"];
     pass1_sub1 -> pass1_sub2 [color="#888888"];
     pass1_sub2 -> pass1_sub3 [color="#888888"];
     pass1_sub3 -> pass1_sub4 [color="#888888"];
-    pass1_sub4 -> pass1_sub5 [color="#888888"];
     pass1_center [label="Mesh Draw", width=0, height=0, style=invis];
     subgraph cluster_outputs1 {
-      label="Outputs";
-      style=dashed;
-      color="#666666";
-      res_img12 [label="sceneImage\nResolveAttachment → ShaderRead", shape=ellipse, fillcolor="#607D8B"];
-      res_img13 [label="colorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
-      res_img14 [label="entityImage\nResolveAttachment", shape=ellipse, fillcolor="#607D8B"];
-      res_img15 [label="entityColorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
-      res_img16 [label="depthImage\nDepthAttachment", shape=ellipse, fillcolor="#607D8B"];
+      label="Outputs"; style=dashed; color="#666666";
+      res_img14_pass1 [label="sceneImage\nResolveAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img15_pass1 [label="colorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img16_pass1 [label="entityImage\nResolveAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img17_pass1 [label="entityColorImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_img18_pass1 [label="depthImage\nDepthAttachment", shape=ellipse, fillcolor="#607D8B"];
+      res_buf2101480049056_pass1 [label="CullBuffer\nTransferDst", shape=ellipse, fillcolor="#607D8B"];
     }
   }
 
-  res_buf1438247295984 -> pass1_sub0 [label="IndirectRead", color="#4FC3F7", style=dashed];
+  subgraph cluster_pass2 {
+    label="RayTracing";
+    style=rounded;
+    color="#444444";
+
+    subgraph cluster_inputs2 {
+      label="Inputs"; style=dashed; color="#666666";
+    }
+    pass2_center [label="RayTracing", width=0, height=0, style=invis];
+    subgraph cluster_outputs2 {
+      label="Outputs"; style=dashed; color="#666666";
+      res_img19_pass2 [label="rayTraceImage\nStorageWrite", shape=ellipse, fillcolor="#607D8B"];
+    }
+  }
+
+  subgraph cluster_pass3 {
+    label="Composit";
+    style=rounded;
+    color="#444444";
+
+    subgraph cluster_inputs3 {
+      label="Inputs"; style=dashed; color="#666666";
+      res_img14_pass3 [label="sceneImage\nShaderRead", shape=ellipse, fillcolor="#607D8B"];
+      res_img19_pass3 [label="rayTracingImage\nShaderRead", shape=ellipse, fillcolor="#607D8B"];
+    }
+    pass3_center [label="Composit", width=0, height=0, style=invis];
+    subgraph cluster_outputs3 {
+      label="Outputs"; style=dashed; color="#666666";
+      res_img20_pass3 [label="finalImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
+    }
+  }
+
+  subgraph cluster_pass4 {
+    label="DownloadCullingData";
+    style=rounded;
+    color="#444444";
+
+    subgraph cluster_inputs4 {
+      label="Inputs"; style=dashed; color="#666666";
+      res_buf2101480049056_pass4 [label="CullBuffer\nTransferSrc", shape=ellipse, fillcolor="#607D8B"];
+    }
+    pass4_center [label="DownloadCullingData", width=0, height=0, style=invis];
+    subgraph cluster_outputs4 {
+      label="Outputs"; style=dashed; color="#666666";
+    }
+  }
+
+  subgraph cluster_pass5 {
+    label="Swapchain";
+    style=rounded;
+    color="#444444";
+
+    subgraph cluster_inputs5 {
+      label="Inputs"; style=dashed; color="#666666";
+      res_img20_pass5 [label="finalImage\nShaderRead", shape=ellipse, fillcolor="#607D8B"];
+    }
+    pass5_center [label="Swapchain", width=0, height=0, style=invis];
+    subgraph cluster_outputs5 {
+      label="Outputs"; style=dashed; color="#666666";
+      res_img4294967295_pass5 [label="SwapChainImage\nColorAttachment", shape=ellipse, fillcolor="#607D8B"];
+    }
+  }
+
+  res_buf2101480054816_pass0 -> res_buf2101480054816_pass1 [label="IndirectRead", color="#4FC3F7", style=dashed];
+  res_img14_pass1 -> res_img14_pass3 [label="ShaderRead", color="#4FC3F7", style=dashed];
+  res_buf2101480049056_pass1 -> res_buf2101480049056_pass4 [label="TransferSrc", color="#4FC3F7", style=dashed];
+  res_img19_pass2 -> res_img19_pass3 [label="ShaderRead", color="#4FC3F7", style=dashed];
+  res_img20_pass3 -> res_img20_pass5 [label="ShaderRead", color="#4FC3F7", style=dashed];
 }

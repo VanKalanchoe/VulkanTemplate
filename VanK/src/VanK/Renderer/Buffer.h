@@ -194,8 +194,8 @@ namespace VanK
         virtual void* MapTransferBuffer(uint64_t size, uint64_t alignment, uint64_t& outOffset) = 0;
         virtual void UnMapTransferBuffer() = 0;
 
-        virtual void UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion, bool runtime = true) = 0;
-        virtual void DownloadFromGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) = 0;
+        /*virtual void UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion, bool runtime = true) = 0;
+        virtual void DownloadFromGPUBufferRAW(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion) = 0;*/
         virtual void UploadRaw(VanKCommandBuffer& cmd, VanKBuffer& dstBuffer, const void* vecData, uint64_t dataSize, uint64_t alignment, uint64_t dstOffset, bool runtime = true) = 0;
         template <class T>
         void Upload(VanKCommandBuffer& cmd, VanKBuffer& dstBuffer, const std::vector<T>& vecData, uint64_t dstOffset, bool runtime = true)
@@ -205,6 +205,18 @@ namespace VanK
 
             UploadRaw(cmd, dstBuffer, vecData.data(), vecData.size() * sizeof(T), alignof(T), dstOffset, runtime);
         }
+        virtual void DownloadRaw(VanKCommandBuffer& cmd, VanKBuffer& srcBuffer, void* outData, uint64_t dataSize, uint64_t alignment, uint64_t srcOffset) = 0;
+        template <class T>
+        void DownloadFromGPUBuffer(VanKCommandBuffer& cmd, VanKBuffer& srcBuffer, std::vector<T>& outVec, uint64_t dataSize, uint64_t dstOffset)
+        {
+            if (outVec.empty())
+                return;
+            
+            DownloadRaw(cmd, srcBuffer, outVec.data(), dataSize, alignof(T), dstOffset);
+        }
+        
+        virtual void DownloadFromGPUImage(VanKCommandBuffer& cmd, uint32_t srcImage, uint32_t x, uint32_t y, uint32_t width, uint32_t height) = 0;
+        virtual int32_t ReadPixel(uint32_t x, uint32_t y) = 0;
         
         static TransferBuffer* Create(uint64_t size, VanKTransferBufferUsage usage);
     };

@@ -13,10 +13,9 @@
 printf((format), __VA_ARGS__);                                                                                     \
 printf("\n");                                                                                                      \
 }
+
 #include <ImGuizmo.h>
 #include <iostream>
-#include <slang.h>
-
 
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_vulkan.h>
@@ -25,7 +24,6 @@ printf("\n");                                                                   
 #include "VulkanBuffer.h"
 #include "VulkanProfilerAPI.h"
 #include "VulkanShader.h"
-#include "VanK/Core/core.h"
 #include "VanK/Core/logger.h"
 #include "VanK/Renderer/Texture.h"
 
@@ -146,9 +144,6 @@ namespace VanK
 
         m_RenderTargetImages.clear();
 
-        // Clean up entity readback buffer
-        entityReadbackBuffer.buffer.clear(); // Add this line
-
         m_samplerPool.deinit();
 
         queryStatisticsBuffer.buffer.clear(); // statistics
@@ -165,37 +160,6 @@ namespace VanK
         cleanupSwapChain();
         createSwapChain();
         createImageViews();
-    }
-
-    void VulkanRendererAPI::recreateImages()
-    {
-        /*device.waitIdle();
-
-        // Recreate offscreen buffers to match viewport size
-        createSceneResources(); //scene evertyhing drawn into this
-        createColorResources(); //msaa
-        createDepthResources(); //depth
-        createEntityResources(); //entity
-        createEntityColorResources();
-        sceneImageInitialized = false;
-        entityImageInitialized = false;
-        entityColorImageInitialized = false;
-
-        // Recreate the ImGui texture to point to the new sceneImageView
-        if (!uiDescriptorSet.empty() && uiDescriptorSet[0] != nullptr)
-        {
-            uiDescriptorSet.resize(1);
-            ImGui_ImplVulkan_RemoveTexture(uiDescriptorSet[0]);
-            uiDescriptorSet[0] = nullptr;
-        }
-        if ((ImGui::GetCurrentContext() != nullptr) && ImGui::GetIO().BackendPlatformUserData != nullptr)
-        {
-            uiDescriptorSet.resize(1);
-            uiDescriptorSet[0] = ImGui_ImplVulkan_AddTexture(
-                linearSampler,
-                *sceneImageView,
-                static_cast<VkImageLayout>(vk::ImageLayout::eShaderReadOnlyOptimal));
-        }*/
     }
 
     void VulkanRendererAPI::createInstance()
@@ -337,12 +301,14 @@ namespace VanK
                 features.template get<vk::PhysicalDeviceVulkan13Features>().dynamicRendering &&
                 features.template get<vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT>().extendedDynamicState &&
                 features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingSampledImageUpdateAfterBind &&
+                features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingStorageImageUpdateAfterBind &&
                 features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingPartiallyBound &&
                 features.template get<vk::PhysicalDeviceVulkan12Features>().descriptorBindingVariableDescriptorCount &&
                 features.template get<vk::PhysicalDeviceVulkan12Features>().runtimeDescriptorArray &&
                 features.template get<vk::PhysicalDeviceVulkan12Features>().shaderSampledImageArrayNonUniformIndexing &&
                 features.template get<vk::PhysicalDeviceVulkan12Features>().bufferDeviceAddress &&
                 features.template get<vk::PhysicalDeviceAccelerationStructureFeaturesKHR>().accelerationStructure &&
+                features.template get<vk::PhysicalDeviceAccelerationStructureFeaturesKHR>().descriptorBindingAccelerationStructureUpdateAfterBind &&
                 features.template get<vk::PhysicalDeviceRayQueryFeaturesKHR>().rayQuery &&
                 features.template get<vk::PhysicalDeviceRayTracingPipelineFeaturesKHR>().rayTracingPipeline &&
                 features.template get<vk::PhysicalDeviceTimelineSemaphoreFeaturesKHR>().timelineSemaphore &&
@@ -410,6 +376,7 @@ namespace VanK
                     .descriptorIndexing = true,
                     .shaderSampledImageArrayNonUniformIndexing = true,
                     .descriptorBindingSampledImageUpdateAfterBind = true,
+                    .descriptorBindingStorageImageUpdateAfterBind = true,
                     .descriptorBindingUpdateUnusedWhilePending = true,
                     .descriptorBindingPartiallyBound = true,
                     .descriptorBindingVariableDescriptorCount = true,
@@ -422,7 +389,7 @@ namespace VanK
                 {.maintenance5 = true, .pushDescriptor = true},
                 {.extendedDynamicState = true}, // vk::PhysicalDeviceExtendedDynamicStateFeaturesEXT
                 {.taskShader = true, .meshShader = true},
-                {.accelerationStructure = true}, // vk::PhysicalDeviceAccelerationStructureFeaturesKHR
+                {.accelerationStructure = true, .descriptorBindingAccelerationStructureUpdateAfterBind = true}, // vk::PhysicalDeviceAccelerationStructureFeaturesKHR
                 {.rayQuery = true},
                 {.rayTracingPipeline = true},
             };
@@ -891,106 +858,46 @@ namespace VanK
         return Wrap(rawHandle);
     }
 
-    utils::Buffer m_sbtBuffer;
-
-    std::vector<uint8_t> m_shaderHandles;
+    
+    /*utils::Buffer m_sbtBuffer;*/
+    /*std::vector<uint8_t> m_shaderHandles;
+    //only regionms need to be stored ? 
     vk::StridedDeviceAddressRegionKHR m_raygenRegion{};
     vk::StridedDeviceAddressRegionKHR m_missRegion{};
     vk::StridedDeviceAddressRegionKHR m_hitRegion{};
-    vk::StridedDeviceAddressRegionKHR m_callableRegion{};
+    vk::StridedDeviceAddressRegionKHR m_callableRegion{};*/
 
-    void VulkanRendererAPI::createShaderBindingTable(const VkRayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline)
+    /*SBTGenerator generatorss;*/
+    // Creating the SBT
+    void VulkanRendererAPI::createShaderBindingTable(const vk::RayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline, SBTGenerator& sbtGenerator, utils::Buffer& sbtBuffer, const vk::PhysicalDeviceRayTracingPipelinePropertiesKHR& rtProps)
     {
-        m_allocator.destroyBuffer(std::move(m_sbtBuffer)); // Cleanup when re-creating
-
-        vk::StructureChain
-            <
-                vk::PhysicalDeviceProperties2,
-                vk::PhysicalDeviceRayTracingPipelinePropertiesKHR,
-                vk::PhysicalDeviceAccelerationStructurePropertiesKHR
-            >
-            props =
-                physicalDevice.getProperties2
-                <
-                    vk::PhysicalDeviceProperties2,
-                    vk::PhysicalDeviceRayTracingPipelinePropertiesKHR,
-                    vk::PhysicalDeviceAccelerationStructurePropertiesKHR
-                >();
-
-        const auto& rtProps =
-            props.get<vk::PhysicalDeviceRayTracingPipelinePropertiesKHR>();
-
-        uint32_t handleSize = rtProps.shaderGroupHandleSize;
-        uint32_t handleAlignment = rtProps.shaderGroupHandleAlignment;
-        uint32_t baseAlignment = rtProps.shaderGroupBaseAlignment;
-        uint32_t groupCount = rtPipelineInfo.groupCount;
-
-        // Get shader group handles
-        size_t dataSize = handleSize * groupCount;
-        m_shaderHandles.resize(dataSize);
-        m_shaderHandles = rtPipeline.getRayTracingShaderGroupHandlesKHR<uint8_t>(0, groupCount, dataSize);
-
-        // Calculate SBT buffer size with proper alignment
-        auto alignUp = [](uint32_t size, uint32_t alignment) { return (size + alignment - 1) & ~(alignment - 1); };
-        uint32_t raygenSize = alignUp(handleSize, handleAlignment);
-        uint32_t missSize = alignUp(handleSize, handleAlignment);
-        uint32_t hitSize = alignUp(handleSize, handleAlignment);
-        uint32_t callableSize = 0; // No callable shaders in this tutorial
-
-        // Ensure each region starts at a baseAlignment boundary
-        uint32_t raygenOffset = 0;
-        uint32_t missOffset = alignUp(raygenSize, baseAlignment);
-        uint32_t hitOffset = alignUp(missOffset + missSize, baseAlignment);
-        uint32_t callableOffset = alignUp(hitOffset + hitSize, baseAlignment);
-
-        size_t bufferSize = callableOffset + callableSize;
-
-        // Create SBT buffer
-        m_sbtBuffer = m_allocator.createBuffer
+        // Calculate required SBT buffer size
+        size_t bufferSize = sbtGenerator.calculateSBTBufferSize(rtPipeline, rtPipelineInfo);
+        
+        // Create SBT buffer using the size from above
+        sbtBuffer = m_allocator.createBuffer
         (
             bufferSize,
             vk::BufferUsageFlagBits2::eShaderBindingTableKHR,
             vma::MemoryUsage::eAutoPreferDevice,
-            vma::AllocationCreateFlagBits::eMapped | vma::AllocationCreateFlagBits::eHostAccessRandom
+            vma::AllocationCreateFlagBits::eMapped | vma::AllocationCreateFlagBits::eHostAccessRandom,
+            sbtGenerator.getBufferAlignment()
         );
-
-        // Populate SBT buffer
-        uint8_t* pData = static_cast<uint8_t*>(m_sbtBuffer.mapping);
-
-        // Ray generation shader (group 0)
-        memcpy(pData + raygenOffset, m_shaderHandles.data() + 0 * handleSize, handleSize);
-        m_raygenRegion.deviceAddress = m_sbtBuffer.address + raygenOffset;
-        m_raygenRegion.stride = raygenSize;
-        m_raygenRegion.size = raygenSize;
-
-        // Miss shader (group 1)
-        memcpy(pData + missOffset + 0 * missSize, m_shaderHandles.data() + 1 * handleSize, handleSize);
-        memcpy(pData + missOffset + 1 * missSize, m_shaderHandles.data() + 2 * handleSize, handleSize); // Shadow miss
-        m_missRegion.deviceAddress = m_sbtBuffer.address + missOffset;
-        m_missRegion.stride = missSize;
-        m_missRegion.size = missSize * 2;
-
-        // Hit shader (group 2)
-        memcpy(pData + hitOffset + 0 * hitSize, m_shaderHandles.data() + 3 * handleSize, handleSize);
-        memcpy(pData + hitOffset + 1 * missSize, m_shaderHandles.data() + 4 * handleSize, handleSize);
-        m_hitRegion.deviceAddress = m_sbtBuffer.address + hitOffset;
-        m_hitRegion.stride = hitSize;
-        m_hitRegion.size = hitSize * 2;
-
-        // Callable shaders (none in this tutorial)
-        m_callableRegion.deviceAddress = 0;
-        m_callableRegion.stride = 0;
-        m_callableRegion.size = 0;
-
+        DBG_VK_NAME(sbtBuffer.buffer);
+        
+        // Populate the SBT buffer with shader handles and data using the CPU-mapped memory pointer
+        sbtGenerator.populateSBTBuffer(sbtBuffer.address, bufferSize, sbtBuffer.mapping);
+       
         LOGI("Shader binding table created and populated \n");
     }
-
-    /*#include "rtbasic.slang.h" */
 
     VanKPipeLine VulkanRendererAPI::createRayTracingPipeline(VanKRaytracingPipelineSpecification raytracingPipelineSpecification)
     {
         vk::raii::Pipeline tempPipeline = VK_NULL_HANDLE;
         vk::raii::PipelineLayout tempPipelineLayout = VK_NULL_HANDLE;
+        // maybe a if statement if rayquery not needed those 2
+        utils::Buffer tempSbtBuffer;
+        SBTGenerator tempGenerator;
 
         // Creating all shaders
         enum StageIndices
@@ -1143,13 +1050,20 @@ namespace VanK
         tempPipeline = vk::raii::Pipeline(device, nullptr, nullptr, rtPipelineInfo);
         DBG_VK_NAME(tempPipeline);
 
-        createShaderBindingTable(rtPipelineInfo, tempPipeline);
+        tempGenerator.init(device, rtProps);
+        
+        createShaderBindingTable(rtPipelineInfo, tempPipeline, tempGenerator, tempSbtBuffer, rtProps);
+        
+        //deinit somehwere and store in pipeline resouce buffer and generator
+        
 
         PipelineResource resource;
         resource.pipeline = std::move(tempPipeline);
         resource.layout = std::move(tempPipelineLayout);
         resource.bindPoint = VanKPipelineBindPoint::Raytracing;
         resource.raytracingSpec = raytracingPipelineSpecification;
+        resource.sbtGenerator = std::move(tempGenerator);
+        resource.sbtBuffer = std::move(tempSbtBuffer);
 
         auto rawHandle = *resource.pipeline; // raw VkPipeline before moving
         m_currentRaytracingPipelineLayout = *resource.layout;
@@ -1160,37 +1074,19 @@ namespace VanK
         return Wrap(rawHandle);
     }
 
+    //Destroy all pipeline resources + sbt buffers and generators for raytracing pipelines
     void VulkanRendererAPI::DestroyAllPipelines()
     {
         // Clear the map completely
         m_PipelineResources.clear();
     }
 
-    /*--
-     * Destroy all resources and the Vulkan context
-   -*/
-
+    //Destroy pipeline resource + sbt buffer and generator for raytracing
     void VulkanRendererAPI::DestroyPipeline(VanKPipeLine pipeline)
     {
-        sceneImageInitialized = false;
-        entityImageInitialized = false;
-        entityColorImageInitialized = false;
-        m_hasActiveRenderPass = false;
         auto it = m_PipelineResources.find(Unwrap(pipeline));
         if (it != m_PipelineResources.end())
         {
-            // not needed because of RAII
-            /*if (it->second.pipeline != VK_NULL_HANDLE)
-            {
-                VkDevice device = m_context.getDevice();
-                
-                vkDestroyPipeline(device, it->second.pipeline, nullptr);
-                it->second.pipeline = VK_NULL_HANDLE;
-                
-                vkDestroyPipelineLayout(device, it->second.layout, nullptr);
-                it->second.layout = VK_NULL_HANDLE;
-            }*/
-
             m_PipelineResources.erase(it);
         }
     }
@@ -1552,88 +1448,6 @@ namespace VanK
                 dstAccess
             );
         }
-    }
-
-    int32_t VulkanRendererAPI::ReadEntityIDAtPixel(uint32_t imageIndex, uint32_t x, uint32_t y)
-    {
-        // Clamp coordinates to viewport
-        x = std::min(x, viewport.width - 1);
-        y = std::min(y, viewport.height - 1);
-
-        // Create readback buffer if needed (only once)
-        if (!*entityReadbackBuffer.buffer)
-        {
-            entityReadbackBuffer = m_allocator.createBuffer(
-                sizeof(int32_t), /*sizeof(int32_t) * viewport.width * viewport.height,*/
-                vk::BufferUsageFlagBits2::eTransferDst,
-                vma::MemoryUsage::eGpuToCpu
-            );
-        }
-
-        /*
-        // Wait for GPU to finish rendering
-        queue.waitIdle();*/
-
-        // Transition entity image to transfer source
-        /*auto cmd = utils::beginSingleTimeCommands(device, commandPool);*/
-
-        utils::transition_image_layout
-        (
-            commandBuffers[frameIndex],
-            *m_RenderTargetImages[imageIndex].image,
-            entityImageInitialized ? vk::ImageLayout::eColorAttachmentOptimal : vk::ImageLayout::eUndefined,
-            vk::ImageLayout::eTransferSrcOptimal,
-            vk::AccessFlagBits2::eColorAttachmentWrite,
-            vk::AccessFlagBits2::eTransferRead,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::PipelineStageFlagBits2::eTransfer,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        // Copy image to buffer
-        vk::BufferImageCopy copyRegion{
-            .bufferOffset = 0,
-            .bufferRowLength = 0,
-            .bufferImageHeight = 0,
-            .imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1},
-            .imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0}, /*.imageOffset = {static_cast<int32_t>(x), static_cast<int32_t>(y), 0},*/
-            .imageExtent = {1, 1, 1} /*.imageExtent = {1, 1, 1} */
-        };
-
-
-        commandBuffers[frameIndex].copyImageToBuffer(
-            *m_RenderTargetImages[imageIndex].image,
-            vk::ImageLayout::eTransferSrcOptimal,
-            entityReadbackBuffer.buffer,
-            {copyRegion}
-        );
-
-        // Transition back
-        utils::transition_image_layout
-        (
-            commandBuffers[frameIndex],
-            *m_RenderTargetImages[imageIndex].image,
-            vk::ImageLayout::eTransferSrcOptimal,
-            vk::ImageLayout::eColorAttachmentOptimal,
-            vk::AccessFlagBits2::eTransferRead,
-            vk::AccessFlagBits2::eColorAttachmentWrite,
-            vk::PipelineStageFlagBits2::eTransfer,
-            vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-            vk::ImageAspectFlagBits::eColor
-        );
-
-        /*utils::endSingleTimeCommands(*cmd, queue);*/
-
-        // Map and read the pixel
-        void* mappedData = entityReadbackBuffer.buffer.getAllocation().map();
-        int32_t* entityIDs = static_cast<int32_t*>(mappedData);
-
-        /*int32_t entityID = entityIDs[y * viewport.width + x];*/
-        int32_t entityID = entityIDs[0];
-
-        entityReadbackBuffer.buffer.getAllocation().unmap();
-
-        return entityID;
     }
 
     void VulkanRendererAPI::BindPipeline(VanKCommandBuffer cmd, VanKPipelineBindPoint pipelineBindPoint, VanKPipeLine pipeline)
@@ -2093,19 +1907,19 @@ namespace VanK
         Unwrap(cmd).drawMeshTasksIndirectCountEXT(bufferIndirect, indirectBufferOffset, bufferCount, countBufferOffset, maxDrawCount, stride);
     }
 
-    void VulkanRendererAPI::TraceRays(VanKCommandBuffer cmd, uint32_t width, uint32_t height)
+    void VulkanRendererAPI::TraceRays(VanKCommandBuffer cmd, VanKPipeLine rtPipeline, uint32_t width, uint32_t height)
     {
         DBG_CMD_INSERT(Unwrap(cmd), "traceray");
-        Unwrap(cmd).traceRaysKHR(m_raygenRegion, m_missRegion, m_hitRegion, m_callableRegion, width, height, 1);
+        
+        auto& pipeRes = m_PipelineResources[Unwrap(rtPipeline)];
+        
+        const SBTGenerator::Regions& regions = pipeRes.sbtGenerator.getSBTRegions();
+        Unwrap(cmd).traceRaysKHR(regions.raygen, regions.miss, regions.hit, regions.callable, width, height, 1);
     }
 
     void VulkanRendererAPI::EndRendering(VanKCommandBuffer cmd)
     {
         Unwrap(cmd).endRendering();
-        sceneImageInitialized = false;
-        entityImageInitialized = false;
-        entityColorImageInitialized = false;
-        m_hasActiveRenderPass = false;
     }
 
     void VulkanRendererAPI::RenderImGui(VanKCommandBuffer cmd)
@@ -2114,218 +1928,7 @@ namespace VanK
 
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
     }
-
-    void VulkanRendererAPI::SubmitRendering(VanKCommandBuffer cmd, uint32_t renderTargetImage)
-    {
-        if (m_renderOption == VanK_Render_ImGui)
-        {
-            // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                swapChainImages[imageIndex],
-                sceneImageInitialized ? vk::ImageLayout::ePresentSrcKHR : vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eColorAttachmentOptimal,
-                {}, // srcAccessMask (no need to wait for previous operations)
-                vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
-                vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage,
-                vk::ImageAspectFlagBits::eColor
-            );
-
-            // Second pass: draw ImGui to swapchain image
-            vk::RenderingAttachmentInfo swapColorAttachment =
-            {
-                .imageView = swapChainImageViews[imageIndex],
-                .imageLayout = vk::ImageLayout::eColorAttachmentOptimal,
-                .loadOp = vk::AttachmentLoadOp::eClear,
-                .storeOp = vk::AttachmentStoreOp::eStore
-            };
-
-            vk::RenderingInfo renderingInfo2 =
-            {
-                .renderArea = {.offset = {0, 0}, .extent = swapChainExtent},
-                .layerCount = 1,
-                .colorAttachmentCount = 1,
-                .pColorAttachments = &swapColorAttachment
-            };
-
-            Unwrap(cmd).beginRendering(renderingInfo2);
-
-            ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
-
-            ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
-
-            Unwrap(cmd).endRendering();
-
-            // Transition the swapchain image to PRESENT_SRC
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                swapChainImages[imageIndex],
-                vk::ImageLayout::eColorAttachmentOptimal,
-                vk::ImageLayout::ePresentSrcKHR,
-                vk::AccessFlagBits2::eColorAttachmentWrite, // srcAccessMask
-                {}, // dstAccessMask
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput, // srcStage
-                vk::PipelineStageFlagBits2::eBottomOfPipe, // dstStage,
-                vk::ImageAspectFlagBits::eColor
-            );
-
-            return;
-        }
-
-        if (m_renderOption == VanK_Render_Swapchain)
-        {
-            // Transition the swapchain image to COLOR_ATTACHMENT_OPTIMAL
-            utils::transition_image_layout
-            (
-                Unwrap(cmd),
-                swapChainImages[imageIndex],
-                sceneImageInitialized ? vk::ImageLayout::ePresentSrcKHR : vk::ImageLayout::eUndefined,
-                vk::ImageLayout::eColorAttachmentOptimal,
-                {}, // srcAccessMask (no need to wait for previous operations)
-                vk::AccessFlagBits2::eColorAttachmentWrite, // dstAccessMask
-                vk::PipelineStageFlagBits2::eTopOfPipe, // srcStage
-                vk::PipelineStageFlagBits2::eColorAttachmentOutput, // dstStage,
-                vk::ImageAspectFlagBits::eColor
-            );
-
-            if (renderTargetImage != UINT32_MAX)
-            {
-                // Transition images before blit
-                utils::transition_image_layout
-                (
-                    Unwrap(cmd),
-                    m_RenderTargetImages[renderTargetImage].image,
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::ImageLayout::eTransferSrcOptimal,
-                    vk::AccessFlagBits2::eShaderRead,
-                    vk::AccessFlagBits2::eTransferRead,
-                    vk::PipelineStageFlagBits2::eFragmentShader,
-                    vk::PipelineStageFlagBits2::eTransfer,
-                    vk::ImageAspectFlagBits::eColor
-                );
-
-                utils::transition_image_layout
-                (
-                    Unwrap(cmd),
-                    swapChainImages[imageIndex],
-                    vk::ImageLayout::eColorAttachmentOptimal,
-                    vk::ImageLayout::eTransferDstOptimal,
-                    {},
-                    vk::AccessFlagBits2::eTransferWrite,
-                    vk::PipelineStageFlagBits2::eBottomOfPipe,
-                    vk::PipelineStageFlagBits2::eTransfer,
-                    vk::ImageAspectFlagBits::eColor
-                );
-
-                vk::ImageSubresourceLayers subresource;
-                subresource.aspectMask = vk::ImageAspectFlagBits::eColor;
-                subresource.baseArrayLayer = 0;
-                subresource.layerCount = 1;
-                subresource.mipLevel = 0;
-
-                vk::ImageBlit2 blitRegion{};
-                blitRegion.srcSubresource = subresource;
-                blitRegion.srcOffsets[0] = {0, 0, 0};
-                blitRegion.srcOffsets[1] = {static_cast<int32_t>(m_RenderTargetImages[renderTargetImage].extent.width), static_cast<int32_t>(m_RenderTargetImages[renderTargetImage].extent.height), 1};
-                blitRegion.dstSubresource = subresource;
-                blitRegion.dstOffsets[0] = {0, 0, 0};
-                blitRegion.dstOffsets[1] = {static_cast<int32_t>(swapChainExtent.width), static_cast<int32_t>(swapChainExtent.height), 1};
-
-                vk::BlitImageInfo2 blitInfo{};
-                blitInfo.srcImage = m_RenderTargetImages[renderTargetImage].image;
-                blitInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
-                blitInfo.dstImage = swapChainImages[imageIndex];
-                blitInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-                blitInfo.regionCount = 1;
-                blitInfo.pRegions = &blitRegion;
-                blitInfo.filter = vk::Filter::eNearest;
-
-                Unwrap(cmd).blitImage2(blitInfo);
-
-                // After rendering, transition the images to appropriate layouts
-
-                // Transition images before blit
-                utils::transition_image_layout
-                (
-                    Unwrap(cmd),
-                    m_RenderTargetImages[renderTargetImage].image,
-                    vk::ImageLayout::eTransferSrcOptimal,
-                    vk::ImageLayout::eShaderReadOnlyOptimal,
-                    vk::AccessFlagBits2::eTransferRead,
-                    vk::AccessFlagBits2::eColorAttachmentWrite,
-                    vk::PipelineStageFlagBits2::eTransfer,
-                    vk::PipelineStageFlagBits2::eColorAttachmentOutput,
-                    vk::ImageAspectFlagBits::eColor
-                );
-
-                // Transition the swapchain image to PRESENT_SRC
-                utils::transition_image_layout
-                (
-                    Unwrap(cmd),
-                    swapChainImages[imageIndex],
-                    vk::ImageLayout::eTransferDstOptimal,
-                    vk::ImageLayout::ePresentSrcKHR,
-                    vk::AccessFlagBits2::eTransferWrite, // srcAccessMask
-                    {}, // dstAccessMask
-                    vk::PipelineStageFlagBits2::eTransfer, // srcStage
-                    vk::PipelineStageFlagBits2::eBottomOfPipe, // dstStage
-                    vk::ImageAspectFlagBits::eColor
-                );
-            }
-            else
-            {
-                VK_CORE_ERROR("SubmitRendering Swapchain no renderTargetImage provided fallback to direct SwapChain");
-
-                vk::ClearColorValue clearColor{std::array{0.5f, 0.5f, 0.5f, 1.0f}};
-
-                vk::ImageSubresourceRange range;
-                range.aspectMask = vk::ImageAspectFlagBits::eColor;
-                range.baseMipLevel = 0;
-                range.levelCount = 1;
-                range.baseArrayLayer = 0;
-                range.layerCount = 1;
-
-                utils::transition_image_layout
-                (
-                    Unwrap(cmd),
-                    swapChainImages[imageIndex],
-                    vk::ImageLayout::eColorAttachmentOptimal,
-                    vk::ImageLayout::eTransferDstOptimal,
-                    {},
-                    vk::AccessFlagBits2::eTransferWrite,
-                    vk::PipelineStageFlagBits2::eBottomOfPipe,
-                    vk::PipelineStageFlagBits2::eTransfer,
-                    vk::ImageAspectFlagBits::eColor
-                );
-
-                vk::ImageSubresourceRange ranges[] = {range};
-
-                Unwrap(cmd).clearColorImage
-                (
-                    swapChainImages[imageIndex],
-                    vk::ImageLayout::eTransferDstOptimal,
-                    clearColor, // pass by reference, not pointer
-                    ranges // ArrayProxy will implicitly wrap the array
-                );
-
-                utils::transition_image_layout(
-                    Unwrap(cmd),
-                    swapChainImages[imageIndex],
-                    vk::ImageLayout::eTransferDstOptimal,
-                    vk::ImageLayout::ePresentSrcKHR,
-                    vk::AccessFlagBits2::eTransferWrite,
-                    {},
-                    vk::PipelineStageFlagBits2::eTransfer,
-                    vk::PipelineStageFlagBits2::eBottomOfPipe,
-                    vk::ImageAspectFlagBits::eColor
-                );
-            }
-        }
-    }
-
+    
     void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing)
     {
         //layout could be raytracing no or should BindRayTracing handle textures to ?
@@ -3206,8 +2809,8 @@ namespace VanK
             };
 
             std::array<vk::DescriptorBindingFlags, 4> flags = {
-                static_cast<vk::DescriptorBindingFlags>(0), // binding 0
-                static_cast<vk::DescriptorBindingFlags>(0), // binding 1
+                vk::DescriptorBindingFlagBits::eUpdateAfterBind, // binding 0
+                vk::DescriptorBindingFlagBits::eUpdateAfterBind, // binding 1
                 vk::DescriptorBindingFlagBits::eUpdateAfterBind, // binding 2
                 vk::DescriptorBindingFlagBits::eUpdateAfterBind // binding 3
             };

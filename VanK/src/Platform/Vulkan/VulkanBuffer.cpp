@@ -203,7 +203,7 @@ namespace VanK
         m_transferBuffer.buffer.getAllocation().unmap();
     }
 
-    void VulkanTransferBuffer::UploadToGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion, bool runtime)
+    void VulkanTransferBuffer::UploadToGPUBufferRAW(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion, bool runtime)
     {
         if (bufferRegion.size == 0)
             return; // or skip the copy safely
@@ -301,7 +301,7 @@ namespace VanK
         }
     }
 
-    void VulkanTransferBuffer::DownloadFromGPUBuffer(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion)
+    void VulkanTransferBuffer::DownloadFromGPUBufferRAW(VanKCommandBuffer cmd, VanKTransferBufferLocation location, VanKBufferRegion bufferRegion)
     {
         if (bufferRegion.size == 0)
             return; // or skip the copy safely
@@ -365,11 +365,69 @@ namespace VanK
         
         memcpy(dataPtr, vecData, dataSize);
         
+        m_transferBuffer.buffer.getAllocation().flush(offset, dataSize); // added my self idk if needed
+        
         UnMapTransferBuffer();
         
-        UploadToGPUBuffer(cmd, VanKTransferBufferLocation{.offset = offset}, VanKBufferRegion{.buffer = &dstBuffer, .offset = dstOffset, .size = dataSize}, runtime);
+        UploadToGPUBufferRAW(cmd, VanKTransferBufferLocation{.offset = offset}, VanKBufferRegion{.buffer = &dstBuffer, .offset = dstOffset, .size = dataSize}, runtime);
+    }
+    
+    void VulkanTransferBuffer::DownloadRaw(VanKCommandBuffer& cmd, VanKBuffer& srcBuffer, void* outData, uint64_t dataSize, uint64_t alignment, uint64_t srcOffset)
+    {
+        uint64_t offset = 0;
+        
+        DownloadFromGPUBufferRAW(cmd, VanKTransferBufferLocation{.offset = offset}, VanKBufferRegion{.buffer = &srcBuffer, .offset = srcOffset, .size = dataSize});
+        
+        void* mappedPtr = MapTransferBuffer(dataSize, alignment, offset);
+        
+        m_transferBuffer.buffer.getAllocation().invalidate(offset, dataSize);
+        
+        memcpy(outData, static_cast<uint8_t*>(mappedPtr) + offset, dataSize);
+        
+        UnMapTransferBuffer();
     }
 
+    void VulkanTransferBuffer::DownloadFromGPUImage(VanKCommandBuffer& cmd, uint32_t srcImage, uint32_t x, uint32_t y, uint32_t width, uint32_t height)
+    { 
+        /*// Clamp coordinates to viewport
+        x = std::min(x, width - 1); // viewport
+        y = std::min(y, height - 1); // viewport*/
+        
+        vk::BufferImageCopy2 copyRegion;
+        copyRegion.bufferOffset = 0;
+        copyRegion.bufferRowLength = 0;
+        copyRegion.bufferImageHeight = 0;
+        copyRegion.imageSubresource = {vk::ImageAspectFlagBits::eColor, 0, 0, 1};
+        copyRegion.imageOffset = vk::Offset3D{static_cast<int>(x), static_cast<int>(y), 0};
+        copyRegion.imageExtent = vk::Extent3D{1, 1, 1}; // Always 1x1 for single pixel picking
+        
+        auto& instance = VulkanRendererAPI::Get();
+        
+        vk::CopyImageToBufferInfo2 copyInfo;
+        copyInfo.srcImage = instance.GetRenderTargetImage(srcImage).image;
+        copyInfo.srcImageLayout = vk::ImageLayout::eTransferSrcOptimal;
+        copyInfo.dstBuffer = m_transferBuffer.buffer;
+        copyInfo.regionCount = 1;
+        copyInfo.pRegions = &copyRegion;
+        
+        Unwrap(cmd).copyImageToBuffer2(copyInfo);
+    }
+    
+    int32_t VulkanTransferBuffer::ReadPixel(uint32_t x, uint32_t y)
+    {
+        // We don't need a command buffer here because we are just reading CPU memory
+        void* mappedPtr = m_transferBuffer.buffer.getAllocation().map();
+    
+        // Invalidate ensures the CPU doesn't use an old cached version of this memory
+        m_transferBuffer.buffer.getAllocation().invalidate(0, sizeof(int32_t));
+    
+        int32_t id = *static_cast<int32_t*>(mappedPtr);
+    
+        m_transferBuffer.buffer.getAllocation().unmap();
+    
+        return id;
+    }
+    
     VulkanUniformBuffer::VulkanUniformBuffer(uint64_t size) : m_size(size)
     {
         VK_CORE_INFO("Created UniformBuffer");

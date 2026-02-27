@@ -131,7 +131,7 @@ namespace VanK
         glm::mat4 view{1.0f};
         glm::mat4 proj{1.0f};
         glm::mat4 viewProj{1.0f};
-        
+
         glm::mat4 viewInverse{1.0f};
         glm::mat4 projInverse{1.0f};
         glm::mat4 viewProjInverse{1.0f};
@@ -156,7 +156,7 @@ namespace VanK
         uint32_t brdflutTexture;
         uint32_t irradianceTexture;
         uint32_t prefilteredTexture;
-        
+
         //path tracer
         uint32_t skyBoxIndex;
         bool useSky;
@@ -294,7 +294,7 @@ namespace VanK
         // fallback PNG/JPG
         return tex.source;
     }
-    
+
     static Ref<Texture2D> LoadTextureFromTexture
     (
         int textureIndex,
@@ -315,8 +315,8 @@ namespace VanK
         const tinygltf::Image& img = model.images[imageIndex];
 
         std::string key = img.uri.empty()
-            ? "embedded_" + std::to_string(imageIndex)
-            : img.uri;
+                              ? "embedded_" + std::to_string(imageIndex)
+                              : img.uri;
 
         auto it = textureCache.find(key);
         if (it != textureCache.end())
@@ -383,12 +383,12 @@ namespace VanK
         mat.doubleSided = 0;
 
         mat.transmissionFactor = 0; // 0 = opaque, 1 = full transparent
-        
-        
+
+
         if (gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness")) // Old PBR
         {
             mat.isSpecularGlossWorkflow = true;
-            
+
             const auto& ext = gltfMat.extensions.at("KHR_materials_pbrSpecularGlossiness");
 
             // Diffuse texture
@@ -456,14 +456,14 @@ namespace VanK
                 const auto& bc = gltfMat.pbrMetallicRoughness.baseColorFactor;
                 mat.baseColorFactor = glm::vec4(bc[0], bc[1], bc[2], bc[3]);
             }
-        
+
             if (gltfMat.pbrMetallicRoughness.baseColorTexture.index >= 0) // New PBR (Metallic-Roughness)
             {
                 int texIndex = gltfMat.pbrMetallicRoughness.baseColorTexture.index;
                 if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::SRGBA8, true))
                     mat.albedoTexture = t->GetTextureIndex();
             }
-            
+
             // -----------------------------
             // METALLIC / ROUGHNESS
             // -----------------------------
@@ -476,9 +476,8 @@ namespace VanK
                 if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::RGBA8, false))
                     mat.metallicRoughnessTexture = t->GetTextureIndex();
             }
-            
         }
-        
+
         if (!gltfMat.extensions.contains("KHR_materials_pbrSpecularGlossiness"))
         {
             if (gltfMat.extensions.contains("KHR_materials_specular"))
@@ -526,7 +525,7 @@ namespace VanK
             if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::RGBA8, false))
                 mat.normalTexture = t->GetTextureIndex();
         }
-        
+
         // -----------------------------
         // EMISSIVE
         // -----------------------------
@@ -545,7 +544,7 @@ namespace VanK
             if (Ref<Texture2D> t = LoadTextureFromTexture(texIndex, basePath, model, false, ImageFormat::SRGBA8, false))
                 mat.emissiveTexture = t->GetTextureIndex();
         }
-        
+
         auto extIt = gltfMat.extensions.find("KHR_materials_emissive_strength");
         if (extIt != gltfMat.extensions.end())
         {
@@ -555,7 +554,7 @@ namespace VanK
                 mat.emissiveStrength = static_cast<float>(ext.Get("emissiveStrength").GetNumberAsDouble());
             }
         }
-        
+
         // -----------------------------
         // AMBIENT OCCLUSION
         // -----------------------------
@@ -579,11 +578,11 @@ namespace VanK
             if (ext.Has("transmissionFactor"))
                 mat.transmissionFactor = static_cast<float>(ext.Get("transmissionFactor").Get<double>());
         }
-        
+
         // -----------------------------
         // VOLUME
         // -----------------------------
-        
+
         if (gltfMat.extensions.contains("KHR_materials_volume"))
         {
             const auto& volExt = gltfMat.extensions.at("KHR_materials_volume");
@@ -612,7 +611,7 @@ namespace VanK
                 }
             }
         }
-        
+
         // -----------------------------
         // IOR
         // -----------------------------
@@ -627,13 +626,13 @@ namespace VanK
         // TRANSPARENCY
         // -----------------------------
         mat.transparent = (gltfMat.alphaMode == "BLEND") || (gltfMat.alphaMode == "MASK") || (mat.transmissionFactor > 0.0f) ? 1 : 0;
-        
-        mat.alphaMode = 0; 
+
+        mat.alphaMode = 0;
         if (gltfMat.alphaMode == "MASK") mat.alphaMode = 1;
         else if (gltfMat.alphaMode == "BLEND") mat.alphaMode = 2;
 
         mat.doubleSided = gltfMat.doubleSided ? 1 : 0;
-        
+
         mat.alphaCutoff = static_cast<float>(gltfMat.alphaCutoff); // Default is 0.5
 
         materials.push_back(mat);
@@ -965,7 +964,7 @@ namespace VanK
             TraverseNode(basePath, model, child, worldTransform, verticesOut, indicesOut, materialIndex);
         }
     }
-    
+
     static ModelHandle LoadMeshModel(std::filesystem::path path, uint32_t materialIndex = 0, std::vector<shaderio::Vertex> vertices = {}, std::vector<uint32_t> indices = {}, bool FrustumFor2D = false)
     {
         uint64_t firstPrimitive = geometry.primitives.size();
@@ -1004,7 +1003,7 @@ namespace VanK
                 ret = loader.LoadASCIIFromFile(&model, &err, &warn, path.string());
             else if (path.extension() == ".glb")
                 ret = loader.LoadBinaryFromFile(&model, &err, &warn, path.string());
-            
+
             if (!warn.empty())
             {
                 std::cout << "glTF warning: " << warn << std::endl;
@@ -1037,17 +1036,17 @@ namespace VanK
         uint64_t primitiveCount = geometry.primitives.size() - firstPrimitive;
         return {firstPrimitive, primitiveCount};
     }
-   
+
     void Renderer::BeginScene(const Camera& camera, const glm::mat4& transform)
     {
         scenesData.view = glm::scale(glm::mat4(1.0f), glm::vec3(1.0f, 1.0f, -1.0f)) * glm::inverse(transform);
         scenesData.proj = camera.GetProjection();
         scenesData.viewProj = camera.GetProjection() * scenesData.view;
-        
+
         scenesData.viewInverse = glm::inverse(scenesData.view);
         scenesData.projInverse = glm::inverse(scenesData.proj);
         scenesData.viewProjInverse = glm::inverse(scenesData.viewProj);
-        
+
         /*scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};*/
         scenesData.frustum = Frustum(scenesData.viewProj);
         scenesData.FrustumCullEnabled = FrustumCullEnabled;
@@ -1074,19 +1073,19 @@ namespace VanK
             scenesData.frozenFrustum = scenesData.frustum;
         }
     }
-    
+
     void Renderer::BeginScene(const EditorCamera& camera)
     {
         scenesData.view = camera.GetViewMatrix();
         scenesData.proj = camera.GetProjection();
         scenesData.viewProj = camera.GetViewProjection();
-        
+
         scenesData.viewInverse = glm::inverse(scenesData.view);
         scenesData.projInverse = glm::inverse(scenesData.proj);
         scenesData.viewProjInverse = glm::inverse(scenesData.viewProj);
-        
+
         scenesData.cameraWorldPos = {camera.GetPosition(), 0.0f};
-        
+
         // Compare to previous frame
         static glm::mat4 lastView = scenesData.view;
         static glm::mat4 lastProj = scenesData.proj;
@@ -1094,7 +1093,7 @@ namespace VanK
         bool cameraMoved = (lastView != scenesData.view) || (lastProj != scenesData.proj);
 
         if (cameraMoved)
-            resetFrame();  // reset progressive accumulation
+            resetFrame(); // reset progressive accumulation
         else
             s_frameIndex = std::min(++s_frameIndex, s_maxAccumulationFrames);
 
@@ -1452,7 +1451,7 @@ namespace VanK
         uint32_t MaterialIndex;
         uint64_t sceneData;
     };
-    
+
     struct PushConstantRayTrace
     {
         uint64_t sceneData;
@@ -1588,20 +1587,20 @@ namespace VanK
             });
         }
     }
-    
-     enum LightType
+
+    enum LightType
     {
-        ePoint       = 0,  // Point light type
-        eSpot        = 1,  // Spot light type
-        eDirectional = 2   // Directional light type
-      };
+        ePoint = 0, // Point light type
+        eSpot = 1, // Spot light type
+        eDirectional = 2 // Directional light type
+    };
 
 
     struct Lights
     {
         glm::vec3 position; // Position of the punctual light in world space
         float intensity; // Intensity of the light
-        glm::vec3 direction;  // Direction of the light (for spot and directional lights)
+        glm::vec3 direction; // Direction of the light (for spot and directional lights)
         int type; // Type of the light (0 = point, 1 = spot, 2 = directional)
         glm::vec3 color; // Color of the light (RGB)
         float coneAngle; // Cone angle for spot lights (in radians, 0 for point and directional lights)
@@ -1629,19 +1628,23 @@ namespace VanK
         // provide myself here every time but this might be not needed if integrated into rendergraph
         // Create new render targets with current viewport size
         sceneImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
-        
-        colorImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, 
-            .SampleCount = 64, .isResolveImage = true, .resolveTargetID = sceneImage->GetRenderImageIndex()});
-        
+
+        colorImage = RenderTargetImage::Create({
+            .Width = m_ViewportSize.width, .Height = m_ViewportSize.height,
+            .SampleCount = 64, .isResolveImage = true, .resolveTargetID = sceneImage->GetRenderImageIndex()
+        });
+
         entityImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT});
-        
-        entityColorImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT,
-            .SampleCount = 64, .isResolveImage = true, .resolveTargetID = entityImage->GetRenderImageIndex()});
-        
+
+        entityColorImage = RenderTargetImage::Create({
+            .Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32SINT,
+            .SampleCount = 64, .isResolveImage = true, .resolveTargetID = entityImage->GetRenderImageIndex()
+        });
+
         depthImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .SampleCount = 64, .depthImage = true});
-        
+
         rayTracingImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height, .Format = ImageFormat::R32G32B32A32_SFLOAT, .isStorageImage = true});
-        
+
         finalImage = RenderTargetImage::Create({.Width = m_ViewportSize.width, .Height = m_ViewportSize.height});
     }
 
@@ -1652,7 +1655,7 @@ namespace VanK
         m_window = window.getWindowHandle();
         RenderCommand::SetConfig(config);
         RenderCommand::Init();
-        
+
         m_BufferManager = std::make_unique<BufferManager>();
 
         // Render Target
@@ -1667,9 +1670,9 @@ namespace VanK
         auto MeshText = GetShaderLibrary().Load("MeshText", "MeshText.slang");
         auto MeshLine = GetShaderLibrary().Load("MeshLine", "MeshLine.slang");
         auto SkyBox = GetShaderLibrary().Load("SkyBox", "SkyBox.slang");
-        auto raytracingbasic = GetShaderLibrary().Load("raytracingbasic", "raytracingbasic.slang");
+        /*auto raytracingbasic = GetShaderLibrary().Load("raytracingbasic", "raytracingbasic.slang");*/
         auto PathTracer = GetShaderLibrary().Load("PathTracer", "PathTracer.slang");
-        
+
         // Pipeline Creation
         uint32_t useTexture = true;
         std::vector<VanKSpecializationMapEntries> mapEntries
@@ -1778,7 +1781,7 @@ namespace VanK
             .RenderingCreateInfo = RenderingCreateInfo,
             .PipelineLayoutInfo = PipelineLayoutCreateInfo,
         };
-        
+
         m_FinalRenderPipelineSpecification = GraphicsPipelineSpecification;
         m_FinalRenderPipelineSpecification.PipelineType = VanK_Mesh;
         m_FinalRenderPipelineSpecification.ShaderStageCreateInfo.VanKShader = FinalRender;
@@ -1796,7 +1799,7 @@ namespace VanK
             }
         };
         m_FinalRenderPipelineSpecification.ColorBlendStateCreateInfo.VanKColorBlendAttachmentState = ColorBlendAttachmentStates2;
-        
+
         m_FinalRenderPipelineSpecification.MultisampleStateCreateInfo.sampleCount = VanK_SAMPLE_COUNT_1_BIT;
         m_FinalRenderPipelineSpecification.RenderingCreateInfo.VanKColorAttachmentFormats = {VanK_Format_B8G8R8A8Srgb};
         m_FinalRenderPipeline = RenderCommand::createGraphicsPipeline(m_FinalRenderPipelineSpecification);
@@ -1912,13 +1915,13 @@ namespace VanK
         /*vikingRoom = TextureImporter::LoadTexture2D("assets/textures/viking_room.ktx2", {.FlipTexture = true});
         ChernoLogo = TextureImporter::LoadTexture2D("assets/textures/ChernoLogo.ktx2");*/
         BRDF2DLUT = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/lol.ktx2", {.FlipTexture = true, .SamplerInfo = skyboxSampler});
-        
+
         /*
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cubemap.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/irradiance.ktx2", {.SamplerInfo = skyboxSampler});
         prefilterMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/prefilter.ktx2", {.SamplerInfo = skyboxSampler});
         */
-       
+
         cubemap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSky.ktx2", {.SamplerInfo = skyboxSampler});
         irradianceMap = TextureImporter::LoadTexture2D("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbrstuff/cloudypPureSky/cubeMapSkyIrradiance.ktx2",
                                                        {.SamplerInfo = skyboxSampler});
@@ -1960,7 +1963,7 @@ namespace VanK
             0, 1, 2, // first triangle
             0, 2, 3 // second triangle
         };
-       
+
         /*ModelHandle bistro = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/bistro/bistro.gltf", pinkTexture->GetTextureIndex());*/
         /*ModelHandle Arcade = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Arcade/Arcade.gltf", pinkTexture->GetTextureIndex());*/
         //ModelHandle bunny = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/stanford_bunny/stanford_bunny.gltf");
@@ -1996,7 +1999,7 @@ namespace VanK
         uint64_t cullBuffersize = sizeof(CulledData);
         cullBuffer = m_BufferManager->Create<StorageBuffer>(cullBuffersize);
 
-        uint64_t m_TransferDownlaoadBuffersize = sizeof(CulledData);
+        uint64_t m_TransferDownlaoadBuffersize = sizeof(CulledData) + sizeof(3840 * 2160 * sizeof(int32_t)); // this is for mouse picking currently only 1x1x1 but future proof for 4k res
         m_TransferDownlaoadBuffer = m_BufferManager->Create<TransferBuffer>(m_TransferDownlaoadBuffersize, VanKTransferBufferUsageDownload);
 
         uint64_t vertexBuffersize = sizeof(shaderio::Vertex) * geometry.vertices.size();
@@ -2063,7 +2066,7 @@ namespace VanK
         RenderCommand::DestroyAllPipelines();
 
         GetShaderLibrary().ShutdownAll();
-        
+
         m_BufferManager.reset();
     }
 
@@ -2099,36 +2102,51 @@ namespace VanK
     {
         /*Flush();*/ // done inside editorlayer on render
 
-        if (isEditor)
+        auto& downloadPass = renderGraph.AddPass("DownloadCullingData");
+        downloadPass.reads =
         {
-            //wrap this in a download function like the upload function to make it nicer
-            uint64_t offset = 0;
-            void* mapPtr = m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->MapTransferBuffer(sizeof(CulledData), 0, offset);
-            m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->DownloadFromGPUBuffer(cmd, {0}, {m_BufferManager->Get<StorageBuffer>(cullBuffer).get(), 0, sizeof(CulledData)});
-            CulledData data;
-            std::memcpy(&data, mapPtr, sizeof(CulledData));
-            m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->UnMapTransferBuffer();
-            ImGui::Begin("Mesh");
-            ImGui::SeparatorText("Culling Breakdown");
-            ImGui::Text("Frustum culled: %u", data.frustumCulled);
-            ImGui::Text("Backface culled: %u", data.backfaceCulled);
+            {"CullBuffer", ResourceID::Buffer(m_BufferManager->Get<StorageBuffer>(cullBuffer).get()), ResourceUsage::TransferSrc},
+            {"entityImage", ResourceID::Image(entityImage->GetRenderImageIndex()), ResourceUsage::TransferSrc}
+        };
+        downloadPass.writes =
+        {
+        };
+        downloadPass.execute = []
+        {
+            if (isEditor)
+            {
+                std::vector<CulledData> data(1);
+                m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->DownloadFromGPUBuffer(cmd, *m_BufferManager->Get<StorageBuffer>(cullBuffer), data, sizeof(CulledData), 0);
+                ImGui::Begin("Mesh");
+                ImGui::SeparatorText("Culling Breakdown");
+                ImGui::Text("Frustum culled: %u", data[0].frustumCulled);
+                ImGui::Text("Backface culled: %u", data[0].backfaceCulled);
 
-            ImGui::SeparatorText("Effective Results");
-            ImGui::Text("Total culled: %u", data.totalCulled);
-            //todo its not the actual rendererd stats its just total so need to substract somehow
-            ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data.totalCulled, geometry.meshlets.size());
-            ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
-            ImGui::Text("Mode: %s", isRaster ? "Raster" : "Raytrace");
-            ImGui::End();
-        }
-     
+                ImGui::SeparatorText("Effective Results");
+                ImGui::Text("Total culled: %u", data[0].totalCulled);
+                //todo its not the actual rendererd stats its just total so need to substract somehow
+                ImGui::Text("Rendered: %zu / %zu", geometry.meshlets.size() - data[0].totalCulled, geometry.meshlets.size());
+                ImGui::Text("Total meshlets: %zu", geometry.meshlets.size());
+                ImGui::Text("Mode: %s", isRaster ? "Raster" : "Raytrace");
+                ImGui::End();
+            }
+            
+            // Entity ID readback Buffer from Entity Image and active pendingPick
+            if (m_PendingPick.active)
+            {
+                m_BufferManager->Get<TransferBuffer>(m_TransferDownlaoadBuffer)->DownloadFromGPUImage(cmd, entityImage->GetRenderImageIndex(), m_PendingPick.x, m_PendingPick.y, 1, 1);
+                
+                m_PendingPick.active = false;
+            }
+        };
+
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
         auto& finalRender = renderGraph.AddPass("Swapchain");
-        finalRender.reads = 
+        finalRender.reads =
         {
             {"finalImage", ResourceID::Image(renderGraph.GetFinalOutput().renderImageIndex), ResourceUsage::ShaderRead},
         };
-        finalRender.writes = 
+        finalRender.writes =
         {
             {
                 "SwapChainImage",
@@ -2145,18 +2163,16 @@ namespace VanK
             if (isEditor)
                 RenderCommand::RenderImGui(cmd);
         };
-        
+
         renderGraph.Build();
         // make a graph send to imgui image to render into viewprot instead of hardocing sceneimage much better i think
         // chatpgt meine fresse sagt mann kann blittingen die hurent sotrage image von raytgracing mutter 
         // mvoe storage image to rendertarget image in my renderer jsut neeed to add storage image flag in texture creation check that out
         /*renderGraph.DumpGraphviz("rendergraph.dot");*/
         renderGraph.Execute(cmd);
-        
+
         // copy raytrace image into swapchain iamge idk if thats good since i have scene image to how do i combine them both together ?
         // submit rendering is not correct either should it be inside the graph ? idk
-
-        /*RenderCommand::SubmitRendering(cmd, renderGraph.GetFinalOutput().renderImageIndex);*/
 
         RenderCommand::EndCommandBuffer(cmd);
 
@@ -2188,7 +2204,7 @@ namespace VanK
     }
 
     static bool done = false;
- 
+
     void Renderer::DrawMeshShader()
     {
         ScopeTimer timer("Renderer::DrawMeshShader");
@@ -2197,31 +2213,31 @@ namespace VanK
         scenesData.brdflutTexture = BRDF2DLUT->GetTextureIndex();
         scenesData.irradianceTexture = irradianceMap->GetTextureIndex();
         scenesData.prefilteredTexture = prefilterMap->GetTextureIndex();
-        
+
         //path tracer
         scenesData.skyBoxIndex = cubemap->GetTextureIndex();
         scenesData.useSky = true;
         scenesData.backgroundColor = glm::vec3(1.0f, 0.0f, 1.0f);
         scenesData.frameIndex = s_frameIndex;
-        
+
         scene.emplace_back(scenesData);
         m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(sceneBuffer), scene, 0);
         scene.clear();
-       
+
         if (!done)
         {
             //lights
             lights.emplace_back(
-    Lights{
-        .position   = glm::vec3(0.0f),                     // unused for directional
-        .intensity  = 5.0f,                                // scaled from GLTF 6830
-        .direction  = glm::normalize(glm::quat(0.7903f, -0.5507f, -0.2371f, -0.1258f) * glm::vec3(0.0f, 0.0f, -1.0f)),
-        .type       = LightType::eDirectional,
-        .color      = glm::vec3(1.0f, 0.95f, 0.85f),      // slightly warm sunlight
-        .coneAngle  = 0.0f                                 // unused
-    }
-);
-       
+                Lights{
+                    .position = glm::vec3(0.0f), // unused for directional
+                    .intensity = 5.0f, // scaled from GLTF 6830
+                    .direction = glm::normalize(glm::quat(0.7903f, -0.5507f, -0.2371f, -0.1258f) * glm::vec3(0.0f, 0.0f, -1.0f)),
+                    .type = LightType::eDirectional,
+                    .color = glm::vec3(1.0f, 0.95f, 0.85f), // slightly warm sunlight
+                    .coneAngle = 0.0f // unused
+                }
+            );
+
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(lightsBuffer), lights, 0);
             lights.clear();
 
@@ -2229,7 +2245,8 @@ namespace VanK
 
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.indices, 0, false);
             // note descriptor update for tlas and storageimage are inside here maybe move out once descriptor heap is implemented ashole
-            RenderCommand::createAccelerationStructures(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials, instanceLUTs, sceneImage->GetRenderImageIndex());
+            RenderCommand::createAccelerationStructures(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials,
+                                                        instanceLUTs, sceneImage->GetRenderImageIndex());
 
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer), instanceLUTs, 0, false);
 
@@ -2326,43 +2343,44 @@ namespace VanK
                     {
                         "depthImage", ResourceID::Image(depthImage->GetRenderImageIndex()), ResourceUsage::DepthAttachment, {}, VanK_FORMAT_DEPTH_STENCIL, VanK_LOADOP_CLEAR, VanK_STOREOP_STORE,
                         VanK_FColor{.f = {0.0f}}
-                    }
+                    },
+                    {"CullBuffer", ResourceID::Buffer(m_BufferManager->Get<StorageBuffer>(cullBuffer).get()), ResourceUsage::TransferDst}
                 };
-                
-                /*MeshDraw.AddSubpass("PBR", []
-               {
-                   GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
 
-               
-                   RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
+                MeshDraw.AddSubpass("PBR", []
+                {
+                    GPUScopeTimer computetimer("Mesh Render: ", cmd, renderPassMesh);
 
-                   RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, false);
-                
-                   RenderCommand::BindRayTracing(cmd, true);
 
-                   TaskMeshPipelinePushConstant pushData
-                   {
-                       .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
-                       .culledDataBuffer = m_BufferManager->Get<StorageBuffer>(cullBuffer)->GetBufferAddress(),
-                       .vertexBuffer = m_BufferManager->Get<StorageBuffer>(vertexBuffer)->GetBufferAddress(),
-                       .indexBuffer = m_BufferManager->Get<StorageBuffer>(indexBuffer)->GetBufferAddress(),
-                       .meshletVerticesBuffer = m_BufferManager->Get<StorageBuffer>(meshletVerticesBuffer)->GetBufferAddress(),
-                       .meshletTrianglesBuffer = m_BufferManager->Get<StorageBuffer>(meshletTrianglesBuffer)->GetBufferAddress(),
-                       .meshletBuffer = m_BufferManager->Get<StorageBuffer>(meshletBuffer)->GetBufferAddress(),
-                       .meshletPrimitives = m_BufferManager->Get<StorageBuffer>(meshletPrimitiveBuffer)->GetBufferAddress(),
-                       .meshDraws = m_BufferManager->Get<StorageBuffer>(meshDrawBuffer)->GetBufferAddress(),
-                       .materialBuffer = m_BufferManager->Get<StorageBuffer>(materialBuffer)->GetBufferAddress(),
-                       .instanceLutBuffer = m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer)->GetBufferAddress(),
-                       .lightsBuffer = m_BufferManager->Get<StorageBuffer>(lightsBuffer)->GetBufferAddress(),
-                   };
+                    RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_MeshPipeline);
 
-                   RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
+                    RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, false);
 
-                   //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
-                   RenderCommand::DrawMeshTasksIndirect(cmd, *m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer), 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+                    RenderCommand::BindRayTracing(cmd, true);
 
-                   /*meshTasks.clear();#1#
-               });*/
+                    TaskMeshPipelinePushConstant pushData
+                    {
+                        .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
+                        .culledDataBuffer = m_BufferManager->Get<StorageBuffer>(cullBuffer)->GetBufferAddress(),
+                        .vertexBuffer = m_BufferManager->Get<StorageBuffer>(vertexBuffer)->GetBufferAddress(),
+                        .indexBuffer = m_BufferManager->Get<StorageBuffer>(indexBuffer)->GetBufferAddress(),
+                        .meshletVerticesBuffer = m_BufferManager->Get<StorageBuffer>(meshletVerticesBuffer)->GetBufferAddress(),
+                        .meshletTrianglesBuffer = m_BufferManager->Get<StorageBuffer>(meshletTrianglesBuffer)->GetBufferAddress(),
+                        .meshletBuffer = m_BufferManager->Get<StorageBuffer>(meshletBuffer)->GetBufferAddress(),
+                        .meshletPrimitives = m_BufferManager->Get<StorageBuffer>(meshletPrimitiveBuffer)->GetBufferAddress(),
+                        .meshDraws = m_BufferManager->Get<StorageBuffer>(meshDrawBuffer)->GetBufferAddress(),
+                        .materialBuffer = m_BufferManager->Get<StorageBuffer>(materialBuffer)->GetBufferAddress(),
+                        .instanceLutBuffer = m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer)->GetBufferAddress(),
+                        .lightsBuffer = m_BufferManager->Get<StorageBuffer>(lightsBuffer)->GetBufferAddress(),
+                    };
+
+                    RenderCommand::PushConstans(cmd, VanKMesh, 0, &pushData, sizeof(TaskMeshPipelinePushConstant));
+
+                    //use count instead so gpu deciced how many draw calls once frustum cull for 1 object in compute
+                    RenderCommand::DrawMeshTasksIndirect(cmd, *m_BufferManager->Get<IndirectBuffer>(meshTaskSubmitBuffer), 0, meshTasks.size(), sizeof(VanKDrawMeshTasksIndirectCommand));
+
+                    /*meshTasks.clear();*/
+                });
 
                 MeshDraw.AddSubpass("Sprites", []
                 {
@@ -2467,65 +2485,64 @@ namespace VanK
                         RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
                     }
                 });*/
-            }/*renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());*/
+            } /*renderGraph.SetFinalOutput(sceneImage->GetRenderImageIndex(), sceneImage->getImTextureID());*/
         }
-        /*else*/ {
-        // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
-        auto& RayTrace = renderGraph.AddPass("RayTracing");
-        RayTrace.reads =
         {
-    
-        };
-        RayTrace.writes =
-        {
-            {"rayTraceImage", ResourceID::Image(rayTracingImage->GetRenderImageIndex()), ResourceUsage::StorageWrite, ResourceUsage::ShaderRead}
-        };
-        RayTrace.execute = []
-        {
-            if(s_frameIndex >= s_maxAccumulationFrames)
-                return;
-
-            RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingPipeline);
-            
-            RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, true);
-            
-            RenderCommand::BindRayTracing(cmd, false, rayTracingImage->GetRenderImageIndex());
-            
-            PushConstantRayTrace pushRayTrace
+            // i had to change format of image to eR8G8B8A8Unorm othewrwise error will seew what happens
+            auto& RayTrace = renderGraph.AddPass("RayTracing");
+            RayTrace.reads =
             {
-                .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
-                .vertexBuffer = m_BufferManager->Get<StorageBuffer>(vertexBuffer)->GetBufferAddress(),
-                .indexBuffer = m_BufferManager->Get<StorageBuffer>(indexBuffer)->GetBufferAddress(),
-                .meshletVerticesBuffer = m_BufferManager->Get<StorageBuffer>(meshletVerticesBuffer)->GetBufferAddress(),
-                .meshletTrianglesBuffer = m_BufferManager->Get<StorageBuffer>(meshletTrianglesBuffer)->GetBufferAddress(),
-                .meshletBuffer = m_BufferManager->Get<StorageBuffer>(meshletBuffer)->GetBufferAddress(),
-                .meshletPrimitives = m_BufferManager->Get<StorageBuffer>(meshletPrimitiveBuffer)->GetBufferAddress(),
-                .meshDraws = m_BufferManager->Get<StorageBuffer>(meshDrawBuffer)->GetBufferAddress(),
-                .materialBuffer = m_BufferManager->Get<StorageBuffer>(materialBuffer)->GetBufferAddress(),
-                .instanceLutBuffer = m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer)->GetBufferAddress(),
-                .lightsBuffer = m_BufferManager->Get<StorageBuffer>(lightsBuffer)->GetBufferAddress(),
+
             };
-            
-            RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
-            
-            RenderCommand::TraceRays(cmd, rayTracingImage->GetWidth(), rayTracingImage->GetHeight());
-        };
-        
+            RayTrace.writes =
+            {
+                {"rayTraceImage", ResourceID::Image(rayTracingImage->GetRenderImageIndex()), ResourceUsage::StorageWrite, ResourceUsage::ShaderRead}
+            };
+            RayTrace.execute = []
+            {
+                if (s_frameIndex >= s_maxAccumulationFrames)
+                    return;
+
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingPipeline);
+
+                RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, true);
+                //instead of cuurently layouts i could use the layout direclty with m_PipelineResources inside vulkanrendererapi which jsut needs the pipeline to get the layout which is already exposed
+                RenderCommand::BindRayTracing(cmd, false, rayTracingImage->GetRenderImageIndex());
+
+                PushConstantRayTrace pushRayTrace
+                {
+                    .sceneData = m_BufferManager->Get<StorageBuffer>(sceneBuffer)->GetBufferAddress(),
+                    .vertexBuffer = m_BufferManager->Get<StorageBuffer>(vertexBuffer)->GetBufferAddress(),
+                    .indexBuffer = m_BufferManager->Get<StorageBuffer>(indexBuffer)->GetBufferAddress(),
+                    .meshletVerticesBuffer = m_BufferManager->Get<StorageBuffer>(meshletVerticesBuffer)->GetBufferAddress(),
+                    .meshletTrianglesBuffer = m_BufferManager->Get<StorageBuffer>(meshletTrianglesBuffer)->GetBufferAddress(),
+                    .meshletBuffer = m_BufferManager->Get<StorageBuffer>(meshletBuffer)->GetBufferAddress(),
+                    .meshletPrimitives = m_BufferManager->Get<StorageBuffer>(meshletPrimitiveBuffer)->GetBufferAddress(),
+                    .meshDraws = m_BufferManager->Get<StorageBuffer>(meshDrawBuffer)->GetBufferAddress(),
+                    .materialBuffer = m_BufferManager->Get<StorageBuffer>(materialBuffer)->GetBufferAddress(),
+                    .instanceLutBuffer = m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer)->GetBufferAddress(),
+                    .lightsBuffer = m_BufferManager->Get<StorageBuffer>(lightsBuffer)->GetBufferAddress(),
+                };
+
+                RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
+
+                RenderCommand::TraceRays(cmd, m_RaytracingPipeline, rayTracingImage->GetWidth(), rayTracingImage->GetHeight());
+            };
         }
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
         auto& Composit = renderGraph.AddPass("Composit");
-        Composit.reads = 
+        Composit.reads =
         {
-                {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ShaderRead},
-                {"rayTracingImage", ResourceID::Image(rayTracingImage->GetRenderImageIndex()), ResourceUsage::ShaderRead}
+            {"sceneImage", ResourceID::Image(sceneImage->GetRenderImageIndex()), ResourceUsage::ShaderRead},
+            {"rayTracingImage", ResourceID::Image(rayTracingImage->GetRenderImageIndex()), ResourceUsage::ShaderRead}
         };
-        Composit.writes = 
+        Composit.writes =
         {
             {
                 "finalImage",
                 ResourceID::Image(finalImage->GetRenderImageIndex()),
                 ResourceUsage::ColorAttachment,
-                ResourceUsage::ShaderRead, 
+                ResourceUsage::ShaderRead,
                 VanK_Format_B8G8R8A8Srgb,
                 VanK_LOADOP_CLEAR,
                 VanK_STOREOP_STORE,
@@ -2535,12 +2552,12 @@ namespace VanK
         Composit.execute = []
         {
             RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Graphics, m_FinalRenderPipeline);
-            
+
             RenderCommand::BindRayTracing(cmd, true, {}, true, sceneImage->GetRenderImageIndex(), rayTracingImage->GetRenderImageIndex());
-            
+
             RenderCommand::DrawMeshTasks(cmd, 1, 1, 1);
         };
-        
+
         //change this give image make internal indexing
         renderGraph.SetFinalOutput(finalImage->GetRenderImageIndex(), finalImage->getImTextureID());
     }

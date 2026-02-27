@@ -3,7 +3,8 @@
 #include "VanK//Project/Project.h"
 #include "VanK/Renderer/Texture.h"
 
-namespace VanK {
+namespace VanK 
+{
 
     struct ThumbnailImage
     {
