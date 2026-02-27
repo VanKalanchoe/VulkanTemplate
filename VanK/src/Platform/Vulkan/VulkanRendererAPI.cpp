@@ -1192,16 +1192,6 @@ namespace VanK
 
     void VulkanRendererAPI::EndFrame()
     {
-        if (m_renderOption == VanK_Render_ImGui)
-        {
-            ImGui::EndFrame();
-            if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
-            {
-                ImGui::UpdatePlatformWindows();
-                ImGui::RenderPlatformWindowsDefault();
-            }
-        }
-
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
         const vk::SubmitInfo submitInfo
@@ -1939,6 +1929,12 @@ namespace VanK
         ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
 
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
+        
+        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+        }
     }
     
     void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing)
@@ -3125,7 +3121,7 @@ namespace VanK
                                                                 bool vsync)
     {
         if (vsync)
-            return vk::PresentModeKHR::eFifo; // guaranteed available
+            return vk::PresentModeKHR::eFifo; // guaranteed available // swapping mail and immeadiate vsync works but idk if good idea or not i feel like no seems driver decides stops me
 
         if (std::ranges::any_of(availablePresentModes,
                                 [](auto mode) { return mode == vk::PresentModeKHR::eMailbox; }))

@@ -1920,32 +1920,6 @@ namespace VanK
         m_RaytracingPipeline = RenderCommand::createRayTracingPipeline(m_RaytracingPipelineSpecification);
         RegisterPipelineForShaderWatcher("PathTracer", "PathTracer.slang", nullptr, nullptr, &m_RaytracingPipelineSpecification, &m_RaytracingPipeline, VanKRaytracing);
 
-        m_RaytracingPipelineSpecifications = raytracingPipelineSpecification;
-        m_RaytracingPipelineSpecifications.ShaderStageCreateInfo.VanKShader = raytracingbasic;
-        
-        // Define the groups to replicate your manual logic perfectly
-        std::vector<VanKRayTracingGroup> newGroup =
-        {
-            // Group 0: Raygen (Raygen #0)
-            { .type = VanKRayTracingGroupType::General, .raygenShader = 0 },
-    
-            // Group 1: Primary Miss (Miss #0)
-            { .type = VanKRayTracingGroupType::General, .missShader = 0 },
-    
-            // Group 3: Primary Hit (CHIT #0 + AHIT #0)
-            { 
-                .type = VanKRayTracingGroupType::TrianglesHitGroup, 
-                .closestHitShader = 0, 
-                .anyHitShader = 0 
-            },
-        };
-
-        
-        m_RaytracingPipelineSpecifications.groups = newGroup;
-        m_RaytracingPipelines = RenderCommand::createRayTracingPipeline(m_RaytracingPipelineSpecifications);
-        RegisterPipelineForShaderWatcher("raytracingbasic", "raytracingbasic.slang", nullptr, nullptr, &m_RaytracingPipelineSpecifications, &m_RaytracingPipelines, VanKRaytracing);
-
-        
         WatchShaderFiles(); // has to be last after pipeline creation
 
         //sampler
