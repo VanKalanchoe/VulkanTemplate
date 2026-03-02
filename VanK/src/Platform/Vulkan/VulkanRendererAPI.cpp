@@ -69,7 +69,7 @@ namespace VanK
         device.waitIdle();
         /*DestroyAllPipelines();// todo idk where to put this will see*/
         cleanup();
-        
+
         // profiler
         VulkanProfilerAPI::shutdownVKProfilerAPI();
     }
@@ -96,7 +96,7 @@ namespace VanK
         //statistics not important
         createQueryPool();
         createQueryBuffer();
-        
+
         // profiler
         VulkanProfilerAPI::initVKProfilerAPI(physicalDevice, device, queue, commandBuffers[0]);
     }
@@ -416,7 +416,7 @@ namespace VanK
         queue = vk::raii::Queue(device, queueIndex, 0);
         DBG_VK_NAME(queue);
     }
-    
+
     void VulkanRendererAPI::createSwapChain()
     {
         auto surfaceCapabilities = physicalDevice.getSurfaceCapabilitiesKHR(*surface);
@@ -858,7 +858,7 @@ namespace VanK
         return Wrap(rawHandle);
     }
 
-    
+
     /*utils::Buffer m_sbtBuffer;*/
     /*std::vector<uint8_t> m_shaderHandles;
     //only regionms need to be stored ? 
@@ -869,11 +869,12 @@ namespace VanK
 
     /*SBTGenerator generatorss;*/
     // Creating the SBT
-    void VulkanRendererAPI::createShaderBindingTable(const vk::RayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline, SBTGenerator& sbtGenerator, utils::Buffer& sbtBuffer, const vk::PhysicalDeviceRayTracingPipelinePropertiesKHR& rtProps)
+    void VulkanRendererAPI::createShaderBindingTable(const vk::RayTracingPipelineCreateInfoKHR& rtPipelineInfo, vk::raii::Pipeline& rtPipeline, SBTGenerator& sbtGenerator, utils::Buffer& sbtBuffer,
+                                                     const vk::PhysicalDeviceRayTracingPipelinePropertiesKHR& rtProps)
     {
         // Calculate required SBT buffer size
         size_t bufferSize = sbtGenerator.calculateSBTBufferSize(rtPipeline, rtPipelineInfo);
-        
+
         // Create SBT buffer using the size from above
         sbtBuffer = m_allocator.createBuffer
         (
@@ -884,19 +885,19 @@ namespace VanK
             sbtGenerator.getBufferAlignment()
         );
         DBG_VK_NAME(sbtBuffer.buffer);
-        
+
         // Populate the SBT buffer with shader handles and data using the CPU-mapped memory pointer
         sbtGenerator.populateSBTBuffer(sbtBuffer.address, bufferSize, sbtBuffer.mapping);
-       
+
         LOGI("Shader binding table created and populated \n");
     }
-    
+
     vk::RayTracingShaderGroupTypeKHR convertGroupTypeToVk(VanKRayTracingGroupType type)
     {
         switch (type)
         {
         case VanKRayTracingGroupType::General: return vk::RayTracingShaderGroupTypeKHR::eGeneral;
-        case VanKRayTracingGroupType::TrianglesHitGroup: return vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup; 
+        case VanKRayTracingGroupType::TrianglesHitGroup: return vk::RayTracingShaderGroupTypeKHR::eTrianglesHitGroup;
         case VanKRayTracingGroupType::ProceduralHitGroup: return vk::RayTracingShaderGroupTypeKHR::eProceduralHitGroup;
         default:
             VK_CORE_ASSERT(false, "Invalid RayTracingGroupType");
@@ -911,24 +912,25 @@ namespace VanK
         // maybe a if statement if rayquery not needed those 2
         utils::Buffer tempSbtBuffer;
         SBTGenerator tempGenerator;
-        
+
         auto vkShader = dynamic_cast<VulkanShader*>(raytracingPipelineSpecification.ShaderStageCreateInfo.VanKShader);
-        
+
         std::vector<vk::PipelineShaderStageCreateInfo> shaderStages;
         std::vector<std::string> entryNames;
-        
+
         // We need to store the metadata temporarily to build the stages in a second pass
-        struct TempStageInfo {
+        struct TempStageInfo
+        {
             vk::ShaderStageFlagBits bit;
             vk::ShaderModule module;
             uint32_t localIndex;
         };
         std::vector<TempStageInfo> collectedStages;
-        
+
         // This table maps [ShaderStageBit][LocalIndex] -> Index in shaderStages vector
         // Example: stageLookup[vk::ShaderStageFlagBits::eMissKHR][1] = 3;
         std::map<vk::ShaderStageFlagBits, std::vector<uint32_t>> stageLookup;
-        
+
         // 1. Automatically collect all stages from the shader object
         std::vector<vk::ShaderStageFlagBits> stageTypes = {
             vk::ShaderStageFlagBits::eRaygenKHR,
@@ -937,23 +939,26 @@ namespace VanK
             vk::ShaderStageFlagBits::eAnyHitKHR,
             vk::ShaderStageFlagBits::eIntersectionKHR
         };
-        
+
         // --- PASS 1: Collect Names and Modules ---
-        for (auto stageBit : stageTypes) {
-            for (uint32_t i = 0; vkShader->HasStage(stageBit, i); ++i) {
+        for (auto stageBit : stageTypes)
+        {
+            for (uint32_t i = 0; vkShader->HasStage(stageBit, i); ++i)
+            {
                 entryNames.push_back(vkShader->GetShaderEntryName(stageBit, i));
                 collectedStages.push_back({
-                    stageBit, 
-                    vkShader->GetShaderModule(stageBit, i), 
+                    stageBit,
+                    vkShader->GetShaderModule(stageBit, i),
                     i
                 });
             }
         }
-        
+
         // --- PASS 2: Build the Actual Vulkan Structs ---
         // Now that entryNames has finished growing, its memory addresses are stable.
         shaderStages.reserve(collectedStages.size());
-        for (size_t i = 0; i < collectedStages.size(); ++i) {
+        for (size_t i = 0; i < collectedStages.size(); ++i)
+        {
             const auto& info = collectedStages[i];
             uint32_t pipelineIndex = static_cast<uint32_t>(shaderStages.size());
 
@@ -970,34 +975,39 @@ namespace VanK
         std::vector<vk::RayTracingShaderGroupCreateInfoKHR> shader_groups;
         shader_groups.reserve(raytracingPipelineSpecification.groups.size());
 
-        for (const auto& groupSpec : raytracingPipelineSpecification.groups) {
+        for (const auto& groupSpec : raytracingPipelineSpecification.groups)
+        {
             vk::RayTracingShaderGroupCreateInfoKHR vkGroup{};
             vkGroup.type = convertGroupTypeToVk(groupSpec.type);
-    
+
             // Initialize all to Unused
-            vkGroup.generalShader      = VK_SHADER_UNUSED_KHR;
-            vkGroup.closestHitShader   = VK_SHADER_UNUSED_KHR;
-            vkGroup.anyHitShader       = VK_SHADER_UNUSED_KHR;
+            vkGroup.generalShader = VK_SHADER_UNUSED_KHR;
+            vkGroup.closestHitShader = VK_SHADER_UNUSED_KHR;
+            vkGroup.anyHitShader = VK_SHADER_UNUSED_KHR;
             vkGroup.intersectionShader = VK_SHADER_UNUSED_KHR;
 
-            if (groupSpec.type == VanKRayTracingGroupType::General) {
+            if (groupSpec.type == VanKRayTracingGroupType::General)
+            {
                 // Handle Raygen specifically
-                if (groupSpec.raygenShader != VANK_SHADER_UNUSED) {
+                if (groupSpec.raygenShader != VANK_SHADER_UNUSED)
+                {
                     vkGroup.generalShader = stageLookup[vk::ShaderStageFlagBits::eRaygenKHR][groupSpec.raygenShader];
                 }
                 // Handle Miss specifically
-                else if (groupSpec.missShader != VANK_SHADER_UNUSED) {
+                else if (groupSpec.missShader != VANK_SHADER_UNUSED)
+                {
                     vkGroup.generalShader = stageLookup[vk::ShaderStageFlagBits::eMissKHR][groupSpec.missShader];
                 }
-            } 
-            else {
+            }
+            else
+            {
                 // Handle Hit Groups
                 if (groupSpec.closestHitShader != VANK_SHADER_UNUSED)
                     vkGroup.closestHitShader = stageLookup[vk::ShaderStageFlagBits::eClosestHitKHR][groupSpec.closestHitShader];
-        
+
                 if (groupSpec.anyHitShader != VANK_SHADER_UNUSED)
                     vkGroup.anyHitShader = stageLookup[vk::ShaderStageFlagBits::eAnyHitKHR][groupSpec.anyHitShader];
-            
+
                 if (groupSpec.intersectionShader != VANK_SHADER_UNUSED)
                     vkGroup.intersectionShader = stageLookup[vk::ShaderStageFlagBits::eIntersectionKHR][groupSpec.intersectionShader];
             }
@@ -1063,11 +1073,11 @@ namespace VanK
         DBG_VK_NAME(tempPipeline);
 
         tempGenerator.init(device, rtProps);
-        
+
         createShaderBindingTable(rtPipelineInfo, tempPipeline, tempGenerator, tempSbtBuffer, rtProps);
-        
+
         //deinit somehwere and store in pipeline resouce buffer and generator
-        
+
 
         PipelineResource resource;
         resource.pipeline = std::move(tempPipeline);
@@ -1108,13 +1118,13 @@ namespace VanK
         commandBuffers[frameIndex].reset();
 
         commandBuffers[frameIndex].begin({});
-        
+
         DBG_CMD_BEGIN(commandBuffers[frameIndex], "Main CommandBuffer" + std::to_string(frameIndex));
 
         //statistics
         commandBuffers[frameIndex].resetQueryPool(queryPoolStatistics, 0, 1);
         commandBuffers[frameIndex].beginQuery(queryPoolStatistics, 0);
-       
+
         auto cmd = new VanKCommandBuffer_T{&commandBuffers[frameIndex]};
 
         //timestamp
@@ -1135,9 +1145,9 @@ namespace VanK
         StopTimeStamp(cmd, timestamp);
 
         DBG_CMD_END(Unwrap(cmd));
-        
+
         VulkanProfilerAPI::ProfilerVkCollect(Unwrap(cmd));
-        
+
         Unwrap(cmd).end();
     }
 
@@ -1186,12 +1196,22 @@ namespace VanK
         currentResult = result;
 
         imageIndex = acquiredImageIndex;
-        
+
         DBG_QUEUE_BEGIN(queue, "Frame Submit");
     }
 
     void VulkanRendererAPI::EndFrame()
     {
+        if (m_renderOption == VanK_Render_ImGui)
+        {
+            ImGui::EndFrame();
+            if ((ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0)
+            {
+                ImGui::UpdatePlatformWindows();
+                ImGui::RenderPlatformWindowsDefault();
+            }
+        }
+
         vk::PipelineStageFlags waitDestinationStageMask(vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
         const vk::SubmitInfo submitInfo
@@ -1240,7 +1260,7 @@ namespace VanK
                 throw;
             }
         }
-        
+
         DBG_QUEUE_END(queue);
 
         frameIndex = (frameIndex + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -1519,6 +1539,10 @@ namespace VanK
     vk::raii::DeviceMemory tlasScratchMemory = nullptr;
     vk::raii::AccelerationStructureKHR tlas = nullptr;
 
+    /*vk::raii::Buffer cubeBlasBuffer = nullptr;
+    vk::raii::DeviceMemory cubeBlasMemory = nullptr;
+    vk::raii::AccelerationStructureKHR cubeBlasHandle = nullptr;*/
+
     /*
     struct InstanceLUT
     {
@@ -1595,7 +1619,8 @@ namespace VanK
         VanKDepthStencilTargetInfo depth_stencil_target_info = {}
     )
     {
-        /*DBG_VK_SCOPE*/(Unwrap(cmd)); // <-- Helps to debug in NSight
+        /*DBG_VK_SCOPE*/
+        (Unwrap(cmd)); // <-- Helps to debug in NSight
 
         // Depth attachment
         vk::RenderingAttachmentInfo depthAttachment{};
@@ -1912,9 +1937,9 @@ namespace VanK
     void VulkanRendererAPI::TraceRays(VanKCommandBuffer cmd, VanKPipeLine rtPipeline, uint32_t width, uint32_t height)
     {
         DBG_CMD_INSERT(Unwrap(cmd), "traceray");
-        
+
         auto& pipeRes = m_PipelineResources[Unwrap(rtPipeline)];
-        
+
         const SBTGenerator::Regions& regions = pipeRes.sbtGenerator.getSBTRegions();
         Unwrap(cmd).traceRaysKHR(regions.raygen, regions.miss, regions.hit, regions.callable, width, height, 1);
     }
@@ -1929,14 +1954,8 @@ namespace VanK
         ImGui::Render(); // This is creating the data to draw the UI (not on GPU yet)
 
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), *Unwrap(cmd));
-        
-        if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-        {
-            ImGui::UpdatePlatformWindows();
-            ImGui::RenderPlatformWindowsDefault();
-        }
     }
-    
+
     void VulkanRendererAPI::BindFragmentSamplers(VanKCommandBuffer cmd, uint32_t firstSlot, const TextureSamplerBinding* samplers, uint32_t num_bindings, bool isRayTracing)
     {
         //layout could be raytracing no or should BindRayTracing handle textures to ?
@@ -1962,7 +1981,9 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInfo =
         {
-            .stageFlags = (isRayTracing) ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR : vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
+            .stageFlags = (isRayTracing)
+                              ? vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR
+                              : vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT,
             .layout = (isRayTracing) ? m_currentRaytracingPipelineLayout : m_currentGraphicPipelineLayout,
             .firstSet = 0,
             .descriptorSetCount = 1,
@@ -2090,7 +2111,9 @@ namespace VanK
         }
         vk::BindDescriptorSetsInfoKHR bindDescriptorSetsInforay =
         {
-            .stageFlags = (useRayQuery) ? vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT : vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
+            .stageFlags = (useRayQuery)
+                              ? vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT
+                              : vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eMissKHR,
             .layout = (useRayQuery) ? m_currentGraphicPipelineLayout : m_currentRaytracingPipelineLayout,
             .firstSet = 2,
             .descriptorSetCount = 1,
@@ -2277,22 +2300,17 @@ namespace VanK
         buffer.bindMemory(bufferMemory, 0);
     }
 
-    void VulkanRendererAPI::createAccelerationStructures
+    void VulkanRendererAPI::createBottomLevelAS
     (
         const StorageBuffer& vertexBuffer,
         const StorageBuffer& indexBuffer,
         std::vector<shaderio::MeshletPrimitive>& primitives,
         std::vector<shaderio::Material>& materials,
-        std::vector<shaderio::InstanceLUT>& instanceLUTs,
-        uint32_t renderTargetImageIndex
+        std::vector<shaderio::InstanceLUT>& instanceLUTs
     )
     {
-#if LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
-        /*vk::BufferDeviceAddressInfo vai{.buffer = *vertexBuffer};*/
         vk::DeviceAddress vertexAddr = vertexBuffer.GetBufferAddress();
-        /*vk::BufferDeviceAddressInfo iai{.buffer = *indexBuffer};*/
         vk::DeviceAddress indexAddr = indexBuffer.GetBufferAddress();
-        std::cout << std::dec << "vertaddr: " << vertexAddr << " indexaddr: " << indexAddr << std::endl;
 
         instances.reserve(primitives.size());
         blasBuffers.reserve(primitives.size());
@@ -2300,7 +2318,8 @@ namespace VanK
         blasHandles.reserve(primitives.size());
 
         vk::TransformMatrixKHR identity{};
-        identity.matrix = std::array<std::array<float, 4>, 3>{
+        identity.matrix = std::array<std::array<float, 4>, 3>
+        {
             {
                 std::array<float, 4>{1.f, 0.f, 0.f, 0.f},
                 std::array<float, 4>{0.f, 1.f, 0.f, 0.f},
@@ -2315,7 +2334,8 @@ namespace VanK
             const auto& mat = materials[submesh.materialIndex];
 
             // Prepare the geometry data
-            auto trianglesData = vk::AccelerationStructureGeometryTrianglesDataKHR{
+            auto trianglesData = vk::AccelerationStructureGeometryTrianglesDataKHR
+            {
                 .vertexFormat = vk::Format::eR32G32B32Sfloat,
                 .vertexData = vertexAddr,
                 .vertexStride = sizeof(shaderio::Vertex),
@@ -2326,17 +2346,17 @@ namespace VanK
 
             vk::AccelerationStructureGeometryDataKHR geometryData(trianglesData);
 
-            vk::AccelerationStructureGeometryKHR blasGeometry{
+            vk::AccelerationStructureGeometryKHR blasGeometry
+            {
                 .geometryType = vk::GeometryTypeKHR::eTriangles,
                 .geometry = geometryData,
                 /*.flags = vk::GeometryFlagBitsKHR::eOpaque*/
             };
-#	if LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
-            // TASK07
+            
             blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation : vk::GeometryFlagBitsKHR::eOpaque;
-#	endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_OPAQUE_FLAG
 
-            vk::AccelerationStructureBuildGeometryInfoKHR blasBuildGeometryInfo{
+            vk::AccelerationStructureBuildGeometryInfoKHR blasBuildGeometryInfo
+            {
                 .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
                 .mode = vk::BuildAccelerationStructureModeKHR::eBuild,
                 .geometryCount = 1,
@@ -2380,7 +2400,8 @@ namespace VanK
                          blasBuffers[i], blasMemories[i]);
 
             // Create and store the BLAS handle
-            vk::AccelerationStructureCreateInfoKHR blasCreateInfo{
+            vk::AccelerationStructureCreateInfoKHR blasCreateInfo
+            {
                 .buffer = blasBuffers[i],
                 .offset = 0,
                 .size = blasBuildSizes.accelerationStructureSize,
@@ -2393,7 +2414,8 @@ namespace VanK
             blasBuildGeometryInfo.dstAccelerationStructure = blasHandles[i];
 
             // Prepare the build range for the BLAS
-            vk::AccelerationStructureBuildRangeInfoKHR blasRangeInfo{
+            vk::AccelerationStructureBuildRangeInfoKHR blasRangeInfo
+            {
                 .primitiveCount = primitiveCount,
                 .primitiveOffset = 0,
                 .firstVertex = submesh.firstVertex,
@@ -2406,12 +2428,14 @@ namespace VanK
             utils::endSingleTimeCommands(*cmd, queue);
 
             // TASK03: Create a BLAS instance for the TLAS
-            vk::AccelerationStructureDeviceAddressInfoKHR addrInfo{
+            vk::AccelerationStructureDeviceAddressInfoKHR addrInfo
+            {
                 .accelerationStructure = *blasHandles[i]
             };
             vk::DeviceAddress blasDeviceAddr = device.getAccelerationStructureAddressKHR(addrInfo);
 
-            vk::AccelerationStructureInstanceKHR instance{
+            vk::AccelerationStructureInstanceKHR instance
+            {
                 .transform = identity,
                 .mask = 0xFF,
                 .accelerationStructureReference = blasDeviceAddr
@@ -2427,6 +2451,146 @@ namespace VanK
 #	endif        // LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
         }
 
+        // AABB
+        // ===============================
+        // BUILD CUBE AABB BLAS
+        // ===============================
+        shaderio::Aabb cube{};
+        cube.minimum = glm::vec3(-0.5f, -0.5f, -0.5f);
+        cube.maximum = glm::vec3(0.5f, 0.5f, 0.5f);
+        // 1) Create AABB buffer
+        vk::raii::Buffer aabbBuffer = nullptr;
+        vk::raii::DeviceMemory aabbMemory = nullptr;
+
+        createBuffer(sizeof(shaderio::Aabb),
+                     vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                     vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+                     vk::MemoryPropertyFlagBits::eHostVisible |
+                     vk::MemoryPropertyFlagBits::eHostCoherent,
+                     aabbBuffer, aabbMemory);
+
+        // upload cube
+        void* mapped = aabbMemory.mapMemory(0, sizeof(shaderio::Aabb));
+        memcpy(mapped, &cube, sizeof(shaderio::Aabb));
+        aabbMemory.unmapMemory();
+
+        vk::BufferDeviceAddressInfo aabbAddrInfo{.buffer = *aabbBuffer};
+        vk::DeviceAddress aabbAddr = device.getBufferAddressKHR(aabbAddrInfo);
+
+
+        // 2) Describe AABB geometry
+        vk::AccelerationStructureGeometryAabbsDataKHR aabbData
+        {
+            .data = aabbAddr,
+            .stride = sizeof(shaderio::Aabb)
+        };
+
+        vk::AccelerationStructureGeometryDataKHR cubeGeometryData(aabbData);
+
+        vk::AccelerationStructureGeometryKHR cubeGeometry
+        {
+            .geometryType = vk::GeometryTypeKHR::eAabbs,
+            .geometry = cubeGeometryData,
+            .flags = vk::GeometryFlagBitsKHR::eOpaque
+        };
+
+
+        // 3) Build info
+        vk::AccelerationStructureBuildGeometryInfoKHR cubeBuildInfo
+        {
+            .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
+            .mode = vk::BuildAccelerationStructureModeKHR::eBuild,
+            .geometryCount = 1,
+            .pGeometries = &cubeGeometry
+        };
+
+        uint32_t cubePrimitiveCount = 1;
+
+
+        // 4) Query size
+        auto cubeSizes =
+            device.getAccelerationStructureBuildSizesKHR(
+                vk::AccelerationStructureBuildTypeKHR::eDevice,
+                cubeBuildInfo,
+                {cubePrimitiveCount});
+
+
+        // 5) Create scratch buffer
+        vk::raii::Buffer cubeScratchBuffer = nullptr;
+        vk::raii::DeviceMemory cubeScratchMemory = nullptr;
+
+        createBuffer(cubeSizes.buildScratchSize,
+                     vk::BufferUsageFlagBits::eStorageBuffer |
+                     vk::BufferUsageFlagBits::eShaderDeviceAddress,
+                     vk::MemoryPropertyFlagBits::eDeviceLocal,
+                     cubeScratchBuffer, cubeScratchMemory);
+
+        vk::BufferDeviceAddressInfo scratchInfo{.buffer = *cubeScratchBuffer};
+        cubeBuildInfo.scratchData.deviceAddress =
+            device.getBufferAddressKHR(scratchInfo);
+
+
+        // 6) Create BLAS buffer (CRASH-PROOF VERSION)
+        vk::raii::Buffer cubeBlasBuffer = nullptr;
+        vk::raii::DeviceMemory cubeBlasMemory = nullptr;
+
+        createBuffer(cubeSizes.accelerationStructureSize,
+                     vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                     vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                     vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+                     vk::MemoryPropertyFlagBits::eDeviceLocal,
+                     cubeBlasBuffer, cubeBlasMemory);
+
+        // Now that the buffer is created, move it into the vector
+        // This works even if the triangle loop was empty!
+        blasBuffers.emplace_back(std::move(cubeBlasBuffer));
+        blasMemories.emplace_back(std::move(cubeBlasMemory));
+
+        // 7) Create BLAS handle
+        vk::AccelerationStructureCreateInfoKHR cubeCreateInfo
+        {
+            .buffer = *blasBuffers.back(), // Now safe because we just emplace_backed
+            .offset = 0,
+            .size = cubeSizes.accelerationStructureSize,
+            .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
+        };
+
+        blasHandles.emplace_back(device.createAccelerationStructureKHR(cubeCreateInfo));
+        cubeBuildInfo.dstAccelerationStructure = *blasHandles.back();
+
+        // 8) Build it
+        vk::AccelerationStructureBuildRangeInfoKHR cubeRange
+        {
+            .primitiveCount = 1
+        };
+
+        auto cmdCube = utils::beginSingleTimeCommands(device, commandPool);
+        cmdCube->buildAccelerationStructuresKHR({cubeBuildInfo}, {&cubeRange});
+        utils::endSingleTimeCommands(*cmdCube, queue);
+
+        // 9) Create TLAS instance
+        vk::AccelerationStructureDeviceAddressInfoKHR addrInfo
+        {
+            .accelerationStructure = *blasHandles.back()
+        };
+
+        vk::DeviceAddress cubeAddr = device.getAccelerationStructureAddressKHR(addrInfo);
+
+        vk::AccelerationStructureInstanceKHR cubeInstance
+        {
+            .transform = identity,
+            .mask = 0xFF,
+            // Keep this at 1 to use your pink shader (closesthitMain2)
+            .instanceShaderBindingTableRecordOffset = 1,
+            .accelerationStructureReference = cubeAddr
+        };
+
+        instances.push_back(cubeInstance);
+        //cube aaab
+    }
+
+    void VulkanRendererAPI::createTopLevelAS()
+    {
         // TASK03: Prepare the instance data buffer
         vk::DeviceSize instBufferSize = sizeof(instances[0]) * instances.size();
         createBuffer(instBufferSize,
@@ -2445,19 +2609,22 @@ namespace VanK
         vk::DeviceAddress instanceAddr = device.getBufferAddressKHR(instanceAddrInfo);
 
         // Prepare the geometry (instance) data
-        auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR{
+        auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR
+        {
             .arrayOfPointers = vk::False,
             .data = instanceAddr
         };
 
         vk::AccelerationStructureGeometryDataKHR geometryData(instancesData);
 
-        vk::AccelerationStructureGeometryKHR tlasGeometry{
+        vk::AccelerationStructureGeometryKHR tlasGeometry
+        {
             .geometryType = vk::GeometryTypeKHR::eInstances,
             .geometry = geometryData
         };
 
-        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo{
+        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo
+        {
             .type = vk::AccelerationStructureTypeKHR::eTopLevel,
             .mode = vk::BuildAccelerationStructureModeKHR::eBuild,
             .geometryCount = 1,
@@ -2501,7 +2668,8 @@ namespace VanK
             tlasBuffer, tlasMemory);
 
         // Create and store the TLAS handle
-        vk::AccelerationStructureCreateInfoKHR tlasCreateInfo{
+        vk::AccelerationStructureCreateInfoKHR tlasCreateInfo
+        {
             .buffer = tlasBuffer,
             .offset = 0,
             .size = tlasBuildSizes.accelerationStructureSize,
@@ -2514,7 +2682,8 @@ namespace VanK
         tlasBuildGeometryInfo.dstAccelerationStructure = tlas;
 
         // Prepare the build range for the TLAS
-        vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo{
+        vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo
+        {
             .primitiveCount = primitiveCount,
             .primitiveOffset = 0,
             .firstVertex = 0,
@@ -2527,7 +2696,6 @@ namespace VanK
         cmd->buildAccelerationStructuresKHR({tlasBuildGeometryInfo}, {&tlasRangeInfo});
 
         utils::endSingleTimeCommands(*cmd, queue);
-#endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_BUILD_AND_BIND
     }
 
     void VulkanRendererAPI::copyBuffer(vk::raii::Buffer& srcBuffer, vk::raii::Buffer& dstBuffer, vk::DeviceSize size)
@@ -2541,12 +2709,12 @@ namespace VanK
         queue.waitIdle();
     }
 
-#if LAB_TASK_LEVEL >= LAB_TASK_AS_ANIMATION
     void VulkanRendererAPI::updateTopLevelAS(const glm::mat4& model)
     {
         vk::TransformMatrixKHR tm{};
         auto& M = model;
-        tm.matrix = std::array<std::array<float, 4>, 3>{
+        tm.matrix = std::array<std::array<float, 4>, 3>
+        {
             {
                 std::array<float, 4>{M[0][0], M[1][0], M[2][0], M[3][0]},
                 std::array<float, 4>{M[0][1], M[1][1], M[2][1], M[3][1]},
@@ -2577,20 +2745,23 @@ namespace VanK
         vk::DeviceAddress instanceAddr = device.getBufferAddressKHR(instanceAddrInfo);
 
         // Prepare the geometry (instance) data
-        auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR{
+        auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR
+        {
             .arrayOfPointers = vk::False,
             .data = instanceAddr
         };
 
         vk::AccelerationStructureGeometryDataKHR geometryData(instancesData);
 
-        vk::AccelerationStructureGeometryKHR tlasGeometry{
+        vk::AccelerationStructureGeometryKHR tlasGeometry
+        {
             .geometryType = vk::GeometryTypeKHR::eInstances,
             .geometry = geometryData
         };
 
         // TASK06: Note the new parameters to re-build the TLAS in-place
-        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo{
+        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo
+        {
             .type = vk::AccelerationStructureTypeKHR::eTopLevel,
             .flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate,
             .mode = vk::BuildAccelerationStructureModeKHR::eUpdate,
@@ -2605,7 +2776,8 @@ namespace VanK
         tlasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
 
         // Prepare the build range for the TLAS
-        vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo{
+        vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo
+        {
             .primitiveCount = primitiveCount,
             .primitiveOffset = 0,
             .firstVertex = 0,
@@ -2655,7 +2827,6 @@ namespace VanK
 
         utils::endSingleTimeCommands(*cmd, queue);
     }
-#endif        // LAB_TASK_LEVEL >= LAB_TASK_AS_ANIMATION
 
     void VulkanRendererAPI::createDescriptorPool()
     {
@@ -2732,7 +2903,8 @@ namespace VanK
                         .binding = 0,
                         .descriptorType = vk::DescriptorType::eCombinedImageSampler,
                         .descriptorCount = numTextures,
-                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR
+                        .stageFlags = vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR |
+                        vk::ShaderStageFlagBits::eMissKHR
                     },
 
                     // This is if we would add another binding for the scene info, but instead we make another set, see below
@@ -2785,7 +2957,7 @@ namespace VanK
             {
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eUniformBuffer, 1,
                                                vk::ShaderStageFlagBits::eAllGraphics | vk::ShaderStageFlagBits::eCompute | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR
-                                               | vk::ShaderStageFlagBits::eAnyHitKHR| vk::ShaderStageFlagBits::eMissKHR, nullptr),
+                                               | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR, nullptr),
             };
 
             vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutInfo
@@ -2804,7 +2976,8 @@ namespace VanK
             {
                 //fragmnet for rayQuerys
                 vk::DescriptorSetLayoutBinding(0, vk::DescriptorType::eAccelerationStructureKHR, 1,
-                                               vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR,
+                                               vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR
+                                               | vk::ShaderStageFlagBits::eMissKHR,
                                                nullptr),
                 vk::DescriptorSetLayoutBinding(1, vk::DescriptorType::eStorageImage, 1, vk::ShaderStageFlagBits::eFragment | vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eCompute,
                                                nullptr),

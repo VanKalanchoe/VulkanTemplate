@@ -59,6 +59,10 @@ namespace VanK
 
     void Application::Run(AppState& applicationState)
     {
+        /*static Uint64 lastCounter = SDL_GetPerformanceCounter();
+        static float fpsTimer = 0.0f;
+        static int frameCount = 0;*/
+        
         if (Renderer::isWindowMinimized())
             return;
         
@@ -84,6 +88,26 @@ namespace VanK
         }
         
         Renderer::EndSubmit();
+        
+        /*Uint64 currentCounter = SDL_GetPerformanceCounter();
+        Uint64 frequency = SDL_GetPerformanceFrequency();
+
+        float deltaTime = (float)(currentCounter - lastCounter) / (float)frequency;
+        lastCounter = currentCounter;
+
+        fpsTimer += deltaTime;
+        frameCount++;
+
+        if (fpsTimer >= 1.0f)
+        {
+            float fps = frameCount / fpsTimer;
+
+            std::string title = "My Engine - FPS: " + std::to_string((int)fps);
+            SDL_SetWindowTitle(m_Window->getWindowHandle(), title.c_str());
+
+            fpsTimer = 0.0f;
+            frameCount = 0;
+        }*/
     }
 
     void Application::RaiseEvent(Event& event)

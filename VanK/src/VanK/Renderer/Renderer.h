@@ -142,6 +142,9 @@ namespace VanK
         // Raytracing Pipelines
         inline static VanKPipeLine m_RaytracingPipeline = {};
         inline static VanKRaytracingPipelineSpecification m_RaytracingPipelineSpecification = {};
+        
+        inline static VanKPipeLine m_RaytracingVoxelPipeline = {};
+        inline static VanKRaytracingPipelineSpecification m_RaytracingVoxelPipelineSpecification = {};
     
     public:
         inline static bool isRaster = false;

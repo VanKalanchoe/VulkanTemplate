@@ -239,9 +239,15 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->InsertBarrier(cmd, id, last, desired);
         }
         
-        static void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs, uint32_t renderTargetImageIndex)
+        static void createBottomLevelAS(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials,
+                                 std::vector<shaderio::InstanceLUT>& instanceLUTs)
         {
-            if (s_RendererAPI) s_RendererAPI->createAccelerationStructures(vertexBuffer, indexBuffer, primitives, materials, instanceLUTs, renderTargetImageIndex);
+            if (s_RendererAPI) s_RendererAPI->createBottomLevelAS(vertexBuffer, indexBuffer, primitives, materials, instanceLUTs);
+        }
+        
+        static void createTopLevelAS()
+        {
+            if (s_RendererAPI) s_RendererAPI->createTopLevelAS();
         }
         
         static void updateTopLevelAS(const glm::mat4 &model)

@@ -606,7 +606,23 @@ namespace VanK
         using namespace glm;
 #include "shaderIO.h"
     }
+    
+    struct ModelHandle
+    {
+        uint64_t firstPrimitive;
+        uint64_t primitiveCount;
+    };
 
+    struct ModelPrimitive
+    {
+        uint64_t primitiveId;
+        uint32_t meshletCount;
+    };
+    struct RuntimeModel
+    {
+        ModelHandle handle;
+        std::vector<ModelPrimitive> primitives;
+    };
     class RendererAPI
     {
     public:
@@ -661,8 +677,10 @@ namespace VanK
         // RenderGraph
         virtual void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) = 0;
         // RenderGraph
-        virtual void createAccelerationStructures(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives,
-                                                  std::vector<shaderio::Material>& materials, std::vector<shaderio::InstanceLUT>& instanceLUTs, uint32_t renderTargetImageIndex) = 0;
+        virtual void createBottomLevelAS(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials,
+                                 std::vector<shaderio::InstanceLUT>& instanceLUTs) = 0;
+        virtual void createTopLevelAS() = 0;
+   
         virtual void updateTopLevelAS(const glm::mat4& model) = 0;
         virtual void waitForGraphicsQueueIdle() = 0;
         virtual void setEnableTimeStamp(bool temp) = 0;

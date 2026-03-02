@@ -63,6 +63,13 @@ struct Material
     float transmissionFactor; // 0 = opaque, 1 = full transparent
 };
 
+// AABB structure for acceleration structure
+struct Aabb
+{
+    vec3 minimum;
+    vec3 maximum;
+};
+
 struct Vertex
 {
     vec3 position;

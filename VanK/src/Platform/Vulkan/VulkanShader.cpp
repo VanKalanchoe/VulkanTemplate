@@ -46,7 +46,9 @@ namespace VanK
             else if (entryPoint == "raygenerationMain") stage = vk::ShaderStageFlagBits::eRaygenKHR;
             else if (entryPoint == "missMain") stage = vk::ShaderStageFlagBits::eMissKHR;
             else if (entryPoint == "missShadowMain") stage = vk::ShaderStageFlagBits::eMissKHR;
+            else if (entryPoint == "intersectionMain") stage = vk::ShaderStageFlagBits::eIntersectionKHR;
             else if (entryPoint == "closesthitMain") stage = vk::ShaderStageFlagBits::eClosestHitKHR;
+            else if (entryPoint == "closesthitMain2") stage = vk::ShaderStageFlagBits::eClosestHitKHR;
             else if (entryPoint == "anyhitMain") stage = vk::ShaderStageFlagBits::eAnyHitKHR;
             else if (entryPoint == "anyShadowHitMain") stage = vk::ShaderStageFlagBits::eAnyHitKHR;
             else continue;
@@ -80,7 +82,9 @@ namespace VanK
         if (entry == "raygenerationMain")         return vk::ShaderStageFlagBits::eRaygenKHR;
         if (entry == "missMain")         return vk::ShaderStageFlagBits::eMissKHR;
         if (entry == "missShadowMain")         return vk::ShaderStageFlagBits::eMissKHR;
+        if (entry == "intersectionMain")         return vk::ShaderStageFlagBits::eIntersectionKHR;
         if (entry == "closesthitMain")         return vk::ShaderStageFlagBits::eClosestHitKHR;
+        if (entry == "closesthitMain2")         return vk::ShaderStageFlagBits::eClosestHitKHR;
         if (entry == "anyhitMain")         return vk::ShaderStageFlagBits::eAnyHitKHR;
         if (entry == "anyShadowHitMain")         return vk::ShaderStageFlagBits::eAnyHitKHR;
         throw std::runtime_error("Unknown entry point: " + entry);
@@ -100,7 +104,9 @@ namespace VanK
             "raygenerationMain",
             "missMain",
             "missShadowMain",
+            "intersectionMain",
             "closesthitMain",
+            "closesthitMain2",
             "anyhitMain",
             "anyShadowHitMain"
         };

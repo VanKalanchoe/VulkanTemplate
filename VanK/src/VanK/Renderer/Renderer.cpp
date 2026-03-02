@@ -194,12 +194,7 @@ namespace VanK
     static std::vector<shaderio::Material> materials;
     static std::vector<shaderio::InstanceLUT> instanceLUTs;
 
-    struct ModelHandle
-    {
-        uint64_t firstPrimitive;
-        uint64_t primitiveCount;
-    };
-
+  
     struct meshTasksSubmitPushConstant
     {
         uint64_t meshTasksIndirectBufferAddress;
@@ -1467,17 +1462,9 @@ namespace VanK
         uint64_t lightsBuffer;
     };
 
-    struct ModelPrimitive
-    {
-        uint64_t primitiveId;
-        uint32_t meshletCount;
-    };
+   
 
-    struct RuntimeModel
-    {
-        ModelHandle handle;
-        std::vector<ModelPrimitive> primitives;
-    };
+    
 
     RuntimeModel BuildRuntimeModel(const ModelHandle& model)
     {
@@ -1498,94 +1485,50 @@ namespace VanK
         return rm;
     }
 
-    void SubmitModel(
+    void SubmitModel
+    (
         const RuntimeModel& model,
         const glm::mat4& transform)
     {
         for (const auto& prim : model.primitives)
         {
-            meshDraws.emplace_back(MeshDraw{
+            meshDraws.emplace_back(MeshDraw
+                {
                 transform,
                 glm::transpose(glm::inverse(glm::mat3(transform))),
                 prim.primitiveId
             });
 
-            meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{
+            meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand
+                {
                 (prim.meshletCount + 63) / 64,
-                1, 1
+                1,
+                    1
             });
         }
     }
 
-    void SubmitModelPrimitive(
+    void SubmitModelPrimitive
+    (
         const RuntimeModel& model,
         uint32_t primitiveIndex,
         const glm::mat4& transform)
     {
         const auto& prim = model.primitives[primitiveIndex];
 
-        meshDraws.emplace_back(MeshDraw{
+        meshDraws.emplace_back(MeshDraw
+            {
             transform,
             glm::transpose(glm::inverse(glm::mat3(transform))),
             prim.primitiveId
         });
 
-        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{
-            (prim.meshletCount + 63) / 64,
-            1, 1
-        });
-    }
-
-    static void SubmitModelDraw(const ModelHandle& model, const glm::mat4& transform)
-    {
-        struct PrimitiveDraw
-        {
-            uint64_t primitiveId;
-            uint32_t meshletCount;
-            bool transparent;
-        };
-
-        std::vector<PrimitiveDraw> primitiveDraws;
-
-        // First, collect all primitives and determine transparency
-        for (uint64_t i = 0; i < model.primitiveCount; ++i)
-        {
-            uint64_t primitiveId = model.firstPrimitive + i;
-            const auto& prim = geometry.primitives[primitiveId];
-
-            // Determine if the primitive is transparent by scanning its vertices
-            bool isTransparent = false;
-
-            // Compute range of vertices covered by this primitive
-            uint32_t vertexStart = UINT32_MAX;
-            uint32_t vertexCount = 0;
-
-            for (uint32_t m = 0; m < prim.meshletCount; ++m)
+        meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand
             {
-                const auto& meshlet = geometry.meshlets[prim.meshletOffset + m];
-                vertexStart = std::min(vertexStart, meshlet.vertexOffset);
-                vertexCount += meshlet.meshletVerticesCount;
-            }
-            std::cout << std::dec << "Color: " << materials[prim.materialIndex].diffuseFactor;
-
-            primitiveDraws.push_back({primitiveId, prim.meshletCount, isTransparent});
-        }
-
-        // Sort primitives: opaque first, transparent last
-        std::sort(primitiveDraws.begin(), primitiveDraws.end(),
-                  [](const PrimitiveDraw& a, const PrimitiveDraw& b)
-                  {
-                      return a.transparent < b.transparent; // false (opaque) comes first
-                  });
-
-        // Submit draws in sorted order
-        for (const auto& pd : primitiveDraws)
-        {
-            meshDraws.emplace_back(MeshDraw{transform, glm::transpose(glm::inverse(glm::mat3(transform))), pd.primitiveId});
-            meshTasks.emplace_back(VanKDrawMeshTasksIndirectCommand{
-                (pd.meshletCount + 64 - 1) / 64, 1, 1
-            });
-        }
+            (prim.meshletCount + 63) / 64,
+            1,
+            1
+        });
     }
 
     enum LightType
@@ -1672,6 +1615,7 @@ namespace VanK
         auto SkyBox = GetShaderLibrary().Load("SkyBox", "SkyBox.slang");
         auto raytracingbasic = GetShaderLibrary().Load("raytracingbasic", "raytracingbasic.slang");
         auto PathTracer = GetShaderLibrary().Load("PathTracer", "PathTracer.slang");
+        auto VoxelTracer = GetShaderLibrary().Load("VoxelTracer", "VoxelTracer.slang");
 
         // Pipeline Creation
         uint32_t useTexture = true;
@@ -1920,6 +1864,22 @@ namespace VanK
         m_RaytracingPipeline = RenderCommand::createRayTracingPipeline(m_RaytracingPipelineSpecification);
         RegisterPipelineForShaderWatcher("PathTracer", "PathTracer.slang", nullptr, nullptr, &m_RaytracingPipelineSpecification, &m_RaytracingPipeline, VanKRaytracing);
 
+        m_RaytracingVoxelPipelineSpecification = raytracingPipelineSpecification;
+        m_RaytracingVoxelPipelineSpecification.ShaderStageCreateInfo.VanKShader = VoxelTracer;
+        std::vector<VanKRayTracingGroup> VoxelGroups =
+        {
+            { .type = VanKRayTracingGroupType::General, .raygenShader = 0 },
+            
+            { .type = VanKRayTracingGroupType::General, .missShader = 0 },
+            
+            { .type = VanKRayTracingGroupType::TrianglesHitGroup, .closestHitShader = 0, .anyHitShader = VANK_SHADER_UNUSED, .intersectionShader = VANK_SHADER_UNUSED},
+            
+            { .type = VanKRayTracingGroupType::ProceduralHitGroup, .closestHitShader = 1, .anyHitShader = VANK_SHADER_UNUSED, .intersectionShader = 0 }
+        };
+        m_RaytracingVoxelPipelineSpecification.groups = VoxelGroups;
+        m_RaytracingVoxelPipeline = RenderCommand::createRayTracingPipeline(m_RaytracingVoxelPipelineSpecification);
+        RegisterPipelineForShaderWatcher("VoxelTracer", "VoxelTracer.slang", nullptr, nullptr, &m_RaytracingVoxelPipelineSpecification, &m_RaytracingVoxelPipeline, VanKRaytracing);
+        
         WatchShaderFiles(); // has to be last after pipeline creation
 
         //sampler
@@ -2272,9 +2232,11 @@ namespace VanK
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(vertexBuffer), geometry.vertices, 0, false);
 
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.indices, 0, false);
-            // note descriptor update for tlas and storageimage are inside here maybe move out once descriptor heap is implemented ashole
-            RenderCommand::createAccelerationStructures(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials,
-                                                        instanceLUTs, sceneImage->GetRenderImageIndex());
+
+            RenderCommand::createBottomLevelAS(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials,
+                                                        instanceLUTs);
+            
+            RenderCommand::createTopLevelAS();
 
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer), instanceLUTs, 0, false);
 
@@ -2297,7 +2259,7 @@ namespace VanK
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float>(currentTime - startTime).count();
 
-        glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f))/* * rotate(glm::mat4(1.0f), time * 0.1f * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/;
+        glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) * rotate(glm::mat4(1.0f), time * 0.1f * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
         SubmitModel(runtimePlant, transform);
         // has to be done after createAccelerationStructures is called once maybe add a check or so
         RenderCommand::updateTopLevelAS(transform);
@@ -2528,10 +2490,10 @@ namespace VanK
             };
             RayTrace.execute = []
             {
-                if (s_frameIndex >= s_maxAccumulationFrames)
-                    return;
+                /*if (s_frameIndex >= s_maxAccumulationFrames)
+                    return;*/
 
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingPipeline);
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingVoxelPipeline);
 
                 RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, true);
                 //instead of cuurently layouts i could use the layout direclty with m_PipelineResources inside vulkanrendererapi which jsut needs the pipeline to get the layout which is already exposed
@@ -2554,7 +2516,7 @@ namespace VanK
 
                 RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
 
-                RenderCommand::TraceRays(cmd, m_RaytracingPipeline, rayTracingImage->GetWidth(), rayTracingImage->GetHeight());
+                RenderCommand::TraceRays(cmd, m_RaytracingVoxelPipeline, rayTracingImage->GetWidth(), rayTracingImage->GetHeight());
             };
         }
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm
