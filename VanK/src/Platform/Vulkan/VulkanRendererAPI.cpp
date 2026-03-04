@@ -2491,6 +2491,17 @@ namespace VanK
         model.instanceCount = static_cast<uint32_t>(instances.size()) - model.firstInstanceIndex;
     }
     
+    void VulkanRendererAPI::clearAllTopLevelASInstances(std::vector<shaderio::InstanceLUT>& instanceLUTs)
+    {
+        instances.clear();
+        // You must also clear your LUT so shaders don't read garbage
+        instanceLUTs.clear(); 
+    
+        // Re-call createTopLevelAS() to build a "Dummy" TLAS
+        // so the renderer doesn't crash on an empty structure.
+        createTopLevelAS();
+    }
+    
     void VulkanRendererAPI::updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId)
     {
         vk::TransformMatrixKHR tm{};
