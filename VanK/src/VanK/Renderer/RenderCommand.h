@@ -249,6 +249,11 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->createInstanceASModel(model, modelTransform, globalPrimitives, instanceLUTs);
         }
         
+        static void clearAllTopLevelASInstances(std::vector<shaderio::InstanceLUT>& instanceLUTs)
+        {
+            if (s_RendererAPI) s_RendererAPI->clearAllTopLevelASInstances(instanceLUTs);
+        }
+        
         static void updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId = UINT64_MAX)
         {
             if (s_RendererAPI) s_RendererAPI->updateTopLevelASModel(model, transform, primitiveId);
