@@ -966,6 +966,9 @@ namespace VanK
         void EndComputePass(VanKComputePass* computePass) override;
         void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) override;
         void createBuffer(vk::DeviceSize size, vk::BufferUsageFlags usage, vk::MemoryPropertyFlags properties, vk::raii::Buffer& buffer, vk::raii::DeviceMemory& bufferMemory);
+        void createBottomLevelASModel(RuntimeModel& model, const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials) override;
+        void createInstanceASModel(RuntimeModel& model, const glm::mat4& modelTransform, const std::vector<shaderio::MeshletPrimitive>& globalPrimitives, std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
+        void updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId) override;
         void createBottomLevelAS(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials,
                                  std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
         void createTopLevelAS() override;

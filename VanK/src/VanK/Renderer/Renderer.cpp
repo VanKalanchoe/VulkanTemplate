@@ -1551,6 +1551,7 @@ namespace VanK
 
     std::vector<Lights> lights;
     RuntimeModel runtimePlant;
+    RuntimeModel runtimePlant2;
 
     void Renderer::CreateRenderTargets()
     {
@@ -1964,7 +1965,7 @@ namespace VanK
         /*ModelHandle damagedHelmet = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/damaged_helmet/DamagedHelmet.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/cornell_box/scene.gltf");*/
         /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Original.gltf");*/
-        /*ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Sphere.gltf");*/
+        ModelHandle cornellBox = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/CornellBox/CornellBox-Sphere.gltf");
         /*ModelHandle spheres = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/pbr_spheres/MetalRoughSpheres.gltf");*/
         /*ModelHandle plantOnTable = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/plantOnTable/Untitled.gltf");*/
         /*ModelHandle Cube = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/Cube/Cube.gltf");*/
@@ -1973,6 +1974,7 @@ namespace VanK
         ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/TransmissionOrderTest/TransmissionOrderTest.gltf");
         /*ModelHandle TransmissionOrderTest = LoadMeshModel("E:/dev/VulkanAdventure/vulkanhpptutorial/VulkanTemplate/assets/IORTestGrid/IORTestGrid.gltf");*/
         runtimePlant = BuildRuntimeModel(TransmissionOrderTest);
+        runtimePlant2 = BuildRuntimeModel(cornellBox);
         //SubmitModelDraw(plantOnTable, glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) /** glm::rotate(glm::mat4(1.0f), glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f))*/);
         /*materials.back().albedoTexture = rustedIron->GetTextureIndex();
         materials.back().metallicRoughnessTexture = rustedIronMetalRough->GetTextureIndex();
@@ -2233,8 +2235,15 @@ namespace VanK
 
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.indices, 0, false);
 
-            RenderCommand::createBottomLevelAS(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials,
-                                                        instanceLUTs);
+            /*RenderCommand::createBottomLevelAS(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials,
+                                                        instanceLUTs);*/
+            RenderCommand::createBottomLevelASModel(runtimePlant, *m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials);
+            RenderCommand::createBottomLevelASModel(runtimePlant2, *m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials);
+            glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+            RenderCommand::createInstanceASModel(runtimePlant, transform, geometry.primitives, instanceLUTs);
+            
+            glm::mat4 transform2 = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
+            RenderCommand::createInstanceASModel(runtimePlant2, transform2, geometry.primitives, instanceLUTs);
             
             RenderCommand::createTopLevelAS();
 
@@ -2260,9 +2269,9 @@ namespace VanK
         float time = std::chrono::duration<float>(currentTime - startTime).count();
 
         glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f)) * rotate(glm::mat4(1.0f), time * 0.1f * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        SubmitModel(runtimePlant, transform);
+        /*SubmitModel(runtimePlant, transform);*/
         // has to be done after createAccelerationStructures is called once maybe add a check or so
-        RenderCommand::updateTopLevelAS(transform);
+        /*RenderCommand::updateTopLevelASModel(runtimePlant, transform);*/
 
         m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(meshDrawBuffer), meshDraws, 0);
 

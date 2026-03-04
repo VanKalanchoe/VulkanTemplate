@@ -1515,19 +1515,9 @@ namespace VanK
             m_currentRaytracingPipelineLayout = layoutToBind;
     }
 
-#ifndef LAB_TASK_LEVEL
-#	define LAB_TASK_LEVEL 11
-#endif
-
-#define LAB_TASK_AS_BUILD_AND_BIND 4
-#define LAB_TASK_AS_ANIMATION 6
-#define LAB_TASK_AS_OPAQUE_FLAG 7
-#define LAB_TASK_INSTANCE_LUT 9
-#define LAB_TASK_REFLECTIONS 11
-
-    std::vector<vk::raii::Buffer> blasBuffers;
-    std::vector<vk::raii::DeviceMemory> blasMemories;
-    std::vector<vk::raii::AccelerationStructureKHR> blasHandles;
+    std::vector<std::optional<vk::raii::Buffer>> blasBuffers;
+    std::vector<std::optional<vk::raii::DeviceMemory>> blasMemories;
+    std::vector<std::optional<vk::raii::AccelerationStructureKHR>> blasHandles;
 
     std::vector<vk::AccelerationStructureInstanceKHR> instances;
     vk::raii::Buffer instanceBuffer = nullptr;
@@ -2299,6 +2289,339 @@ namespace VanK
         bufferMemory = vk::raii::DeviceMemory(device, allocInfo);
         buffer.bindMemory(bufferMemory, 0);
     }
+    
+    void VulkanRendererAPI::createBottomLevelASModel
+    (
+        RuntimeModel& model,
+        const StorageBuffer& vertexBuffer,
+        const StorageBuffer& indexBuffer,
+        std::vector<shaderio::MeshletPrimitive>& globalPrimitives,
+        std::vector<shaderio::Material>& materials
+    )
+    {
+        vk::DeviceAddress vertexAddr = vertexBuffer.GetBufferAddress();
+        vk::DeviceAddress indexAddr = indexBuffer.GetBufferAddress();
+        
+        if (blasHandles.size() < globalPrimitives.size()) {
+            blasHandles.resize(globalPrimitives.size()); // This works now!
+            blasBuffers.resize(globalPrimitives.size());
+            blasMemories.resize(globalPrimitives.size());
+        }
+
+        vk::TransformMatrixKHR identity{};
+        identity.matrix = std::array<std::array<float, 4>, 3>
+        {
+            {
+                std::array<float, 4>{1.f, 0.f, 0.f, 0.f},
+                std::array<float, 4>{0.f, 1.f, 0.f, 0.f},
+                std::array<float, 4>{0.f, 0.f, 1.f, 0.f}
+            }
+        };
+
+        // TASK02: Build a bottom level acceleration structure for each submesh
+        for (const auto& modelPrim : model.primitives)
+        {
+            // Get the global index from the model primitive
+            uint32_t i = modelPrim.primitiveId;
+            
+            if (blasHandles[i].has_value()) continue;
+            
+            const auto& submesh = globalPrimitives[i];
+            const auto& mat = materials[submesh.materialIndex];
+
+            // Prepare the geometry data
+            auto trianglesData = vk::AccelerationStructureGeometryTrianglesDataKHR
+            {
+                .vertexFormat = vk::Format::eR32G32B32Sfloat,
+                .vertexData = vertexAddr,
+                .vertexStride = sizeof(shaderio::Vertex),
+                .maxVertex = submesh.maxVertex,
+                .indexType = vk::IndexType::eUint32,
+                .indexData = indexAddr + submesh.indexOffset * sizeof(uint32_t)
+            };
+
+            vk::AccelerationStructureGeometryDataKHR geometryData(trianglesData);
+
+            vk::AccelerationStructureGeometryKHR blasGeometry
+            {
+                .geometryType = vk::GeometryTypeKHR::eTriangles,
+                .geometry = geometryData,
+                /*.flags = vk::GeometryFlagBitsKHR::eOpaque*/
+            };
+            
+            blasGeometry.flags = (mat.transparent) ? vk::GeometryFlagBitsKHR::eNoDuplicateAnyHitInvocation : vk::GeometryFlagBitsKHR::eOpaque;
+
+            vk::AccelerationStructureBuildGeometryInfoKHR blasBuildGeometryInfo
+            {
+                .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
+                .mode = vk::BuildAccelerationStructureModeKHR::eBuild,
+                .geometryCount = 1,
+                .pGeometries = &blasGeometry,
+            };
+
+            // Query the memory sizes that will be needed for this BLAS
+            auto primitiveCount = static_cast<uint32_t>(submesh.indexCount / 3);
+
+            vk::AccelerationStructureBuildSizesInfoKHR blasBuildSizes =
+                device.getAccelerationStructureBuildSizesKHR(
+                    vk::AccelerationStructureBuildTypeKHR::eDevice,
+                    blasBuildGeometryInfo,
+                    {primitiveCount});
+
+            // Create a scratch buffer for the BLAS, this will hold temporary data
+            // during the build process
+            vk::raii::Buffer scratchBuffer = nullptr;
+            vk::raii::DeviceMemory scratchMemory = nullptr;
+            createBuffer(blasBuildSizes.buildScratchSize,
+                         vk::BufferUsageFlagBits::eStorageBuffer |
+                         vk::BufferUsageFlagBits::eShaderDeviceAddress,
+                         vk::MemoryPropertyFlagBits::eDeviceLocal,
+                         scratchBuffer, scratchMemory);
+
+            // Save the scratch buffer address in the build info structure
+            vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *scratchBuffer};
+            vk::DeviceAddress scratchAddr = device.getBufferAddressKHR(scratchAddressInfo);
+            blasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
+
+            // Create a buffer for the BLAS itself now that we now the required size
+            vk::raii::Buffer blasBuffer = nullptr;
+            vk::raii::DeviceMemory blasMemory = nullptr;
+            createBuffer(blasBuildSizes.accelerationStructureSize,
+                         vk::BufferUsageFlagBits::eAccelerationStructureStorageKHR |
+                         vk::BufferUsageFlagBits::eShaderDeviceAddress |
+                         vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
+                         vk::MemoryPropertyFlagBits::eDeviceLocal,
+                         blasBuffer, blasMemory);
+            
+            blasBuffers[i].emplace(std::move(blasBuffer));
+            blasMemories[i].emplace(std::move(blasMemory));
+
+            // Create and store the BLAS handle
+            vk::AccelerationStructureCreateInfoKHR blasCreateInfo
+            {
+                .buffer = *blasBuffers[i].value(),
+                .offset = 0,
+                .size = blasBuildSizes.accelerationStructureSize,
+                .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
+            };
+
+            blasHandles[i].emplace(device.createAccelerationStructureKHR(blasCreateInfo));
+
+            // Save the BLAS handle in the build info structure
+            blasBuildGeometryInfo.dstAccelerationStructure = *blasHandles[i].value();
+
+            // Prepare the build range for the BLAS
+            vk::AccelerationStructureBuildRangeInfoKHR blasRangeInfo
+            {
+                .primitiveCount = primitiveCount,
+                .primitiveOffset = 0,
+                .firstVertex = submesh.firstVertex,
+                .transformOffset = 0
+            };
+
+            // Build the BLAS
+            auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+            cmd->buildAccelerationStructuresKHR({blasBuildGeometryInfo}, {&blasRangeInfo});
+            utils::endSingleTimeCommands(*cmd, queue);
+        }
+    }
+    
+    void VulkanRendererAPI::createInstanceASModel
+    (
+        RuntimeModel& model,
+        const glm::mat4& modelTransform,
+        const std::vector<shaderio::MeshletPrimitive>& globalPrimitives,
+        std::vector<shaderio::InstanceLUT>& instanceLUTs
+    )
+    {
+        vk::TransformMatrixKHR tm;
+        auto& M = modelTransform;
+        tm.matrix = std::array<std::array<float, 4>, 3>
+        {
+                {
+                    std::array<float, 4>{M[0][0], M[1][0], M[2][0], M[3][0]},
+                    std::array<float, 4>{M[0][1], M[1][1], M[2][1], M[3][1]},
+                    std::array<float, 4>{M[0][2], M[1][2], M[2][2], M[3][2]}
+                }
+        };
+        
+        model.firstInstanceIndex = static_cast<uint32_t>(instances.size());
+        
+        for (uint32_t j = 0; j < (uint32_t)model.primitives.size(); ++j)
+        {
+            uint32_t globalID = model.primitives[j].primitiveId;
+
+            // Ensure the BLAS exists before trying to instance it
+            if (globalID >= blasHandles.size() || !blasHandles[globalID].has_value()) 
+            {
+                // Error log: Attempted to instance a model that hasn't been built yet
+                continue;
+            }
+
+            vk::AccelerationStructureDeviceAddressInfoKHR addrInfo
+            {
+                .accelerationStructure = *blasHandles[globalID].value()
+            };
+            vk::DeviceAddress blasAddr = device.getAccelerationStructureAddressKHR(addrInfo);
+
+            // Create the instance for the TLAS
+            vk::AccelerationStructureInstanceKHR instance
+            {
+                .transform = tm,
+                .instanceCustomIndex = j,
+                .mask = 0xFF,
+                .instanceShaderBindingTableRecordOffset = 0,
+                .accelerationStructureReference = blasAddr
+            };
+
+            instances.push_back(instance);
+
+#if LAB_TASK_LEVEL >= LAB_TASK_INSTANCE_LUT
+            // Record metadata for this specific instance in the shader-readable LUT
+            const auto& submesh = globalPrimitives[globalID];
+            instanceLUTs.push_back(
+                {
+                static_cast<uint32_t>(submesh.materialIndex), 
+                submesh.indexOffset, 
+                submesh.firstVertex
+            });
+#endif
+        }
+        
+        model.instanceCount = static_cast<uint32_t>(instances.size()) - model.firstInstanceIndex;
+    }
+    
+    void VulkanRendererAPI::updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId)
+    {
+        vk::TransformMatrixKHR tm{};
+        auto& M = transform;
+        tm.matrix = std::array<std::array<float, 4>, 3>
+        {
+                {
+                    std::array<float, 4>{M[0][0], M[1][0], M[2][0], M[3][0]},
+                    std::array<float, 4>{M[0][1], M[1][1], M[2][1], M[3][1]},
+                    std::array<float, 4>{M[0][2], M[1][2], M[2][2], M[3][2]}
+                }
+        };
+        
+        // Check if we are doing a specific primitive or the whole model
+        bool updateSingle = (primitiveId != UINT64_MAX);
+
+        for (uint32_t i = 0; i < model.instanceCount; ++i)
+        {
+            uint32_t globalIdx = model.firstInstanceIndex + i;
+            auto& instance = instances[globalIdx];
+
+            // If 'updateSingle' is false, we update everything in the loop.
+            // If 'updateSingle' is true, we only update the matching custom index.
+            if (!updateSingle || instance.instanceCustomIndex == (uint32_t)primitiveId)
+            {
+                instance.setTransform(tm);
+            
+                // Optimization: if we only wanted one, we can stop the loop early
+                if (updateSingle) break; 
+            }
+        }
+
+        auto primitiveCount = static_cast<uint32_t>(instances.size());
+        vk::DeviceSize instBufferSize = sizeof(instances[0]) * primitiveCount;
+
+        vk::raii::Buffer stagingBuffer({});
+        vk::raii::DeviceMemory stagingBufferMemory({});
+        createBuffer(instBufferSize, vk::BufferUsageFlagBits::eTransferSrc, vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent, stagingBuffer, stagingBufferMemory);
+
+        void* dataStaging = stagingBufferMemory.mapMemory(0, instBufferSize);
+        memcpy(dataStaging, instances.data(), instBufferSize);
+        stagingBufferMemory.unmapMemory();
+
+        copyBuffer(stagingBuffer, instanceBuffer, instBufferSize);
+
+        vk::BufferDeviceAddressInfo instanceAddrInfo{.buffer = instanceBuffer};
+        vk::DeviceAddress instanceAddr = device.getBufferAddressKHR(instanceAddrInfo);
+
+        // Prepare the geometry (instance) data
+        auto instancesData = vk::AccelerationStructureGeometryInstancesDataKHR
+        {
+            .arrayOfPointers = vk::False,
+            .data = instanceAddr
+        };
+
+        vk::AccelerationStructureGeometryDataKHR geometryData(instancesData);
+
+        vk::AccelerationStructureGeometryKHR tlasGeometry
+        {
+            .geometryType = vk::GeometryTypeKHR::eInstances,
+            .geometry = geometryData
+        };
+
+        // TASK06: Note the new parameters to re-build the TLAS in-place
+        vk::AccelerationStructureBuildGeometryInfoKHR tlasBuildGeometryInfo
+        {
+            .type = vk::AccelerationStructureTypeKHR::eTopLevel,
+            .flags = vk::BuildAccelerationStructureFlagBitsKHR::eAllowUpdate,
+            .mode = vk::BuildAccelerationStructureModeKHR::eUpdate,
+            .srcAccelerationStructure = tlas,
+            .dstAccelerationStructure = tlas,
+            .geometryCount = 1,
+            .pGeometries = &tlasGeometry
+        };
+
+        vk::BufferDeviceAddressInfo scratchAddressInfo{.buffer = *tlasScratchBuffer};
+        vk::DeviceAddress scratchAddr = device.getBufferAddressKHR(scratchAddressInfo);
+        tlasBuildGeometryInfo.scratchData.deviceAddress = scratchAddr;
+
+        // Prepare the build range for the TLAS
+        vk::AccelerationStructureBuildRangeInfoKHR tlasRangeInfo
+        {
+            .primitiveCount = primitiveCount,
+            .primitiveOffset = 0,
+            .firstVertex = 0,
+            .transformOffset = 0
+        };
+
+        // Re-build the TLAS
+        auto cmd = utils::beginSingleTimeCommands(device, commandPool);
+
+        // Pre-build barrier
+        vk::MemoryBarrier2 preBarrier
+        {
+            .srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR | vk::PipelineStageFlagBits2::eTransfer | vk::PipelineStageFlagBits2::eFragmentShader,
+            .srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR | vk::AccessFlagBits2::eTransferWrite | vk::AccessFlagBits2::eShaderRead,
+            .dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+            .dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eAccelerationStructureWriteKHR
+        };
+
+        vk::DependencyInfo preDependencyInfo
+        {
+            .dependencyFlags = {},
+            .memoryBarrierCount = 1,
+            .pMemoryBarriers = &preBarrier,
+        };
+
+        cmd->pipelineBarrier2(preDependencyInfo);
+
+        cmd->buildAccelerationStructuresKHR({tlasBuildGeometryInfo}, {&tlasRangeInfo});
+
+        // Post-build barrier
+        vk::MemoryBarrier2 postBarrier
+        {
+            .srcStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR,
+            .srcAccessMask = vk::AccessFlagBits2::eAccelerationStructureWriteKHR,
+            .dstStageMask = vk::PipelineStageFlagBits2::eAccelerationStructureBuildKHR | vk::PipelineStageFlagBits2::eFragmentShader,
+            .dstAccessMask = vk::AccessFlagBits2::eAccelerationStructureReadKHR | vk::AccessFlagBits2::eShaderRead
+        };
+
+        vk::DependencyInfo postDependencyInfo
+        {
+            .dependencyFlags = {},
+            .memoryBarrierCount = 1,
+            .pMemoryBarriers = &postBarrier,
+        };
+
+        cmd->pipelineBarrier2(postDependencyInfo);
+
+        utils::endSingleTimeCommands(*cmd, queue);
+    }
 
     void VulkanRendererAPI::createBottomLevelAS
     (
@@ -2397,12 +2720,12 @@ namespace VanK
                          vk::BufferUsageFlagBits::eShaderDeviceAddress |
                          vk::BufferUsageFlagBits::eAccelerationStructureBuildInputReadOnlyKHR,
                          vk::MemoryPropertyFlagBits::eDeviceLocal,
-                         blasBuffers[i], blasMemories[i]);
+                         blasBuffers[i].value(), blasMemories[i].value());
 
             // Create and store the BLAS handle
             vk::AccelerationStructureCreateInfoKHR blasCreateInfo
             {
-                .buffer = blasBuffers[i],
+                .buffer = blasBuffers[i].value(),
                 .offset = 0,
                 .size = blasBuildSizes.accelerationStructureSize,
                 .type = vk::AccelerationStructureTypeKHR::eBottomLevel,
@@ -2411,7 +2734,7 @@ namespace VanK
             blasHandles.emplace_back(device.createAccelerationStructureKHR(blasCreateInfo));
 
             // Save the BLAS handle in the build info structure
-            blasBuildGeometryInfo.dstAccelerationStructure = blasHandles[i];
+            blasBuildGeometryInfo.dstAccelerationStructure = blasHandles[i].value();
 
             // Prepare the build range for the BLAS
             vk::AccelerationStructureBuildRangeInfoKHR blasRangeInfo
@@ -2591,6 +2914,15 @@ namespace VanK
 
     void VulkanRendererAPI::createTopLevelAS()
     {
+        // 1. Check if we actually have work to do
+        if (instances.empty()) 
+        {
+            vk::AccelerationStructureInstanceKHR dummy{};
+            dummy.mask = 0x00; // 0x00 means rays will never hit this
+            dummy.accelerationStructureReference = 0; // Null address
+            instances.push_back(dummy);
+        }
+        
         // TASK03: Prepare the instance data buffer
         vk::DeviceSize instBufferSize = sizeof(instances[0]) * instances.size();
         createBuffer(instBufferSize,

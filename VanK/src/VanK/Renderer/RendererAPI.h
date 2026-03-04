@@ -618,11 +618,15 @@ namespace VanK
         uint64_t primitiveId;
         uint32_t meshletCount;
     };
+    
     struct RuntimeModel
     {
         ModelHandle handle;
         std::vector<ModelPrimitive> primitives;
+        uint32_t firstInstanceIndex;
+        uint32_t instanceCount;
     };
+    
     class RendererAPI
     {
     public:
@@ -677,6 +681,9 @@ namespace VanK
         // RenderGraph
         virtual void InsertBarrier(VanKCommandBuffer cmd, ResourceID& id, ResourceState& last, ResourceState& desired) = 0;
         // RenderGraph
+        virtual void createBottomLevelASModel(RuntimeModel& model, const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials) = 0;
+        virtual void createInstanceASModel(RuntimeModel& model, const glm::mat4& modelTransform, const std::vector<shaderio::MeshletPrimitive>& globalPrimitives, std::vector<shaderio::InstanceLUT>& instanceLUTs) = 0;
+        virtual void updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId) = 0;
         virtual void createBottomLevelAS(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials,
                                  std::vector<shaderio::InstanceLUT>& instanceLUTs) = 0;
         virtual void createTopLevelAS() = 0;
