@@ -2241,10 +2241,10 @@ namespace VanK
             RenderCommand::createBottomLevelASModel(runtimePlant2, *m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials);
             glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
             RenderCommand::createInstanceASModel(runtimePlant, transform, geometry.primitives, instanceLUTs);
-             
+           
             glm::mat4 transform2 = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
             RenderCommand::createInstanceASModel(runtimePlant2, transform2, geometry.primitives, instanceLUTs);
-            
+            RenderCommand::removeInstanceASModel(runtimePlant, 2);
             RenderCommand::createTopLevelAS();
             /*RenderCommand::clearAllTopLevelASInstances(instanceLUTs);*/
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer), instanceLUTs, 0, false);

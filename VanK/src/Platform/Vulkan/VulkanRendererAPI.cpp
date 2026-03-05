@@ -2502,6 +2502,34 @@ namespace VanK
         createTopLevelAS();
     }
     
+    void VulkanRendererAPI::removeInstanceASModel(RuntimeModel& model, const uint64_t& primitiveId)
+    {
+        bool removeSingle = (primitiveId != UINT64_MAX);
+
+        uint32_t first = model.firstInstanceIndex;
+        uint32_t count = model.instanceCount;
+
+        if (count == 0)
+            return;
+
+        for (uint32_t i = 0; i < count; ++i)
+        {
+            uint32_t globalIdx = first + i;
+            auto& instance = instances[globalIdx];
+
+            if (!removeSingle || instance.instanceCustomIndex == (uint32_t)primitiveId)
+            {
+                instances.erase(instances.begin() + globalIdx);
+
+                model.instanceCount--;
+
+                break; // remove only one
+            }
+        }
+
+        createTopLevelAS();
+    }
+    
     void VulkanRendererAPI::updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId)
     {
         vk::TransformMatrixKHR tm{};

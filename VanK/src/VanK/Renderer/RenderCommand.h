@@ -254,6 +254,11 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->clearAllTopLevelASInstances(instanceLUTs);
         }
         
+        static void removeInstanceASModel(RuntimeModel& model, const uint64_t& primitiveId = UINT64_MAX)
+        {
+            if (s_RendererAPI) s_RendererAPI->removeInstanceASModel(model, primitiveId);
+        }
+        
         static void updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId = UINT64_MAX)
         {
             if (s_RendererAPI) s_RendererAPI->updateTopLevelASModel(model, transform, primitiveId);
