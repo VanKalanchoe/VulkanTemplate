@@ -2244,7 +2244,8 @@ namespace VanK
            
             glm::mat4 transform2 = glm::translate(glm::mat4(1.0f), glm::vec3(10.0f, 0.0f, 0.0f));
             RenderCommand::createInstanceASModel(runtimePlant2, transform2, geometry.primitives, instanceLUTs);
-            RenderCommand::removeInstanceASModel(runtimePlant, 2);
+            RenderCommand::removeInstanceASModel(runtimePlant, instanceLUTs, 2);
+            RenderCommand::removeInstanceASModel(runtimePlant2, instanceLUTs, 2);
             RenderCommand::createTopLevelAS();
             /*RenderCommand::clearAllTopLevelASInstances(instanceLUTs);*/
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer), instanceLUTs, 0, false);
@@ -2503,7 +2504,7 @@ namespace VanK
                 /*if (s_frameIndex >= s_maxAccumulationFrames)
                     return;*/
 
-                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingVoxelPipeline);
+                RenderCommand::BindPipeline(cmd, VanKPipelineBindPoint::Raytracing, m_RaytracingPipeline);
 
                 RenderCommand::BindFragmentSamplers(cmd, NULL, nullptr, NULL, true);
                 //instead of cuurently layouts i could use the layout direclty with m_PipelineResources inside vulkanrendererapi which jsut needs the pipeline to get the layout which is already exposed
@@ -2526,7 +2527,7 @@ namespace VanK
 
                 RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
 
-                RenderCommand::TraceRays(cmd, m_RaytracingVoxelPipeline, rayTracingImage->GetWidth(), rayTracingImage->GetHeight());
+                RenderCommand::TraceRays(cmd, m_RaytracingPipeline, rayTracingImage->GetWidth(), rayTracingImage->GetHeight());
             };
         }
         //swapchain doesnt work since sceneimage or raytrace image cant blit either because only 1 image possible how do combine hmmmm

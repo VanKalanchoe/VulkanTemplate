@@ -289,8 +289,8 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     /* uv.y = 1.0 - uv.y; */
     float3 localPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
     float3 localN = normalize(bary.x * v0.normals + bary.y * v1.normals + bary.z * v2.normals);
-    float3 worldPos = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(localPos,1.0)).xyz;
-    float3 worldNormal = normalize(mul((float3x3)pushConst.meshDrawBuffer->meshDraw[instanceID].normalMatrix, localN));
+    float3 worldPos = mul(ObjectToWorld(), float4(localPos,1.0)).xyz;
+    float3 worldNormal = normalize(mul((float3x3)WorldToObject(), localN));
     if(dot(worldNormal, WorldRayDirection()) > 0) worldNormal = -worldNormal;
 
     Material mat = pushConst.materialBuffer[NonUniformResourceIndex(lut.materialID)];

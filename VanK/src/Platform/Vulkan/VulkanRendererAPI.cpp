@@ -2502,7 +2502,10 @@ namespace VanK
         createTopLevelAS();
     }
     
-    void VulkanRendererAPI::removeInstanceASModel(RuntimeModel& model, const uint64_t& primitiveId)
+    void VulkanRendererAPI::removeInstanceASModel(
+    RuntimeModel& model,
+    const uint64_t& primitiveId,
+    std::vector<shaderio::InstanceLUT>& instanceLUTs)
     {
         bool removeSingle = (primitiveId != UINT64_MAX);
 
@@ -2519,11 +2522,13 @@ namespace VanK
 
             if (!removeSingle || instance.instanceCustomIndex == (uint32_t)primitiveId)
             {
+                // erase both arrays at same index
                 instances.erase(instances.begin() + globalIdx);
+                instanceLUTs.erase(instanceLUTs.begin() + globalIdx);
 
                 model.instanceCount--;
 
-                break; // remove only one
+                break;
             }
         }
 

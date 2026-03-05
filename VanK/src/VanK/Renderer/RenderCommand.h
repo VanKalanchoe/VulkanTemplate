@@ -254,9 +254,9 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->clearAllTopLevelASInstances(instanceLUTs);
         }
         
-        static void removeInstanceASModel(RuntimeModel& model, const uint64_t& primitiveId = UINT64_MAX)
+        static void removeInstanceASModel(RuntimeModel& model, std::vector<shaderio::InstanceLUT>& instanceLUTs, const uint64_t& primitiveId = UINT64_MAX)
         {
-            if (s_RendererAPI) s_RendererAPI->removeInstanceASModel(model, primitiveId);
+            if (s_RendererAPI) s_RendererAPI->removeInstanceASModel(model, primitiveId, instanceLUTs);
         }
         
         static void updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId = UINT64_MAX)
