@@ -27,14 +27,10 @@ struct PushConstant
     SceneData* sceneData;
     Vertex* vertexBuffer;
     uint32_t* indexBuffer;
-    MeshletVerticesData* meshletVerticesBuffer;
-    MeshletTrianglesData* meshletTrianglesBuffer;
-    MeshletData* meshletBuffer;
-    MeshletPrimitive* meshletPrimitive;
-    MeshDrawData* meshDrawBuffer;
     Material* materialBuffer;
     InstanceLUT* instanceLutBuffer;
     LightData* lightingBuffer;
+    BrickVoxelData* voxelBuffer;
 };
 [[vk::push_constant]]
 ConstantBuffer<PushConstant> pushConst;
@@ -348,9 +344,9 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     float3 V   = -WorldRayDirection();              // View direction (towards camera)
     float3 L   = normalize(light.direction);  // Light direction
 
-    float3 p0 = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(v0.position,1)).xyz;
-    float3 p1 = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(v1.position,1)).xyz;
-    float3 p2 = mul(pushConst.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(v2.position,1)).xyz;
+    float3 p0 = mul(ObjectToWorld(), float4(v0.position,1)).xyz;
+    float3 p1 = mul(ObjectToWorld(), float4(v1.position,1)).xyz;
+    float3 p2 = mul(ObjectToWorld(), float4(v2.position,1)).xyz;
 
     float3 geonrm = normalize(cross(p1 - p0, p2 - p0));
  

@@ -42,6 +42,7 @@ namespace VanK
         static void BeginSubmit();
         static void EndSubmit();
         static void Flush();
+        static void uploadVoxelBuffer();
         static void DrawMeshShader();
         static bool GetVSync() { return vSync; };
         static void QueVSyncChange(bool vSyncTemp) { vSync = vSyncTemp; s_VSyncChangeRequested = true; };
@@ -173,6 +174,10 @@ namespace VanK
         inline static BufferHandle circleBuffer ;
         inline static BufferHandle textBuffer ;
         inline static BufferHandle lineBuffer ;
+        //--
+        
+        // voxel
+        inline static BufferHandle voxelBuffer;
         //--
         
         inline static BufferHandle localMeshTaskSubmitBuffer;

@@ -99,4 +99,12 @@ struct MeshletPrimitive
     vec4 boundingSphere;
 };
 
+// Brick voxel data (8x8x8)
+struct BrickVoxelData 
+{// could be color, density, material ID, etc.
+    uint8_t r[512];
+    uint8_t g[512];
+    uint8_t b[512];
+};
+
 #endif  // HOST_DEVICE_H

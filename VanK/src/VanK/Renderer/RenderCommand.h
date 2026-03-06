@@ -264,6 +264,26 @@ namespace VanK
             if (s_RendererAPI) s_RendererAPI->updateTopLevelASModel(model, transform, primitiveId);
         }
         
+        static uint32_t createBottomLevelASAABB(shaderio::Aabb& aabb)
+        {
+            return s_RendererAPI ? s_RendererAPI->createBottomLevelASAABB(aabb) : UINT32_MAX;
+        }
+        
+        static uint32_t createInstanceASAABB(uint32_t blasIndex, const glm::mat4& modelTransform)
+        {
+            return s_RendererAPI ? s_RendererAPI->createInstanceASAABB(blasIndex, modelTransform) : UINT32_MAX;
+        }
+        
+        static void removeInstanceASAABB(uint32_t instanceIndex)
+        {
+            if (s_RendererAPI) s_RendererAPI->removeInstanceASAABB(instanceIndex);
+        }
+        
+        static void updateTopLevelASAABB(uint32_t instanceIndex, const glm::mat4& transform)
+        {
+            if (s_RendererAPI) s_RendererAPI->updateTopLevelASAABB(instanceIndex, transform);
+        }
+        
         static void createBottomLevelAS(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials,
                                  std::vector<shaderio::InstanceLUT>& instanceLUTs)
         {

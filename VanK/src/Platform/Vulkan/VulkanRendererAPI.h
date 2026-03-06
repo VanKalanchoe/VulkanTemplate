@@ -971,6 +971,10 @@ namespace VanK
         void clearAllTopLevelASInstances(std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
         void removeInstanceASModel(RuntimeModel& model, const uint64_t& primitiveId, std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
         void updateTopLevelASModel(const RuntimeModel& model, const glm::mat4& transform, const uint64_t& primitiveId) override;
+        uint32_t createBottomLevelASAABB(shaderio::Aabb& aabb) override;
+        uint32_t createInstanceASAABB(uint32_t blasIndex, const glm::mat4& modelTransform) override;
+        void removeInstanceASAABB(uint32_t instanceIndex) override;
+        void updateTopLevelASAABB(uint32_t instanceIndex, const glm::mat4& transform) override;
         void createBottomLevelAS(const StorageBuffer& vertexBuffer, const StorageBuffer& indexBuffer, std::vector<shaderio::MeshletPrimitive>& primitives, std::vector<shaderio::Material>& materials,
                                  std::vector<shaderio::InstanceLUT>& instanceLUTs) override;
         void createTopLevelAS() override;
@@ -1405,7 +1409,7 @@ namespace VanK
         case VanKGraphics: return vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
         case VanKCompute: return vk::ShaderStageFlagBits::eCompute;
         case VanKMesh: return vk::ShaderStageFlagBits::eTaskEXT | vk::ShaderStageFlagBits::eMeshEXT | vk::ShaderStageFlagBits::eFragment;
-        case VanKRaytracing: return vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR;
+        case VanKRaytracing: return vk::ShaderStageFlagBits::eRaygenKHR | vk::ShaderStageFlagBits::eClosestHitKHR | vk::ShaderStageFlagBits::eAnyHitKHR | vk::ShaderStageFlagBits::eMissKHR | vk::ShaderStageFlagBits::eIntersectionKHR;
         }
         return vk::ShaderStageFlagBits::eAll;
     }

@@ -22,14 +22,10 @@ struct PushConstant
     SceneData* sceneData;
     Vertex* vertexBuffer;
     uint32_t* indexBuffer;
-    MeshletVerticesData* meshletVerticesBuffer;
-    MeshletTrianglesData* meshletTrianglesBuffer;
-    MeshletData* meshletBuffer;
-    MeshletPrimitive* meshletPrimitive;
-    MeshDrawData* meshDrawBuffer;
     Material* materialBuffer;
     InstanceLUT* instanceLutBuffer;
     LightData* lightingBuffer;
+    BrickVoxelData* voxelBuffer;
 };
 [[vk::push_constant]]
 ConstantBuffer<PushConstant> pushConstant;
@@ -259,8 +255,8 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 /*     uv.y = 1.0 - uv.y; */
     float3 localPos = bary.x * v0.position + bary.y * v1.position + bary.z * v2.position;
     float3 localN   = normalize(bary.x * v0.normals + bary.y * v1.normals + bary.z * v2.normals);
-    float3 worldPos = mul(pushConstant.meshDrawBuffer->meshDraw[instanceID].modelMatrix, float4(localPos, 1.0)).xyz;
-    float3 Ng = normalize(mul((float3x3)pushConstant.meshDrawBuffer->meshDraw[instanceID].normalMatrix, localN));
+    float3 worldPos = mul(ObjectToWorld(), float4(localPos, 1.0)).xyz;
+    float3 Ng = normalize(mul((float3x3)WorldToObject(), localN));
     float3 V = -WorldRayDirection();
     bool isInside = dot(Ng, V) < 0.0;
 
@@ -290,7 +286,7 @@ void closesthitMain(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 
     // --- 2. TBN & NORMAL MAPPING ---
     float4 localT4 = bary.x * v0.tangents + bary.y * v1.tangents + bary.z * v2.tangents;
-    float3 worldTangent = normalize(mul((float3x3)pushConstant.meshDrawBuffer->meshDraw[instanceID].normalMatrix, localT4.xyz));
+    float3 worldTangent = normalize(mul((float3x3)WorldToObject(), localT4.xyz));
     if (isInside) {
     worldTangent = -worldTangent;
 }

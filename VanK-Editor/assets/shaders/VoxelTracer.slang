@@ -2,6 +2,7 @@ import common;
 
 #include "shaderIO.h"
 #include "pbr.h.slang"
+#include "nvshaders/random.h.slang"
 
 [[vk::binding(0,2)]]
 RaytracingAccelerationStructure topLevelAS;
@@ -20,14 +21,10 @@ struct PushConstant
     SceneData* sceneData;
     Vertex* vertexBuffer;
     uint32_t* indexBuffer;
-    MeshletVerticesData* meshletVerticesBuffer;
-    MeshletTrianglesData* meshletTrianglesBuffer;
-    MeshletData* meshletBuffer;
-    MeshletPrimitive* meshletPrimitive;
-    MeshDrawData* meshDrawBuffer;
     Material* materialBuffer;
     InstanceLUT* instanceLutBuffer;
     LightData* lightingBuffer;
+    BrickVoxelData* voxelBuffer;
 };
 [[vk::push_constant]]
 ConstantBuffer<PushConstant> pushConst;
@@ -49,27 +46,26 @@ void raygenerationMain()
     float2 launchSize = (float2)DispatchRaysDimensions().xy; // Image size (width,height)
 
     // Retrieve scene information from push constants
-    SceneData sceneInfo = pushConst.sceneData[0];
+    SceneData* scene = pushConst.sceneData;
 
-    // Set ray tracing flags (0 = no special flags)
-    //RAY_FLAG_CULL_BACK_FACING_TRIANGLES
-    const uint rayFlags = 0;
-    
-    // Convert pixel coordinates to normalized device coordinates (NDC)
-    // Range: [-1,1] for both x and y
-    const float2 clipCoords = float2(launchID.x / launchSize.x * 2.0 - 1.0, 1.0 - (launchID.y / launchSize.y) * 2.0 + 1.0);
-    float2 ndc;
-ndc.x = (launchID.x + 0.5) / launchSize.x * 2.0 - 1.0;
-ndc.y = 1.0 - ((launchID.y + 0.5) / launchSize.y * 2.0);
-    // Transform from NDC to view space using inverse projection matrix
-    const float4 viewCoords = mul(sceneInfo.projInverse, float4(ndc, 1.0, 1.0));
-float3 dir = normalize(viewCoords.xyz / viewCoords.w); // perspective divide if needed
-    // Create the primary ray
+    uint32_t frame = scene->frameIndex;
+
+    // Initialize high-quality random number generator
+    // Uses xxhash32 with pixel coordinates and frame number for good distribution
+    uint seed = xxhash32(uint3(uint2(launchID.xy), frame));
+
+    // ANTI-ALIASING: Subpixel jittering for temporal supersampling
+    // First frame uses pixel center, subsequent frames use random subpixel positions
+    const float2 subpixelJitter = frame == 0 ? float2(0.5, 0.5) : float2(rand(seed), rand(seed));
+    const float2 pixelCenter = launchID + subpixelJitter; // Jittered pixel position
+    float2 clipCoords = pixelCenter / launchSize * 2.0 - 1.0;  // Convert to NDC [-1,1]
+    clipCoords.y *= -1.0; 
+    const float4 viewCoords = mul(scene->projInverse, float4(clipCoords.x, clipCoords.y, 1.0, 1.0));  // Transform to view space
+
+    // Generate primary camera ray
     RayDesc ray;
-    // Transform camera origin (0,0,0) from view space to world space
-    ray.Origin = mul(sceneInfo.viewInverse, float4(0.0, 0.0, 0.0, 1.0)).xyz;
-    // Transform ray direction from view space to world space
-    ray.Direction = mul(sceneInfo.viewInverse, float4(dir, 0.0)).xyz;
+    ray.Origin = mul(scene->viewInverse, float4(0.0, 0.0, 0.0, 1.0)).xyz; // Camera position in world space
+    ray.Direction = mul(scene->viewInverse, float4(normalize(viewCoords.xyz), 0.0)).xyz; // Ray direction in world space
     ray.TMin = 0.001;    // Minimum distance to avoid self-intersection
     ray.TMax = INFINITE; // Maximum distance (infinite for primary rays)
 
@@ -81,7 +77,7 @@ float3 dir = normalize(viewCoords.xyz / viewCoords.w); // perspective divide if 
 
     // Cast the ray into the scene using the acceleration structure
     // Parameters: AS, flags, instance mask, sbt offset, sbt stride, miss offset, ray, payload
-    TraceRay(topLevelAS, rayFlags, 0xff, 0, 0, 0, ray, payload);
+    TraceRay(topLevelAS, 0, 0xff, 0, 0, 0, ray, payload);
     
     // Get the final color from the ray tracing result
     float3 color = payload.color;
@@ -136,36 +132,154 @@ void missMain(inout HitPayload payload)
     payload.depth = MISS_DEPTH;
 }
 
+
+struct VoxelHitAttributes
+{
+    int3 voxel;
+    float tHit;
+};
+
 [shader("intersection")]
 void intersectionMain()
 {
     float3 rayOrigin = ObjectRayOrigin();
-    float3 rayDir    = ObjectRayDirection();
+    float3 rayDir    = normalize(ObjectRayDirection());
 
-    // AABB intersection
+    const int3 brickSize = int3(8,8,8);
     Aabb aabb;
-    aabb.minimum = float3(-0.5, -0.5, -0.5);
-    aabb.maximum = float3(0.5, 0.5, 0.5);
+    aabb.minimum = float3(0,0,0);
+    aabb.maximum = float3(brickSize);
 
-    float tHit = hitAabb(aabb, rayOrigin, rayDir);
+    // --- Step 1: Ray-AABB intersection ---
+    float3 invDir = 1.0 / rayDir;
+    float3 t1 = (aabb.minimum - rayOrigin) * invDir;
+    float3 t2 = (aabb.maximum - rayOrigin) * invDir;
+    float3 tMin = min(t1, t2);
+    float3 tMax = max(t1, t2);
+    float tEnter = max(max(tMin.x, tMin.y), tMin.z);
+    float tExit  = min(min(tMax.x, tMax.y), tMax.z);
 
-    if (tHit > 0)
+    if(tExit < max(tEnter, 0.0)) return; // ray misses brick
+
+    // --- Step 2: Starting voxel ---
+    float3 startPos = rayOrigin + rayDir * max(tEnter, 0.0);
+    int3 voxel = clamp(int3(floor(startPos)), int3(0), brickSize - 1);
+
+    // --- Step 3: DDA setup using scalars only ---
+    int3 step = int3(sign(rayDir));
+
+    float tMaxX = (rayDir.x != 0.0) ? ((voxel.x + (step.x > 0 ? 1 : 0) - rayOrigin.x) / rayDir.x) : INFINITE;
+    float tMaxY = (rayDir.y != 0.0) ? ((voxel.y + (step.y > 0 ? 1 : 0) - rayOrigin.y) / rayDir.y) : INFINITE;
+    float tMaxZ = (rayDir.z != 0.0) ? ((voxel.z + (step.z > 0 ? 1 : 0) - rayOrigin.z) / rayDir.z) : INFINITE;
+
+    float tDeltaX = (rayDir.x != 0.0) ? (1.0 / abs(rayDir.x)) : INFINITE;
+    float tDeltaY = (rayDir.y != 0.0) ? (1.0 / abs(rayDir.y)) : INFINITE;
+    float tDeltaZ = (rayDir.z != 0.0) ? (1.0 / abs(rayDir.z)) : INFINITE;
+
+    uint instance = InstanceIndex();
+    BrickVoxelData* voxelBuffer = pushConst.voxelBuffer;
+
+    // --- Step 4: Traverse voxels ---
+    const int maxSteps = 32;
+    float tCur = max(tEnter, 0.0);
+
+    for(int i=0; i<maxSteps; i++)
     {
-        // Create hit attributes
-        BuiltInTriangleIntersectionAttributes attr;
-        attr.barycentrics = float2(0.0, 0.0);  // For a plane, we can use (0,0) as barycentrics
+        // --- Check voxel bounds ---
+        if(any(voxel < 0) || any(voxel >= brickSize)) break;
 
-        ReportHit(tHit, 0, attr);
-        // hier die 0 bedeutet was closeshit2 für verschiende geoemtrys machen kann
-        // z.b cube die id 0 sphere wäre 1 dann in closeshit kann ich 
-        // uint kind = HitKind(); und dann je nachdem was machen cool
+        int index = voxel.x + voxel.y * 8 + voxel.z * 64;
+        if(voxelBuffer[instance].r[index] != 0 || voxelBuffer[instance].g[index] != 0 || voxelBuffer[instance].b[index] != 0)
+        {
+            // Hit non-empty voxel
+            VoxelHitAttributes attr;
+            attr.voxel = voxel;
+            attr.tHit  = tCur;
+            ReportHit(tCur, 0, attr);
+            return;
+        }
+
+        // --- Advance to next voxel ---
+        if(tMaxX < tMaxY && tMaxX < tMaxZ)
+        {
+            voxel.x += step.x;
+            tCur = tMaxX;
+            tMaxX += tDeltaX;
+        }
+        else if(tMaxY < tMaxZ)
+        {
+            voxel.y += step.y;
+            tCur = tMaxY;
+            tMaxY += tDeltaY;
+        }
+        else
+        {
+            voxel.z += step.z;
+            tCur = tMaxZ;
+            tMaxZ += tDeltaZ;
+        }
     }
 }
 
 [shader("closesthit")]
-void closesthitMain2(inout HitPayload payload)
+void closesthitMain2(inout HitPayload payload, in VoxelHitAttributes attr)
 {
-    payload.color = float3(1, 0, 1); // Pink
+    uint instance = InstanceIndex();
+    BrickVoxelData* voxelBuffer = pushConst.voxelBuffer;
+
+    int3 v = attr.voxel;
+    int index = v.x + v.y * 8 + v.z * 64;
+
+    float3 colorBase = float3(voxelBuffer[instance].r[index], voxelBuffer[instance].g[index], voxelBuffer[instance].b[index]) / 255.0;
+
+    // 1. Calculate Hit Position in Object Space
+    float3 hitPos = ObjectRayOrigin() + ObjectRayDirection() * attr.tHit;
+    
+    // 2. Get local position within the specific voxel [0, 1]
+    float3 localPos = hitPos - float3(v);
+
+    // 3. Determine which face was hit (the Normal)
+    // We find which component is closest to 0 or 1
+    float3 f = abs(localPos - 0.5);
+    float2 uv;
+    
+    if (f.x > f.y && f.x > f.z) {
+        // --- X faces (Left / Right) ---
+        if (localPos.x > 0.5) {
+            // Right face (+X): Looking at it, Z increases to the left
+            uv = float2(1.0 - localPos.z, localPos.y);
+        } else {
+            // Left face (-X): Looking at it, Z increases to the right
+            uv = float2(localPos.z, localPos.y);
+        }
+    } 
+    else if (f.y > f.z) {
+        // --- Y faces (Top / Bottom) ---
+        if (localPos.y > 0.5) {
+            // Top face (+Y): 
+            // We want U to be X, and V to increase as we go "into" the screen (-Z)
+            uv = float2(localPos.x, 1.0 - localPos.z);
+        } else {
+            // Bottom face (-Y): 
+            // When looking up, X is still X, but V increases as we go "away" (+Z)
+            uv = float2(localPos.x, localPos.z);
+        }
+    }
+    else {
+        // --- Z faces (Front / Back) ---
+        if (localPos.z > 0.5) {
+            // Front face (+Z): Looking at it, X increases to the right
+            uv = float2(localPos.x, localPos.y);
+        } else {
+            // Back face (-Z): Looking at it, X increases to the left
+            uv = float2(1.0 - localPos.x, localPos.y);
+        }
+    }
+
+    // 4. Sample the texture using the corrected UVs
+    float4 texColor = texture[NonUniformResourceIndex(8)].SampleLevel(uv, 0.0);
+
+    payload.color = colorBase * texColor.rgb;
 }
 
 // Ray-AABB intersection
