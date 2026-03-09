@@ -37,6 +37,15 @@ FetchContent_Declare (
 )
 FetchContent_MakeAvailable ( tracy )
 
+# Fetch FastNoise2 v1.1.1 from GitHub
+FetchContent_Declare(
+    FastNoise2
+    GIT_REPOSITORY https://github.com/Auburn/FastNoise2.git
+    GIT_TAG v1.1.1
+    GIT_SHALLOW TRUE
+)
+FetchContent_MakeAvailable(FastNoise2)
+
 FetchContent_Declare(
     ImGuizmo
     GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
@@ -139,7 +148,7 @@ function(add_chapter CHAPTER_NAME)
     "${CMAKE_SOURCE_DIR}/VanK-Editor/assets/shaders/shaderIO.h"
     )
 
-    target_include_directories(${CHAPTER_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/VanK/src ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/FileWatch ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/Entt/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/VulkanMemoryAllocator/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/include "${CMAKE_SOURCE_DIR}/VanK-Editor/assets/shaders")
+    target_include_directories(${CHAPTER_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/VanK/src ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/slang/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/FileWatch ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/Entt/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/VulkanMemoryAllocator/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/VulkanMemoryAllocator-Hpp/include ${CMAKE_CURRENT_SOURCE_DIR}/Vendor/taskflow/include "${CMAKE_SOURCE_DIR}/VanK-Editor/assets/shaders")
 message("VMA include dir: ${CMAKE_CURRENT_SOURCE_DIR}/VanK/vendor/VulkanMemoryAllocator-Hpp/include")
 
     set_target_properties(${CHAPTER_NAME} PROPERTIES
@@ -196,5 +205,5 @@ add_chapter(
     #SHADER shaderIO.h QuadShader.slang DrawIndirectShader.slang
     #MODELS
     #TEXTURES texture.jpg viking_room2.ktx2
-    LIBS Vulkan::cppm SDL3::SDL3 glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf GameNetworkingSockets::static Tracy::TracyClient
+    LIBS Vulkan::cppm SDL3::SDL3 glm::glm tinygltf::tinygltf KTX::ktx imgui spdlog::spdlog xxHash::xxhash yaml-cpp ImGuizmoLib msdf-atlas-gen box2d::box2d meshoptimizer::meshoptimizer fastgltf::fastgltf GameNetworkingSockets::static Tracy::TracyClient FastNoise
 )

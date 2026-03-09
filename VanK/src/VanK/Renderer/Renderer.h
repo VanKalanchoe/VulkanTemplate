@@ -10,8 +10,16 @@
 
 #include "VanK/Renderer/RenderGraph.h"
 
+#include "VanK/Voxels/VoxelWorldManager.h"
+
 namespace VanK
 {
+    struct MousePickRequest 
+    {
+        int x = -1, y = -1;
+        bool active = false;
+    };
+    
     class Renderer
     {
     public:
@@ -63,12 +71,6 @@ namespace VanK
         inline static VanKTimestampPass renderPassMesh;
         static void CreateRenderTargets();
         static RenderGraph GetRenderGraph() { return renderGraph; };
-        
-        struct MousePickRequest 
-        {
-            int x = -1, y = -1;
-            bool active = false;
-        };
         
         static int32_t getLastPickedID() { return m_LastPickedID; }
         static void setLastPickedID(int32_t id) { m_LastPickedID = id; }
@@ -177,7 +179,8 @@ namespace VanK
         //--
         
         // voxel
-        inline static BufferHandle voxelBuffer;
+        inline static VoxelWorld voxelWorld;
+        inline static VoxelWorldManager voxelWorldManager;
         //--
         
         inline static BufferHandle localMeshTaskSubmitBuffer;

@@ -2001,22 +2001,22 @@ namespace VanK
         uint64_t meshletBuffersize = sizeof(Meshlet) * geometry.meshlets.size();
         meshletBuffer = m_BufferManager->Create<StorageBuffer>(meshletBuffersize);
 
-        uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10000;
+        uint64_t localMeshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
         localMeshTaskSubmitBuffer = m_BufferManager->Create<StorageBuffer>(localMeshTaskSubmitBuffersize);
 
-        uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10000;
+        uint64_t meshTaskSubmitBuffersize = sizeof(VanKDrawMeshTasksIndirectCommand) * 10;
         meshTaskSubmitBuffer = m_BufferManager->Create<IndirectBuffer>(meshTaskSubmitBuffersize);
 
-        uint64_t meshletPrimitiveBuffersize = sizeof(shaderio::MeshletPrimitive) * 10000;
+        uint64_t meshletPrimitiveBuffersize = sizeof(shaderio::MeshletPrimitive) * 10;
         meshletPrimitiveBuffer = m_BufferManager->Create<StorageBuffer>(meshletPrimitiveBuffersize);
 
-        uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10000;
+        uint64_t meshDrawBuffersize = sizeof(MeshDraw) * 10;
         meshDrawBuffer = m_BufferManager->Create<StorageBuffer>(meshDrawBuffersize);
 
-        uint64_t materialBuffersize = sizeof(shaderio::Material) * 10000;
+        uint64_t materialBuffersize = sizeof(shaderio::Material) * 100;
         materialBuffer = m_BufferManager->Create<StorageBuffer>(materialBuffersize);
 
-        uint64_t instanceLutsBuffersize = sizeof(shaderio::InstanceLUT) * 10000;
+        uint64_t instanceLutsBuffersize = sizeof(shaderio::InstanceLUT) * 1;
         instanceLutsBuffer = m_BufferManager->Create<StorageBuffer>(instanceLutsBuffersize);
 
         uint64_t quadBuffersize = sizeof(QuadData) * 10;
@@ -2033,9 +2033,6 @@ namespace VanK
 
         uint64_t lightsBuffersize = sizeof(Lights) * 10;
         lightsBuffer = m_BufferManager->Create<StorageBuffer>(lightsBuffersize);
-        
-        uint64_t voxelBuffersize = sizeof(shaderio::BrickVoxelData) * 1000000;
-        voxelBuffer = m_BufferManager->Create<StorageBuffer>(voxelBuffersize);
 
         uint64_t transferSize = sceneBuffersize + vertexBuffersize + indexBuffersize + meshletVerticesBuffersize + meshletTrianglesBuffersize + meshletBuffersize +
             localMeshTaskSubmitBuffersize + meshletPrimitiveBuffersize + meshDrawBuffersize + materialBuffersize + instanceLutsBuffersize + quadBuffersize + circleBuffersize +
@@ -2189,129 +2186,6 @@ namespace VanK
         /*EndSubmit();*/
     }
     
-    // Brick struct
-    struct Brick
-    {
-        glm::ivec3 position;    // brick position inside chunk (in brick units)
-        uint32_t instanceIndex; // TLAS instance index
-        uint32_t voxelIndex;    // index into voxel buffer
-    };
-
-    // Chunk struct
-    struct Chunk
-    {
-        glm::ivec3 position;  // chunk position in world
-        glm::ivec3 size;      // size in voxels (e.g., 16x16x16)
-        std::vector<Brick> bricks;
-    };
-    
-    std::vector<shaderio::BrickVoxelData> allBricks; // global voxel buffer
-    
-    // Create a single BLAS for all bricks (8x8x8)
-    uint32_t createBrickBLAS()
-    {
-        shaderio::Aabb aabb;
-        aabb.minimum = glm::vec3(0,0,0);
-        aabb.maximum = glm::vec3(8.0f + 1e-4f);
-        return RenderCommand::createBottomLevelASAABB(aabb);
-    }
-    
-    // Instance a chunk's bricks
-    // Instance a chunk's bricks WITHOUT filling voxels
-    void instanceChunk(Chunk& chunk, uint32_t brickBLAS)
-    {
-        glm::vec3 chunkOrigin = glm::vec3(chunk.position) * glm::vec3(chunk.size);
-        chunkOrigin -= glm::vec3(chunk.size) * 0.5f;
-
-        for (auto& brick : chunk.bricks)
-        {
-            glm::vec3 brickOffset = glm::vec3(brick.position.x * 8, brick.position.y * 8, (chunk.size.z - 8) - brick.position.z * 8); // Flip Z of the brick
-            glm::vec3 worldPos = chunkOrigin + brickOffset;
-            glm::mat4 transform = glm::translate(glm::mat4(1.0f), worldPos);
-
-            brick.instanceIndex = RenderCommand::createInstanceASAABB(brickBLAS, transform);
-
-            // Assign voxel buffer index
-            brick.voxelIndex = static_cast<uint32_t>(allBricks.size());
-
-            // Create empty brick (all voxels black)
-            shaderio::BrickVoxelData emptyVoxelData{};
-            for(int i = 0; i < 8*8*8; ++i) {
-                emptyVoxelData.r[i] = 0;
-                emptyVoxelData.g[i] = 0;
-                emptyVoxelData.b[i] = 0;
-            }
-            allBricks.push_back(emptyVoxelData);
-        }
-
-        RenderCommand::createTopLevelAS();
-    }
-    
-    // Set a voxel inside a brick
-    void setVoxel(Brick& brick, int x, int y, int z, uint8_t r, uint8_t g, uint8_t b)
-    {
-        if (brick.voxelIndex >= allBricks.size()) return;
-        shaderio::BrickVoxelData& data = allBricks[brick.voxelIndex];
-        int index = x + y*8 + z*64; // flatten 3D coords
-        data.r[index] = r;
-        data.g[index] = g;
-        data.b[index] = b;
-    }
-
-    // Add a voxel in world coordinates
-    void addVoxelInChunk(Chunk& chunk, glm::ivec3 worldVoxelPos, uint8_t r, uint8_t g, uint8_t b)
-    {
-        glm::ivec3 local = worldVoxelPos - chunk.position;
-
-        glm::ivec3 brickPos = local / 8;
-        glm::ivec3 voxelInBrick = local % 8;
-
-        voxelInBrick.z = 7 - voxelInBrick.z;
-
-        int bricksPerAxis = chunk.size.x / 8;
-
-        int brickIndex =
-            brickPos.x +
-            brickPos.y * bricksPerAxis +
-            brickPos.z * bricksPerAxis * bricksPerAxis;
-
-        if (brickIndex < 0 || brickIndex >= chunk.bricks.size())
-            return;
-
-        Brick& brick = chunk.bricks[brickIndex];
-
-        setVoxel(brick, voxelInBrick.x, voxelInBrick.y, voxelInBrick.z, r, g, b);
-    }
-
-    // Remove a voxel in world coordinates
-    void removeVoxelInChunk(Chunk& chunk, glm::ivec3 worldVoxelPos)
-    {
-        addVoxelInChunk(chunk, worldVoxelPos, 0, 0, 0);
-    }
-
-    // Upload voxel buffer to GPU
-    void Renderer::uploadVoxelBuffer()
-    {
-        m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(voxelBuffer), allBricks, 0);
-    }
-    
-    void updateBrickInstance(Brick& brick, const glm::vec3& newWorldPos)
-    {
-        glm::mat4 transform = glm::translate(glm::mat4(1.0f), newWorldPos);
-
-        RenderCommand::updateTopLevelASAABB(brick.instanceIndex, transform);
-
-        RenderCommand::createTopLevelAS();
-    }
-    
-    void removeBrick(Brick& brick)
-    {
-        RenderCommand::removeInstanceASAABB(brick.instanceIndex);
-        brick.instanceIndex = UINT32_MAX;
-
-        RenderCommand::createTopLevelAS();
-    }
-    
     static bool done = false;
     uint32_t index = 0;
     void Renderer::DrawMeshShader()
@@ -2335,7 +2209,7 @@ namespace VanK
 
         if (!done)
         {
-            //lights
+            /*//lights
             lights.emplace_back(
                 Lights{
                     .position = glm::vec3(0.0f), // unused for directional
@@ -2348,53 +2222,25 @@ namespace VanK
             );
 
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(lightsBuffer), lights, 0);
-            lights.clear();
+            lights.clear();*/
 
+            /*
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(vertexBuffer), geometry.vertices, 0, false);
 
             m_BufferManager->Get<TransferBuffer>(m_TransferBuffer)->Upload(cmd, *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.indices, 0, false);
+            */
             
-            Chunk chunk0; chunk0.position = glm::ivec3(0,0,0); chunk0.size = glm::ivec3(32);
-            /*Chunk chunk1; chunk1.position = glm::ivec3(1,0,0); chunk1.size = glm::ivec3(32);*/
-
-            auto generateChunk = [&](Chunk& chunk)
-            {
-                for(int x=0;x<chunk.size.x;x+=8)
-                    for(int y=0;y<chunk.size.y;y+=8)
-                        for(int z=0;z<chunk.size.z;z+=8)
-                        {
-                            Brick brick{};
-                            brick.position = glm::ivec3(x/8,y/8,z/8);
-                            brick.instanceIndex = UINT32_MAX;
-                            chunk.bricks.push_back(brick);
-                        }
-            };
-
-            generateChunk(chunk0);
-            /*generateChunk(chunk1);*/
+            voxelWorld.initialize(*m_BufferManager);
             
-            uint32_t brickBLAS = createBrickBLAS();
-            instanceChunk(chunk0, brickBLAS);
-            /*instanceChunk(chunk1, brickBLAS);*/
-            /*addVoxelInChunk(chunk0, glm::ivec3(0,0,0), 255,0,0); // red
-            addVoxelInChunk(chunk0, glm::ivec3(0,1,0), 0,255,0); // green*/
-            //for loop goes trough whole chunk all voxels
-            for (int x = 0; x < chunk0.size.x; ++x)
-            {
-                for (int y = 0; y < chunk0.size.y; ++y)
-                {
-                    for (int z = 0; z < chunk0.size.z; ++z)
-                    {
-                        uint8_t r = rand() % 256;
-                        uint8_t g = rand() % 256;
-                        uint8_t b = rand() % 256;
-
-                        addVoxelInChunk(chunk0, glm::ivec3(x, y, z), r, g, b);
-                    }
-                }
-            }
-            //currently blakc means air can change inside shader to later to type air being emtpy
-            uploadVoxelBuffer(); // allBricks now on GPU
+            voxelWorldManager.Init(&voxelWorld);
+            //noise frequency (controls how smooth/rough terrain is)
+            //amplitude / maximum terrain height
+            //seed for random but reproducible terrain
+            voxelWorldManager.initTerrain(0.0f, 8.0f, 1337, TerrainGenerator::Mode::Flat);
+            /*voxelWorldManager.initTerrain(0.02f, 32.0f, 1337, TerrainGenerator::Mode::Procedural);*/
+            voxelWorldManager.generateChunks({10,1,10}, {32,32,32});
+            // Upload voxel data
+            voxelWorld.uploadVoxelBuffer(cmd);
 
             /*RenderCommand::createBottomLevelAS(*m_BufferManager->Get<StorageBuffer>(vertexBuffer), *m_BufferManager->Get<StorageBuffer>(indexBuffer), geometry.primitives, materials,
                                                         instanceLUTs);*/
@@ -2694,7 +2540,7 @@ namespace VanK
                     .materialBuffer = m_BufferManager->Get<StorageBuffer>(materialBuffer)->GetBufferAddress(),
                     .instanceLutBuffer = m_BufferManager->Get<StorageBuffer>(instanceLutsBuffer)->GetBufferAddress(),
                     .lightsBuffer = m_BufferManager->Get<StorageBuffer>(lightsBuffer)->GetBufferAddress(),
-                    .voxelBuffer = m_BufferManager->Get<StorageBuffer>(voxelBuffer)->GetBufferAddress(),
+                    .voxelBuffer = m_BufferManager->Get<StorageBuffer>(voxelWorld.GetVoxelBuffer())->GetBufferAddress(),
                 };
 
                 RenderCommand::PushConstans(cmd, VanKRaytracing, 0, &pushRayTrace, sizeof(PushConstantRayTrace));
